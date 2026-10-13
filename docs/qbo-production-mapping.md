@@ -4,20 +4,15 @@ This is the mapping the TMS uses when it sends an invoice or a bill to MS Expres
 
 ## Invoice number
 
-MS Express's QuickBooks invoices are plain 7-digit numbers in the existing sequence, such as 1006250. The TMS load number (MSE-1055) is not the QuickBooks DocNumber.
+The QuickBooks DocNumber is the TMS load number, such as MSE-1055. The send does not continue the old 1006 invoice sequence and does not require an existing 1006 invoice before it will post.
 
-Intuit's Transaction.DocNumber note says: if DocNumber is omitted and Custom Transaction Numbers is Off, QuickBooks assigns the next sales number; otherwise the value stays null. Passing a DocNumber on an update changes that invoice and does not move the company's sequence. See [DocNumber](https://static.developer.intuit.com/sdkdocs/qbv3doc/ippdotnetdevkitv3/html/a3d723dc-46b1-2f36-b891-a6fac6a4226c.htm), [SalesFormsPrefs.CustomTxnNumbers](https://static.developer.intuit.com/sdkdocs/qbv3doc/ippdotnetdevkitv3/html/eb3307eb-ef7b-1962-72f0-6fac624dbb4d.htm), and Intuit's [DocNumber thread](https://help.developer.intuit.com/s/question/0D5TR00000UsduO0AR/issues-with-docnumber).
+QuickBooks allows 21 characters on DocNumber. A longer load number stops the send with a message that names the length. The number is not truncated. The load number still goes in the customer memo, the private note, and the line descriptions. The lane in that memo is written `Hastings, NE to Omaha, NE`. The arrow character is not used there, because the QuickBooks PDF drops it.
 
-Neither "always omit DocNumber" nor "always let the TMS pick" is safe on its own. When `Preferences.SalesFormsPrefs.CustomTxnNumbers` is true, an invoice created without a DocNumber is stored with no number. When it is false, sending our own number can collide with the number QuickBooks was about to use. The send therefore reads Preferences first:
+If QuickBooks already has an invoice with that DocNumber, the send updates that invoice and does not create a second one. A re-send updates the same invoice and sends the same DocNumber again.
 
-- CustomTxnNumbers false: omit DocNumber and store the number QuickBooks returns.
-- CustomTxnNumbers true: take the max existing 7-digit DocNumber at or above 1006000, add 1, and check that number once more immediately before create. If it was taken, read the max again and try one new number. A second collision stops the send. Load numbers such as MSE-1055, and anything below 1006000, are ignored. The TMS does not send `AUTO_GENERATE`, because that follows QuickBooks' own counter and is not guaranteed to stay inside the 1006 sequence.
+The number is stored on the load as `qbo_doc_number` (nullable text, added with the usual column migration) and copied into `qbo_invoice_number`. The load screen and the QuickBooks panel label it **QB invoice #**. The QuickBooks invoice id stays in `qbo_invoice_id`.
 
-A re-sync updates the same invoice and sends the DocNumber already on it. It does not allocate another number.
-
-The number QuickBooks assigned is stored on the load as `qbo_doc_number` (nullable text, added with the usual column migration) and copied into `qbo_invoice_number`. The load screen and the QuickBooks panel label it **QB invoice #**. The QuickBooks invoice id stays in `qbo_invoice_id`.
-
-Before a successful sync, the TMS PDF invoice number is the TMS invoice number, or `INV-{load number}` when that is blank. After the sync, that same PDF field is `qbo_doc_number`. The PDF also prints **MS Express load #** and, when the load has one, **Customer ref #**. The QuickBooks customer memo starts `MS Express load MSE-1055 · Customer ref 12345` (no colon after "ref"). The memo is cut at 1,000 characters, which is QuickBooks' CustomerMemo limit. A long load number is allowed; it is not a DocNumber.
+Before a successful sync, the TMS PDF invoice number is the TMS invoice number, or `INV-{load number}` when that is blank. After the sync, that same PDF field is `qbo_doc_number`, which is the load number. The PDF also prints **MS Express load #** and, when the load has one, **Customer ref #**. The QuickBooks customer memo starts `MS Express load MSE-1055 · Customer ref 12345` (no colon after "ref"). The memo is cut at 1,000 characters, which is QuickBooks' CustomerMemo limit.
 
 ## Invoice lines
 
@@ -36,7 +31,7 @@ Before a successful sync, the TMS PDF invoice number is the TMS invoice number, 
 | 14 | Trailer Rental, Fuel Advance Fee, Claim for Damages | — | — | Not billed. The send stops and names the line. | C29, C17 |
 | 1 | Lumper | Lumper | Lumper | One customer amount. A pay line and a driver receipt that disagree block the PDF and the send. | C03 |
 | 2 | Fuel Surcharge | Fuel Surcharge | Fuel Surcharge Income | No miles × rate calculation. | C09 |
-| 3 | — | — | — | DocNumber is the 1006 sequence above, not the load number. | C19 |
+| 3 | — | — | — | DocNumber is the TMS load number. Longer than 21 characters is refused. An existing DocNumber is updated. | C19, C21 |
 | 4 | Customer 317 MS Express | — | — | Never mapped and never invoiced, even if an id is stored. | C22 |
 | 5 | Customer 294 M&S Management Group | — | — | No automatic name match. An id the office saved is used. | C23 |
 | 17 | Any other customer | Customer.DisplayName | — | Exact name only. No fuzzy match and no create. More than one exact name stops the send. | C32 |

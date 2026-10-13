@@ -9812,7 +9812,7 @@ DISPATCH CONFIRMATION
     queries.getLoad(relayLoadId)!,
   );
   assert.equal(qboPreview.amount, 3200);
-  assert.equal(qboPreview.lane, "New York, NY → Denver, CO");
+  assert.equal(qboPreview.lane, "New York, NY to Denver, CO");
   assert.doesNotMatch(qboPreview.memo, /Chicago|internal \$900|Relay Bravo/);
   const splitLoadId = queries.createLoad({
     customer_id: customerId,

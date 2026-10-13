@@ -345,7 +345,7 @@ async function main() {
   let fuelVendorId = "61";
   let ooAccountId = "701";
   let fuelAccountId = "702";
-  const ooColAccountId = "414";
+  let ooColAccountId = "414";
   let netTermId = "3";
   const { productionNamesForSandbox5710 } = await import("../lib/qbo-production-map");
   const sandboxNames = productionNamesForSandbox5710();
@@ -413,6 +413,7 @@ async function main() {
     const fuelVendor = await find("Vendor", "DisplayName", "MSETMS Test Fuel Vendor");
     if (fuelVendor?.Id) fuelVendorId = String(fuelVendor.Id);
     ooAccountId = accountIds["Owner Operators:Owner Operators COL"] || ooAccountId;
+    ooColAccountId = accountIds["Owner Operators:Owner Operators COL"] || ooColAccountId;
     fuelAccountId = accountIds["Owner Operators:Fuel"] || fuelAccountId;
     const terms = (await qbo.queryQboReadOnly<Json>("select * from Term")).QueryResponse?.Term ?? [];
     const net = (terms as Json[]).find((t) => t.Name === "Net 30") ?? (terms as Json[])[0];
@@ -471,7 +472,8 @@ async function main() {
   };
   function makeLoad(opts: { customerId?: number; rate?: number | null; status?: string; pay?: PayLine[]; delivery?: string; lumperActual?: number; tag?: string; customerReference?: string; loadNumber?: string }) {
     seq += 1;
-    const loadNumber = opts.loadNumber ?? `MSETMS-T${String(seq).padStart(2, "0")}-${RUN}`;
+    const loadNumber =
+      opts.loadNumber ?? (LIVE && process.env.REAL_SHAPED ? String(1006900 + seq) : `MSETMS-T${String(seq).padStart(2, "0")}-${RUN}`);
     const delivery = opts.delivery ?? "2026-09-14T17:00:00";
     const id = queries.createLoad({
       customer_id: opts.customerId ?? 9,
@@ -563,12 +565,7 @@ async function main() {
     check(c.checks, "txn date", exp.txnDate ?? "2026-09-14", String(read.TxnDate));
     const doc = String(read.DocNumber ?? "");
     const stored = String(load.qbo_doc_number ?? "");
-    check(
-      c.checks,
-      "doc number is 1006 sequence",
-      "7-digit",
-      /^\d{7}$/.test(doc) && Number(doc) >= 1_006_000 && doc !== load.load_number ? "7-digit" : doc,
-    );
+    check(c.checks, "doc number is the load number", load.load_number, doc);
     check(c.checks, "doc number stored on the load", doc, stored);
     check(c.checks, "no AR account override", "none", sentBody?.ARAccountRef ? "set" : "none");
     check(c.checks, "sent body found", "yes", sentBody ? "yes" : "no");
@@ -905,7 +902,7 @@ async function main() {
     const { id } = makeLoad({ rate: 900, pay: [{ category: "misc", rate: -40, total: -40, notes: "Adjustment" }] });
     await qbo.sendLoadToQuickbooks(id);
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 900 }, { cat: "misc", amount: -40, unitPrice: -40 }] });
-    check(c.checks, "adjustment account", "401", incomeId.misc);
+    check(c.checks, "adjustment account", incomeId.flat_rate, incomeId.misc);
   });
   let resyncLoad = 0;
   await runCase("C12", "Re-sync an existing invoice: same QuickBooks invoice updated, no duplicate", async (c) => {
@@ -1009,55 +1006,69 @@ async function main() {
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1800 }] });
     setRemit("100 Campaign Test Rd", "ar-test@example.com");
   });
-  await runCase("C19", "Invoice # is QuickBooks' 1006 sequence: auto-assign, TMS assign, one duplicate retry", async (c) => {
+  await runCase("C19", "Invoice # is the TMS load number: create, re-sync, and an existing DocNumber is updated", async (c) => {
     fake.customTxnNumbers = false;
     const auto = makeLoad({ rate: 1200, customerReference: "12345", loadNumber: "MSE-1055" });
     const before = calls.length;
     const sent = await qbo.sendLoadToQuickbooks(auto.id);
-    const create = calls.slice(before).find((x) => x.method === "POST" && /\/invoice\?/.test(x.url));
-    check(c.checks, "auto path omits DocNumber", "omitted", create?.body?.DocNumber ? String(create.body.DocNumber) : "omitted");
+    const create = calls.slice(before).find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && !x.body?.Id);
+    check(c.checks, "DocNumber is the load number", "MSE-1055", String(create?.body?.DocNumber ?? ""));
     const autoDoc = String(queries.getLoad(auto.id)!.qbo_doc_number ?? "");
-    check(c.checks, "auto DocNumber stored", sent.invoiceNumber, autoDoc);
-    check(c.checks, "auto DocNumber is 7-digit", "yes", /^\d{7}$/.test(autoDoc) && Number(autoDoc) >= 1_006_000 ? "yes" : autoDoc);
+    check(c.checks, "DocNumber stored", sent.invoiceNumber, autoDoc);
+    check(c.checks, "stored DocNumber is the load number", "MSE-1055", autoDoc);
     const autoMemo = String(create?.body?.CustomerMemo?.value ?? "");
+    const autoNote = String(create?.body?.PrivateNote ?? "");
+    const autoLines = ((create?.body?.Line ?? []) as Json[]).map((line) => String(line.Description ?? "")).join("\n");
     check(
       c.checks,
       "memo has load and customer ref",
       "yes",
       autoMemo.includes("MS Express load MSE-1055 · Customer ref 12345") ? "yes" : autoMemo,
     );
+    check(c.checks, "private note has the load number", "yes", autoNote.includes("MSETMS load MSE-1055") ? "yes" : autoNote);
+    check(c.checks, "line description has the load number", "yes", autoLines.includes("MSE-1055") ? "yes" : autoLines);
+    check(c.checks, "memo route uses to", "yes", autoMemo.includes("Hastings, NE to Omaha, NE") && !autoMemo.includes("→") ? "yes" : autoMemo);
+    check(c.checks, "line route uses to", "yes", autoLines.includes("Hastings, NE to Omaha, NE") && !autoLines.includes("→") ? "yes" : autoLines);
     c.qboIds.push(`Invoice ${sent.invoiceId}`);
     const again = await qbo.sendLoadToQuickbooks(auto.id, { confirmResend: true });
     check(c.checks, "re-sync keeps the number", sent.invoiceNumber, again.invoiceNumber);
     check(c.checks, "re-sync keeps the invoice", sent.invoiceId, again.invoiceId);
     const resend = [...calls].reverse().find((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && x.body?.Id === sent.invoiceId);
-    check(c.checks, "re-sync sends the same DocNumber", sent.invoiceNumber, String(resend?.body?.DocNumber ?? ""));
+    check(c.checks, "re-sync sends the same DocNumber", "MSE-1055", String(resend?.body?.DocNumber ?? ""));
+    const creates = calls.filter(
+      (x) => x.method === "POST" && /\/invoice\?/.test(x.url) && !x.body?.Id && String(x.body?.DocNumber ?? "") === "MSE-1055",
+    );
+    check(c.checks, "re-sync does not create a second invoice", "1", String(creates.length));
 
-    fake.customTxnNumbers = true;
-    fake.invoices.set("seq-seed", { Id: "seq-seed", DocNumber: "1006250", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
-    fake.invoices.set("seq-mse", { Id: "seq-mse", DocNumber: "MSE-1055", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
-    fake.invoices.set("seq-low", { Id: "seq-low", DocNumber: "1005999", SyncToken: "0", TotalAmt: 1, Balance: 1, Line: [] });
-    const assigned = makeLoad({ rate: 1100, customerReference: "9988" });
-    const assignedSent = await qbo.sendLoadToQuickbooks(assigned.id);
-    check(c.checks, "TMS assigns 1006251", "1006251", assignedSent.invoiceNumber);
-    check(c.checks, "1006251 stored", "1006251", String(queries.getLoad(assigned.id)!.qbo_doc_number ?? ""));
-    const kept = await qbo.sendLoadToQuickbooks(assigned.id, { confirmResend: true });
-    check(c.checks, "custom re-sync keeps 1006251", "1006251", kept.invoiceNumber);
-    c.qboIds.push(`Invoice ${assignedSent.invoiceId}`);
+    fake.invoices.set("already-mse", {
+      Id: "already-mse",
+      DocNumber: "MSE-2002",
+      SyncToken: "0",
+      TotalAmt: 50,
+      Balance: 50,
+      Line: [],
+    });
+    const taken = makeLoad({ rate: 1100, loadNumber: "MSE-2002" });
+    const takenBefore = calls.length;
+    const takenSent = await qbo.sendLoadToQuickbooks(taken.id);
+    check(c.checks, "existing DocNumber is updated", "already-mse", takenSent.invoiceId);
+    check(c.checks, "existing DocNumber stored", "MSE-2002", String(queries.getLoad(taken.id)!.qbo_doc_number ?? ""));
+    const takenCreates = calls
+      .slice(takenBefore)
+      .filter((x) => x.method === "POST" && /\/invoice\?/.test(x.url) && !x.body?.Id);
+    check(c.checks, "existing DocNumber: no second create", "0", String(takenCreates.length));
+    const same = (await qbo.queryQboReadOnly<Json>("select Id from Invoice where DocNumber = 'MSE-2002'")).QueryResponse?.Invoice ?? [];
+    check(c.checks, "one invoice with this load number", "1", String((same as Json[]).length));
+    const takenAgain = await qbo.sendLoadToQuickbooks(taken.id, { confirmResend: true });
+    check(c.checks, "second send keeps the same invoice", takenSent.invoiceId, takenAgain.invoiceId);
+    check(c.checks, "second send keeps the load number", "MSE-2002", takenAgain.invoiceNumber);
+    c.qboIds.push(`Invoice ${takenSent.invoiceId}`);
 
-    fake.docCollideRemaining = 1;
-    const retry = makeLoad({ rate: 1000 });
-    const retrySent = await qbo.sendLoadToQuickbooks(retry.id);
-    check(c.checks, "duplicate retry takes the next free number", "1006253", retrySent.invoiceNumber);
-    check(c.checks, "retry stored", retrySent.invoiceNumber, String(queries.getLoad(retry.id)!.qbo_doc_number ?? ""));
-    c.qboIds.push(`Invoice ${retrySent.invoiceId}`);
-
-    fake.docCollideRemaining = 2;
-    const blocked = makeLoad({ rate: 900 });
-    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /QuickBooks invoice #\d+ is already used/);
-    check(c.checks, "duplicate block not marked sent", "", queries.getLoad(blocked.id)!.qbo_invoice_id);
+    const tooLong = "N".repeat(22);
+    const blocked = makeLoad({ rate: 900, loadNumber: tooLong });
+    await expectBlocked(c, () => qbo.sendLoadToQuickbooks(blocked.id), /at most 21 characters/);
+    check(c.checks, "22-character load # not marked sent", "", queries.getLoad(blocked.id)!.qbo_invoice_id);
     fake.customTxnNumbers = false;
-    fake.docCollideRemaining = 0;
   });
   await runCase("C20", "Customer payment terms -> QuickBooks Term (and unknown terms block)", async (c) => {
     const termName = fake.terms[0]?.Name ?? "Net 30";
@@ -1070,7 +1081,7 @@ async function main() {
     await expectBlocked(c, () => qbo.sendLoadToQuickbooks(other.id), /not set up in QuickBooks/);
     db.prepare("UPDATE customers SET payment_terms = '' WHERE id = 9").run();
   });
-  await runCase("C21", "Memo and PDF show the MS Express load # and customer ref; DocNumber stays the QBO number", async (c) => {
+  await runCase("C21", "Memo and PDF show the MS Express load # and customer ref; DocNumber is the load number", async (c) => {
     const customerRef = "BROKER-LOAD-555";
     const unsent = makeLoad({ rate: 700, customerReference: "PRE-SYNC" });
     const beforeSync = buildTmsInvoice(queries.getLoad(unsent.id)!);
@@ -1079,7 +1090,7 @@ async function main() {
     await qbo.sendLoadToQuickbooks(id);
     const read = await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1400 }] });
     const doc = String(read.DocNumber ?? "");
-    check(c.checks, "DocNumber is not the TMS load #", "different", doc === loadNumber ? "same" : "different");
+    check(c.checks, "DocNumber is the TMS load #", loadNumber, doc);
     check(c.checks, "DocNumber is not the customer ref", "different", doc === customerRef ? "same" : "different");
     check(c.checks, "DocNumber is not the PO", "different", doc.startsWith("PO-") ? "same" : "different");
     const memo = String(read.CustomerMemo?.value ?? "");
@@ -1101,18 +1112,18 @@ async function main() {
     await qbo.sendLoadToQuickbooks(blank.id);
     const blankRead = await expectInvoice(c, blank.id, { lines: [{ cat: "flat_rate", amount: 900 }] });
     const blankMemo = String(blankRead.CustomerMemo?.value ?? "");
-    check(c.checks, "no customer ref: DocNumber is not the load #", "different", String(blankRead.DocNumber) === blank.loadNumber ? "same" : "different");
+    check(c.checks, "no customer ref: DocNumber is the load #", blank.loadNumber, String(blankRead.DocNumber ?? ""));
     check(c.checks, "no customer ref: memo has the load #", "present", blankMemo.includes(`MS Express load ${blank.loadNumber}`) ? "present" : "absent");
     check(c.checks, "no customer ref: memo has no Customer ref line", "absent", blankMemo.includes("Customer ref") ? "present" : "absent");
     check(c.checks, "no customer ref: PDF field empty", "", buildTmsInvoice(queries.getLoad(blank.id)!).customerReference);
 
-    const tooLong = "N".repeat(22);
-    const allowed = makeLoad({ rate: 500, loadNumber: tooLong });
-    await qbo.sendLoadToQuickbooks(allowed.id);
-    const longRead = await expectInvoice(c, allowed.id, { lines: [{ cat: "flat_rate", amount: 500 }] });
-    const longMemo = String(longRead.CustomerMemo?.value ?? "");
-    check(c.checks, "22-character load # is in the memo", "present", longMemo.includes(`MS Express load ${tooLong}`) ? "present" : "absent");
-    check(c.checks, "22-character load # is not the DocNumber", "different", String(longRead.DocNumber) === tooLong ? "same" : "different");
+    const maxed = "N".repeat(21);
+    const exact = makeLoad({ rate: 500, loadNumber: maxed });
+    await qbo.sendLoadToQuickbooks(exact.id);
+    const exactRead = await expectInvoice(c, exact.id, { lines: [{ cat: "flat_rate", amount: 500 }] });
+    check(c.checks, "21-character load # is the DocNumber", maxed, String(exactRead.DocNumber ?? ""));
+    const exactMemo = String(exactRead.CustomerMemo?.value ?? "");
+    check(c.checks, "21-character load # is in the memo", "present", exactMemo.includes(`MS Express load ${maxed}`) ? "present" : "absent");
   });
   await runCase("C36", "Legal name is accepted; brokerage name, MC, email, and addresses block the send", async (c) => {
     const restore = () => {

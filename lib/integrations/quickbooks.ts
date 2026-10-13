@@ -45,10 +45,10 @@ const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const QBO_SCOPE = "com.intuit.quickbooks.accounting";
 const LINE_HAUL_ITEM_NAME = "Line Haul";
-/** QuickBooks CustomerMemo limit. The load number is not a DocNumber, so the old 21-character refusal does not apply. */
+/** QuickBooks CustomerMemo limit. */
 export const QBO_CUSTOMER_MEMO_MAX = 1000;
-/** Seven-digit invoice numbers in MS Express's existing sequence, from 1006000 upward. */
-export const QBO_DOC_SEQUENCE_FLOOR = 1_006_000;
+/** QuickBooks Transaction.DocNumber max. A longer load number is refused, never truncated. */
+export const QBO_DOC_NUMBER_MAX = 21;
 /** MS Express is in Hastings, NE. Invoice and bill dates use the company's calendar day. */
 const COMPANY_TIME_ZONE = "America/Chicago";
 const SANDBOX_API_HOST = "https://sandbox-quickbooks.api.intuit.com";
@@ -170,7 +170,7 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
     customerName: load.customer_name,
     customerNeedsQbo: !String(customer?.qbo_customer_id ?? "").trim(),
     loadNumber: load.load_number,
-    lane: `${load.origin} → ${load.destination}`,
+    lane: qboRouteText(load.origin, load.destination),
     amount,
     lines,
     txnDate: invoiceDate(load.delivery_end || load.delivery_start),
@@ -196,7 +196,7 @@ export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
   const lumper = resolveCustomerLumper(load);
   if (!lumper.ok) throw new Error(lumper.message);
   const payItems = customerInvoiceBillableItems(load.id);
-  const lane = `${load.origin} → ${load.destination}`;
+  const lane = qboRouteText(load.origin, load.destination);
   const qboLine = (item: {
     category: string;
     payee: string;
@@ -515,7 +515,7 @@ function buildMemo(load: LoadView): string {
   const head = customerRef
     ? `MS Express load ${load.load_number} · Customer ref ${customerRef}`
     : `MS Express load ${load.load_number}`;
-  const parts = [head, `${load.origin} → ${load.destination}`];
+  const parts = [head, qboRouteText(load.origin, load.destination)];
   if (load.reference_number) parts.push(`Ref: ${load.reference_number}`);
   if (load.po_number) parts.push(`PO: ${load.po_number}`);
   return parts.join("\n").slice(0, QBO_CUSTOMER_MEMO_MAX);
@@ -531,45 +531,44 @@ function buildPrivateNote(load: LoadView): string {
 
 type QboInvoiceRecord = { Id?: string; SyncToken?: string; DocNumber?: string; TotalAmt?: number; Balance?: number };
 
-const SEVEN_DIGIT_DOC = /^\d{7}$/;
-
-/**
- * Next MS Express invoice number: max existing 7-digit DocNumber at or above 1006000, plus one.
- * Ignores load numbers (MSE-1055) and anything below the 1006 sequence. Never skips into that format.
- */
-export function nextSequenceDocNumber(docNumbers: Iterable<string>): string {
-  let max = 0;
-  for (const raw of docNumbers) {
-    const value = String(raw ?? "").trim();
-    if (!SEVEN_DIGIT_DOC.test(value)) continue;
-    const parsed = Number(value);
-    if (parsed >= QBO_DOC_SEQUENCE_FLOOR && parsed > max) max = parsed;
-  }
-  if (!max) {
-    throw new Error("No QuickBooks invoice number in the 1006 sequence was found, so nothing was sent.");
-  }
-  if (max >= 9_999_999) {
-    throw new Error("QuickBooks invoice numbers in the 1006 sequence stop at 9999999. Nothing was sent.");
-  }
-  return String(max + 1);
+/** Lane text stored on the QuickBooks invoice. The arrow character is dropped on the QBO PDF. */
+function qboRouteText(origin: string, destination: string): string {
+  return `${origin} to ${destination}`;
 }
 
 /**
- * New invoice: local refusals, then customer, terms, and every item. DocNumber is chosen last.
- * Custom transaction numbers off: omit DocNumber and let QuickBooks assign it.
- * Custom transaction numbers on: TMS assigns the next 1006 number, re-checks it, and retries once.
- * Already sent: sparse-update that same invoice and keep its DocNumber. Never a second number.
+ * DocNumber is the TMS load number. Longer than 21 characters is refused here, before any QuickBooks write.
+ * The number is not truncated.
+ */
+export function loadNumberAsDocNumber(loadNumber: string): string {
+  const docNumber = String(loadNumber ?? "").trim();
+  if (!docNumber) {
+    throw new Error("This load has no load number, so nothing was sent.");
+  }
+  if (docNumber.length > QBO_DOC_NUMBER_MAX) {
+    throw new Error(
+      `Load number "${docNumber}" is ${docNumber.length} characters. QuickBooks invoice numbers can be at most ${QBO_DOC_NUMBER_MAX} characters, so nothing was sent. Shorten the load number. It is not cut off.`,
+    );
+  }
+  return docNumber;
+}
+
+/**
+ * DocNumber is the TMS load number on create and on every re-send.
+ * An invoice that already uses that DocNumber is updated. A second invoice is never created.
  */
 async function createOrUpdateLiveInvoice(
   load: LoadView,
   preview: QboInvoicePreview,
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
   refuseUnbilledLines(preview.lines);
+  const docNumber = loadNumberAsDocNumber(load.load_number);
   const customerId = await resolveQboCustomer(load);
   const salesTerm = await resolveSalesTermRef(load);
   const linePayload = await resolveInvoiceLines(preview.lines);
   const payload: Record<string, unknown> = {
     TxnDate: preview.txnDate,
+    DocNumber: docNumber,
     CustomerRef: { value: customerId },
     PrivateNote: buildPrivateNote(load).slice(0, 4000),
     CustomerMemo: { value: preview.memo.slice(0, QBO_CUSTOMER_MEMO_MAX) },
@@ -577,98 +576,65 @@ async function createOrUpdateLiveInvoice(
   };
   if (salesTerm) payload.SalesTermRef = salesTerm;
 
-  const existingId = load.qbo_source === "quickbooks" ? load.qbo_invoice_id.trim() : "";
-  if (existingId) {
-    let current: QboInvoiceRecord | undefined;
-    try {
-      current = (await qboGet<{ Invoice?: QboInvoiceRecord }>(`/invoice/${encodeURIComponent(existingId)}`, "invoice read"))
-        .Invoice;
-    } catch (error) {
-      throw new Error(
-        `Could not read QuickBooks invoice ${existingId}, so nothing was sent. ${publicQboError(error)} If it was deleted in QuickBooks, ask an administrator to clear the link on this load.`,
-      );
-    }
-    if (!current?.Id || current.SyncToken == null) {
-      throw new Error(`QuickBooks invoice ${existingId} was not found, so nothing was sent.`);
-    }
-    if (typeof current.Balance === "number" && typeof current.TotalAmt === "number" && current.Balance < current.TotalAmt) {
-      throw new Error(
-        `QuickBooks invoice ${current.DocNumber || existingId} already has a payment applied, so nothing was sent. Adjust it in QuickBooks (credit memo) instead.`,
-      );
-    }
-    const kept = String(current.DocNumber ?? "").trim();
-    if (kept) payload.DocNumber = kept;
-    const updated = await qboPost<{ Invoice?: QboInvoiceRecord }>(
-      "/invoice",
-      { ...payload, Id: current.Id, SyncToken: current.SyncToken, sparse: true },
-      "invoice update",
-    );
+  const linkedId = load.qbo_source === "quickbooks" ? load.qbo_invoice_id.trim() : "";
+  const existingByNumber = await findInvoiceByDocNumber(docNumber);
+  const targetId = String(existingByNumber?.Id ?? "").trim() || linkedId;
+  if (targetId) return updateLiveInvoice(targetId, payload, docNumber);
+
+  try {
+    const created = await qboPost<{ Invoice?: QboInvoiceRecord }>("/invoice", payload, "invoice create");
+    const invoiceId = created.Invoice?.Id;
+    if (!invoiceId) throw new Error("QuickBooks did not return an invoice id.");
     return {
-      invoiceId: updated.Invoice?.Id || current.Id,
-      invoiceNumber: String(updated.Invoice?.DocNumber || kept).trim(),
-    };
-  }
-
-  const docNumber = await assignCreateDocNumber();
-  if (docNumber) payload.DocNumber = docNumber;
-  const created = await qboPost<{ Invoice?: QboInvoiceRecord }>("/invoice", payload, "invoice create");
-  const invoiceId = created.Invoice?.Id;
-  if (!invoiceId) {
-    throw new Error("QuickBooks did not return an invoice id.");
-  }
-  const invoiceNumber = String(created.Invoice?.DocNumber ?? "").trim();
-  if (!invoiceNumber) {
-    markQboInvoice(load.id, {
       invoiceId,
-      invoiceNumber: "",
-      source: "quickbooks",
-      sentAt: new Date().toISOString(),
-    });
+      invoiceNumber: String(created.Invoice?.DocNumber || docNumber).trim(),
+    };
+  } catch (error) {
+    const raced = await findInvoiceByDocNumber(docNumber);
+    const racedId = String(raced?.Id ?? "").trim();
+    if (!racedId) throw error;
+    return updateLiveInvoice(racedId, payload, docNumber);
+  }
+}
+
+async function updateLiveInvoice(
+  invoiceId: string,
+  payload: Record<string, unknown>,
+  docNumber: string,
+): Promise<{ invoiceId: string; invoiceNumber: string }> {
+  let current: QboInvoiceRecord | undefined;
+  try {
+    current = (await qboGet<{ Invoice?: QboInvoiceRecord }>(`/invoice/${encodeURIComponent(invoiceId)}`, "invoice read")).Invoice;
+  } catch (error) {
     throw new Error(
-      "QuickBooks created the invoice but did not assign an invoice number. The link was saved so a retry updates that invoice instead of creating another one.",
+      `Could not read QuickBooks invoice ${invoiceId}, so nothing was sent. ${publicQboError(error)} If it was deleted in QuickBooks, ask an administrator to clear the link on this load.`,
     );
   }
-  return { invoiceId, invoiceNumber };
-}
-
-async function customTxnNumbersOn(): Promise<boolean> {
-  const result = await qboQuery<{
-    Preferences?:
-      | { SalesFormsPrefs?: { CustomTxnNumbers?: boolean } }
-      | Array<{ SalesFormsPrefs?: { CustomTxnNumbers?: boolean } }>;
-  }>("select * from Preferences", "preferences");
-  const prefs = result.QueryResponse?.Preferences;
-  const row = Array.isArray(prefs) ? prefs[0] : prefs;
-  return row?.SalesFormsPrefs?.CustomTxnNumbers === true;
-}
-
-async function listRecentDocNumbers(): Promise<string[]> {
-  const result = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
-    "select Id, DocNumber from Invoice orderby MetaData.LastUpdatedTime desc maxresults 1000",
-    "invoice numbers",
+  if (!current?.Id || current.SyncToken == null) {
+    throw new Error(`QuickBooks invoice ${invoiceId} was not found, so nothing was sent.`);
+  }
+  if (typeof current.Balance === "number" && typeof current.TotalAmt === "number" && current.Balance < current.TotalAmt) {
+    throw new Error(
+      `QuickBooks invoice ${current.DocNumber || invoiceId} already has a payment applied, so nothing was sent. Adjust it in QuickBooks (credit memo) instead.`,
+    );
+  }
+  const updated = await qboPost<{ Invoice?: QboInvoiceRecord }>(
+    "/invoice",
+    { ...payload, DocNumber: docNumber, Id: current.Id, SyncToken: current.SyncToken, sparse: true },
+    "invoice update",
   );
-  return (result.QueryResponse?.Invoice ?? []).map((row) => String(row.DocNumber ?? ""));
+  return {
+    invoiceId: updated.Invoice?.Id || current.Id,
+    invoiceNumber: String(updated.Invoice?.DocNumber || docNumber).trim(),
+  };
 }
 
-async function invoiceNumberTaken(docNumber: string): Promise<boolean> {
+async function findInvoiceByDocNumber(docNumber: string): Promise<QboInvoiceRecord | undefined> {
   const clash = await qboQuery<{ Invoice?: QboInvoiceRecord[] }>(
-    `select Id, DocNumber from Invoice where DocNumber = '${escapeQboString(docNumber)}'`,
+    `select Id, SyncToken, DocNumber, TotalAmt, Balance from Invoice where DocNumber = '${escapeQboString(docNumber)}'`,
     "invoice number check",
   );
-  return Boolean(clash.QueryResponse?.Invoice?.[0]?.Id);
-}
-
-/** Undefined: omit DocNumber. A string: the TMS-assigned 1006 number. */
-async function assignCreateDocNumber(): Promise<string | undefined> {
-  if (!(await customTxnNumbersOn())) return undefined;
-  let candidate = nextSequenceDocNumber(await listRecentDocNumbers());
-  if (await invoiceNumberTaken(candidate)) {
-    candidate = nextSequenceDocNumber(await listRecentDocNumbers());
-    if (await invoiceNumberTaken(candidate)) {
-      throw new Error(`QuickBooks invoice #${candidate} is already used, so nothing was sent.`);
-    }
-  }
-  return candidate;
+  return (clash.QueryResponse?.Invoice ?? []).find((row) => String(row.Id ?? "").trim());
 }
 
 /** Customer payment terms -> QuickBooks Term by exact name. Blank = the QuickBooks customer's default terms. */

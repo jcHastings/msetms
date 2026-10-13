@@ -129,13 +129,34 @@ async function main() {
   assert.equal(sent.invoiceId, "900");
   const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(invoice.body.CustomerRef.value, "58");
-  assert.equal(invoice.body.DocNumber, undefined, "CustomTxnNumbers is off, so DocNumber is omitted");
+  assert.equal(invoice.body.DocNumber, "QBOMAP1", "DocNumber is the TMS load number");
   assert.equal(invoice.body.ARAccountRef, undefined);
   assert.equal(invoice.body.ClassRef, undefined);
-  assert.equal(sent.invoiceNumber, "1006250");
-  assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "1006250");
+  assert.equal(sent.invoiceNumber, "QBOMAP1");
+  assert.equal(queries.getLoad(loadId)?.qbo_doc_number, "QBOMAP1");
   assert.match(String(invoice.body.CustomerMemo.value), /MS Express load QBOMAP1/);
+  assert.match(String(invoice.body.CustomerMemo.value), /Hastings, NE to Omaha, NE/);
+  assert.doesNotMatch(String(invoice.body.CustomerMemo.value), /→/);
+  assert.match(String(invoice.body.PrivateNote), /MSETMS load QBOMAP1/);
+  assert.ok(
+    invoice.body.Line.every((line: Json) => String(line.Description ?? "").includes("QBOMAP1")),
+    "every line description keeps the load number",
+  );
   assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "22", "21"], "map, exact name, map");
+
+  const longNumber = "N".repeat(22);
+  const longLoad = queries.createLoad({
+    customer_id: customerId, origin: "Hastings, NE", destination: "Omaha, NE",
+    pickup_start: day, pickup_end: day, delivery_start: day, delivery_end: day,
+    weight: 1000, commodity: "Frozen beef", rate: 100, notes: "", special_instructions: "", appointment_notes: "",
+    reference_number: "", po_number: "", reefer_setpoint_f: null, trailer_number: "", status: "available",
+    truck_id: null, driver_id: null, trailer_id: null, load_number: longNumber, oo_pay: null,
+  } as Parameters<typeof queries.createLoad>[0]);
+  db.prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(longLoad);
+  calls.length = 0;
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(longLoad), /at most 21 characters/);
+  assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "a long load number is not truncated or sent");
+  assert.equal(queries.getLoad(longLoad)?.qbo_invoice_id ?? "", "");
 
   // Unmapped customer: exact DisplayName lookup, and no create when it misses.
   const bareId = queries.createCustomer({ name: "Unmapped Broker", billing_notes: "", contacts: [] });
@@ -194,7 +215,8 @@ async function main() {
   const qboSrc = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
   assert.doesNotMatch(qboSrc, /\/customer"|\/vendor"/);
   assert.doesNotMatch(qboSrc, /load_number\.slice\(0,\s*21\)/);
-  assert.match(qboSrc, /nextSequenceDocNumber/);
+  assert.doesNotMatch(qboSrc, /nextSequenceDocNumber/);
+  assert.match(qboSrc, /QBO_DOC_NUMBER_MAX = 21/);
   const mapPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
   assert.match(mapPage, /htmlFor=\{selectId\}/);
   assert.match(mapPage, /No TMS customers to map yet/);
