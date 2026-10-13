@@ -391,6 +391,7 @@ async function main(): Promise<void> {
     "app/api/tolls/pull/route.ts",
     "app/api/integrations/quickbooks/connect/route.ts",
     "app/api/integrations/quickbooks/callback/route.ts",
+    "app/api/integrations/quickbooks/disconnect/route.ts",
     "app/api/paystubs/preview/route.ts",
     "app/api/paystubs/commit/route.ts",
   ]);
@@ -464,6 +465,15 @@ async function main(): Promise<void> {
   await assertOfficeWriteResponse(
     await qboCallback.GET(new Request("http://localhost/api/integrations/quickbooks/callback")),
     "quickbooks callback",
+  );
+  apiWriteCount += 1;
+
+  const qboDisconnect = await import("../app/api/integrations/quickbooks/disconnect/route");
+  await assertOfficeWriteResponse(
+    await qboDisconnect.POST(
+      new Request("http://localhost/api/integrations/quickbooks/disconnect", { method: "POST" }),
+    ),
+    "quickbooks disconnect",
   );
   apiWriteCount += 1;
 
