@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { DriverPhotoFields } from "@/components/driver-photo-fields";
 import { FormBanner } from "@/components/form-banner";
 import { driverMatchFuelReceiptAction, driverUploadFuelReceiptAction } from "@/lib/driver-actions";
 import type { ActionResult } from "@/lib/types";
@@ -45,6 +46,7 @@ export function DriverFuelPanel({
     null as ActionResult | null,
   );
   const [selectedReceipt, setSelectedReceipt] = useState(pending[0]?.id ?? 0);
+  const [formError, setFormError] = useState<string | null>(null);
   const unmatched = transactions.filter((row) => row.receipt_id == null);
 
   return (
@@ -54,9 +56,31 @@ export function DriverFuelPanel({
         <p className="mt-1 text-sm text-slate-400">
           Take a photo now. Dispatch will match it to the card row when the fuel spreadsheet lands.
         </p>
-        <form action={uploadAction} className="mt-3 space-y-3">
+        <form
+          action={uploadAction}
+          className="mt-3 space-y-3"
+          onSubmit={(event) => {
+            const file = new FormData(event.currentTarget).get("file");
+            if (!(file instanceof File) || file.size === 0) {
+              event.preventDefault();
+              setFormError("A receipt photo is required. Tap Take photo or Choose from photos.");
+            }
+          }}
+        >
           <FormBanner result={uploadState} />
-          <input className="block w-full text-sm text-slate-200" name="file" type="file" accept="image/*,.pdf" required />
+          <DriverPhotoFields
+            entry="fuel-receipt"
+            tone="dark"
+            cameraLabel="Take photo"
+            onPick={() => setFormError(null)}
+            disabled={uploadPending}
+            submitName="file"
+          />
+          {formError ? (
+            <p className="text-sm text-rose-200" role="alert">
+              {formError}
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-slate-400">
               Amount
