@@ -1126,9 +1126,9 @@ function itsLocationRecords(): CityLocationRecord[] {
   return getDb().prepare("SELECT name, city, state FROM locations").all() as CityLocationRecord[];
 }
 
-function rateFill(current: { rate: number | null }, row: LoadImportValues, options: ItsImportOptions): Change | null {
-  if (!options.importRate || row.billing_rate == null) return null;
-  if (current.rate != null && !Number.isNaN(Number(current.rate))) return null;
+function rateFill(current: { rate: unknown }, row: LoadImportValues, options: ItsImportOptions): Change | null {
+  if (!options.importRate || row.billing_rate == null || !(row.billing_rate > 0)) return null;
+  if (current.rate != null && current.rate !== "") return null;
   return change("rate", "rate", current.rate, row.billing_rate);
 }
 
@@ -1156,7 +1156,7 @@ function insertLoad(
   const truckId = truck.id;
   const trailerId = trailer.id;
   const driverId = driver.id;
-  const rate = options.importRate ? row.billing_rate : null;
+  const rate = options.importRate && row.billing_rate != null && row.billing_rate > 0 ? row.billing_rate : null;
   const db = getDb();
   const write = db.transaction(() => {
     guardFreeLoadNumber(db, row.load_number);
