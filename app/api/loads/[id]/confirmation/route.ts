@@ -28,7 +28,7 @@ export async function GET(
   const wantInternal = url.searchParams.get("packet") === "internal";
   const packet = dispatcher && !wantInternal ? "customer" : "internal";
   const queryDriverId = Number.parseInt(url.searchParams.get("driver") ?? "", 10);
-  // Drivers always get their own packet. ?driver= is an office relay picker only.
+  // A signed-in driver always gets their own leg. Dispatch can still pass ?driver=.
   const driverId = driver ? driver.id : Number.isFinite(queryDriverId) ? queryDriverId : undefined;
   // Single-tenant local desk: leftover driver-app cookies must not 404 a
   // dispatcher download for a load they just created (often still unassigned).

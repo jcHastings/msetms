@@ -325,6 +325,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "lumper_actual", "REAL");
   ensureColumn(db, "loads", "detention_started_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "detention_ended_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "detention_leg", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "appointment_confirmation", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "unload_type", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "watched", "INTEGER NOT NULL DEFAULT 0");
@@ -553,6 +554,31 @@ export function migrate(db: Database): void {
   ensureColumn(db, "load_relays", "relay_lng", "REAL");
   ensureColumn(db, "load_relays", "relay_address", "TEXT");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
+  ensureColumn(db, "load_relays", "swap_id", "INTEGER");
+  ensureColumn(db, "load_relays", "miles_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_relays", "miles_locked", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "load_relays", "from_leg_state_miles", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_relays", "to_leg_state_miles", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_swaps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_a_id INTEGER NOT NULL,
+      load_b_id INTEGER NOT NULL,
+      location_id INTEGER,
+      place_id TEXT,
+      lat REAL,
+      lng REAL,
+      address TEXT NOT NULL DEFAULT '',
+      swap_at TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_swaps_a ON load_swaps(load_a_id);
+    CREATE INDEX IF NOT EXISTS idx_load_swaps_b ON load_swaps(load_b_id);
+    CREATE INDEX IF NOT EXISTS idx_load_relays_swap ON load_relays(swap_id);
+  `);
   db.exec(`
 
     CREATE TABLE IF NOT EXISTS load_templates (
@@ -917,6 +943,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "route_miles", "REAL");
   ensureColumn(db, "locations", "call_before", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "load_pay_items", "paid_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_pay_items", "leg", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_templates", "reefer_mode", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_templates", "public_notes", "TEXT NOT NULL DEFAULT ''");
   db.exec(`
@@ -1340,6 +1367,7 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_reimburse_status ON driver_reimbursements(status, id);
     CREATE INDEX IF NOT EXISTS idx_reimburse_week ON driver_reimbursements(driver_id, settlement_week_start);
   `);
+  ensureColumn(db, "settlement_statements", "snapshot_json", "TEXT NOT NULL DEFAULT ''");
   seedExampleDeductionTemplates(db);
 
   db.exec(`

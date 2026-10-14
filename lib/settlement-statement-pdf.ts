@@ -22,7 +22,10 @@ function percentLabel(value: number | null): string {
   return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
-export async function renderSettlementPdf(statement: SettlementStatement): Promise<Buffer> {
+export async function renderSettlementPdf(
+  statement: SettlementStatement,
+  audience: "office" | "driver" = "office",
+): Promise<Buffer> {
   if (statement.identityBlock) throw new StatementIdentityError(statement.identityBlock);
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
@@ -30,12 +33,12 @@ export async function renderSettlementPdf(statement: SettlementStatement): Promi
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    drawSettlement(doc, statement);
+    drawSettlement(doc, statement, audience);
     doc.end();
   });
 }
 
-function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement): void {
+function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement, audience: "office" | "driver"): void {
   const left = 40;
   const width = 532;
   let y = 40;
@@ -104,7 +107,7 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
   }
   y += 8;
 
-  const showPercent = statement.driverKind === "owner_operator";
+  const showPercent = audience !== "driver" && statement.driverKind === "owner_operator";
   y = sectionTitle(doc, left, y, "Loads");
   const loadHeader = showPercent
     ? ["Load", "Pickup to delivery", "Dates", "Miles", "Linehaul", "OO %"]
@@ -118,7 +121,7 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
     ensure(28);
     const dates = [formatMdYDisplay(line.pickup), formatMdYDisplay(line.delivery)].filter((part) => part !== "—").join(" - ");
     const cells = [
-      line.loadNumber,
+      line.legLabel ? `${line.loadNumber} ${line.legLabel}` : line.loadNumber,
       pdfPlain(line.lane),
       dates || "-",
       [

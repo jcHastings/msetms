@@ -29,6 +29,7 @@ import { listDriverRateConRedactions } from "./rate-con-redact-store";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
 import { DRIVER_PASSWORD_NOT_RECOGNIZED, findDriverIdByLoginEmail } from "./driver-password";
 import { authenticateDriverByEmail, getDriver, isDriverLoginEligible, listLoadsForDriver } from "./queries";
+import { driverSwapLegView } from "./driver-leg";
 import { relayForDriver } from "./relay-store";
 import { formatRelayLane } from "./relays";
 import { ensureDefaultStops, type LoadStop } from "./stops";
@@ -83,6 +84,8 @@ export type DriverApiRelayLeg = {
   pickup: string;
   delivery: string;
   lane: string;
+  swap_at?: string;
+  trailer?: string;
 };
 
 export type DriverApiLoadSummary = {
@@ -323,13 +326,21 @@ export function canCheckStops(status: string): boolean {
 
 function toLoadSummary(load: LoadView, driverId: number): DriverApiLoadSummary {
   const relay = relayForDriver(load.id, driverId);
+  const swapLeg = driverSwapLegView({
+    driverId,
+    origin: load.origin,
+    destination: load.destination,
+    trailerNumber: load.trailer_number || load.trailer_unit || "",
+    truckUnit: load.truck_unit || "",
+    relay,
+  });
   return {
     id: load.id,
     load_number: load.load_number,
     status: load.status,
     driver_progress: isDriverProgress(load.driver_progress) ? load.driver_progress : "",
-    origin: load.origin,
-    destination: load.destination,
+    origin: swapLeg?.role === "delivery" ? swapLeg.swapPoint : load.origin,
+    destination: swapLeg?.role === "pickup" ? swapLeg.swapPoint : load.destination,
     pickup_start: toDriverApiDateTime(load.pickup_start),
     pickup_end: toDriverApiDateTime(load.pickup_end),
     delivery_start: toDriverApiDateTime(load.delivery_start),
@@ -337,15 +348,23 @@ function toLoadSummary(load: LoadView, driverId: number): DriverApiLoadSummary {
     customer_name: load.customer_name,
     commodity: load.commodity,
     weight: load.weight,
-    trailer_number: load.trailer_number || load.trailer_unit || "",
-    truck_unit: load.truck_unit,
+    trailer_number: swapLeg?.trailer || load.trailer_number || load.trailer_unit || "",
+    truck_unit: swapLeg?.truck || load.truck_unit,
     docs_requested: Boolean(load.docs_requested),
     special_instructions: load.special_instructions,
     appointment_notes: load.appointment_notes,
     public_notes: load.public_notes,
-    relay_leg: relay
-      ? { pickup: relay.pickup, delivery: relay.delivery, lane: formatRelayLane(relay.pickup, relay.delivery) }
-      : null,
+    relay_leg: swapLeg
+      ? {
+          pickup: swapLeg.role === "pickup" ? load.origin : swapLeg.swapPoint,
+          delivery: swapLeg.role === "pickup" ? swapLeg.swapPoint : load.destination,
+          lane: swapLeg.lane,
+          swap_at: swapLeg.swapAt,
+          trailer: swapLeg.trailer,
+        }
+      : relay
+        ? { pickup: relay.pickup, delivery: relay.delivery, lane: formatRelayLane(relay.pickup, relay.delivery) }
+        : null,
     next_actions: {
       allowed_progress: allowedDriverProgress(load.driver_progress, load.status),
       can_check_stops: canCheckStops(load.status),
@@ -400,7 +419,20 @@ function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
   }));
   return {
     ...toLoadSummary(load, driverId),
-    stops: ensureDefaultStops(load.id).map(toStopDto),
+    stops: ensureDefaultStops(load.id)
+      .filter((stop) => {
+        const swapLeg = driverSwapLegView({
+          driverId,
+          origin: load.origin,
+          destination: load.destination,
+          trailerNumber: load.trailer_number || load.trailer_unit || "",
+          truckUnit: load.truck_unit || "",
+          relay: relayForDriver(load.id, driverId),
+        });
+        if (!swapLeg) return true;
+        return swapLeg.role === "pickup" ? stop.kind === "pickup" : stop.kind === "delivery";
+      })
+      .map(toStopDto),
     attachments,
     rate_confirmations,
   };
