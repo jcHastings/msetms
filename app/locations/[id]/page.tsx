@@ -8,8 +8,8 @@ import { SamsaraAddressSync } from "@/components/samsara-address-sync";
 import { deleteLocationFormAction, updateLocationAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { getGoogleMapsBrowserKey } from "@/lib/env";
-import { ARCHIVED_MERGE_LEAD, isArchivedLocation } from "@/lib/locations";
-import { getLocation } from "@/lib/queries";
+import { ARCHIVED_MERGE_LEAD, formatLocationAddress, isArchivedLocation } from "@/lib/locations";
+import { getLocation, listLocationAliases } from "@/lib/queries";
 import { canDeleteLocations } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,7 @@ export default async function EditLocationPage({
   const keeperId = Number(location.merged_into);
   const keeper =
     isArchivedLocation(location) && Number.isFinite(keeperId) && keeperId > 0 ? getLocation(keeperId) : null;
+  const aliases = isArchivedLocation(location) ? [] : listLocationAliases(location.id);
   const boundAction = updateLocationAction.bind(null, location.id);
   const canDelete = canDeleteLocations(dispatcher.role);
 
@@ -61,6 +62,20 @@ export default async function EditLocationPage({
             "Archived"
           )}
         </p>
+      ) : null}
+      {aliases.length ? (
+        <section aria-labelledby="location-aliases" className="card mb-4 p-4 text-sm" data-location-aliases="">
+          <h2 id="location-aliases" className="font-semibold text-[#07325a]">
+            Also known as
+          </h2>
+          <ul className="mt-2 space-y-1 text-slate-700">
+            {aliases.map((alias) => (
+              <li key={alias.id}>
+                {[alias.name, formatLocationAddress(alias)].filter(Boolean).join(" — ")}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       <LocationForm
         location={location}

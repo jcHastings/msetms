@@ -1255,6 +1255,7 @@ export function migrate(db: Database): void {
   migrateDriverApiIdempotencyKey(db);
   migrateFacilityAndCompanyDocs(db);
   migrateLocationArchive(db);
+  migrateLocationAliases(db);
   ensureColumn(db, "loads", "qbo_send_claimed_at", "TEXT NOT NULL DEFAULT ''");
   const qboInvoiceIds = migrateQboInvoiceIdUnique(db);
   if (!qboInvoiceIds.created && qboInvoiceIds.conflicts.length) {
@@ -1985,6 +1986,23 @@ function migrateFacilityAndCompanyDocs(db: Database): void {
 function migrateLocationArchive(db: Database): void {
   ensureColumn(db, "locations", "archived_at", "TEXT");
   ensureColumn(db, "locations", "merged_into", "INTEGER");
+}
+
+/** Name and address variants a dispatcher confirmed with Use. Matching reads these. Nothing else on the location changes. */
+function migrateLocationAliases(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS location_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      location_id INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT '',
+      street TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_location_aliases_location ON location_aliases(location_id);
+  `);
 }
 
 export type QboInvoiceIdConflict = {
