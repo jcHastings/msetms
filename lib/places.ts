@@ -128,22 +128,37 @@ async function geocodePlace(query: string, key: string, fetchImpl: GoogleFetch):
 }
 
 /** Fail-soft geocode. Never invents a point when Google has no result. */
-export async function geocodeAddress(address: string): Promise<{ latitude: number; longitude: number } | null> {
+export async function geocodeAddress(
+  address: string,
+  options?: { timeoutMs?: number },
+): Promise<{ latitude: number; longitude: number } | null> {
   const key = getGoogleMapsApiKey();
   const trimmed = address.trim();
   if (!key || trimmed.length < 5) return null;
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", trimmed);
   url.searchParams.set("key", key);
-  const response = await fetch(url);
-  if (!response.ok) return null;
-  const payload = (await response.json()) as {
-    status: string;
-    results?: Array<{ geometry?: { location?: { lat: number; lng: number } } }>;
-  };
-  const loc = payload.results?.[0]?.geometry?.location;
-  if (payload.status !== "OK" || loc == null || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+  const timeoutMs = options?.timeoutMs;
+  const controller = timeoutMs != null && timeoutMs > 0 ? new AbortController() : null;
+  const timer =
+    controller && timeoutMs
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+  try {
+    const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
+    if (!response.ok) return null;
+    const payload = (await response.json()) as {
+      status: string;
+      results?: Array<{ geometry?: { location?: { lat: number; lng: number } } }>;
+    };
+    const loc = payload.results?.[0]?.geometry?.location;
+    if (payload.status !== "OK" || loc == null || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) {
+      return null;
+    }
+    return { latitude: loc.lat, longitude: loc.lng };
+  } catch {
     return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  return { latitude: loc.lat, longitude: loc.lng };
 }

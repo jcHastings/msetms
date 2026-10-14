@@ -3626,6 +3626,13 @@ html:has([data-load-embed]) body {
   margin: 0.35rem 0 0;
 }
 
+.backhaul-retry {
+  min-height: 44px;
+  min-width: 44px;
+  margin-top: 0.75rem;
+  padding: 0.55rem 1rem;
+}
+
 .backhaul-footnote {
   margin: 0;
   padding: 0.65rem 1.1rem 0.85rem;

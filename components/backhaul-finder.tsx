@@ -5,12 +5,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom";
 import { useDismissable } from "@/components/use-dismissable";
 import {
+  BACKHAUL_CLIENT_TIMEOUT_MS,
   BACKHAUL_EMPTY_TITLE,
   BACKHAUL_MISSING_TITLE,
   BACKHAUL_RADIUS_MI,
   BACKHAUL_RULE,
   BACKHAUL_SEARCH_FAILED,
   BACKHAUL_SEARCHING,
+  BACKHAUL_TIMEOUT_MESSAGE,
   backhaulEmptyDetail,
   type BackhaulLoadRow,
   type BackhaulResponse,
@@ -73,6 +75,23 @@ function FinderBody({
   onRetry: () => void;
 }) {
   if (!data.ok) {
+    if (data.reason === "timeout") {
+      return (
+        <div className="backhaul-empty" data-backhaul-state="timeout">
+          <p id="backhaul-timeout-message" className="backhaul-empty-title">
+            {BACKHAUL_TIMEOUT_MESSAGE}
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary backhaul-retry"
+            onClick={onRetry}
+            aria-describedby="backhaul-timeout-message"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
     const title = data.reason === "missing_delivery" ? BACKHAUL_MISSING_TITLE : BACKHAUL_SEARCH_FAILED;
     return (
       <div className="backhaul-empty" data-backhaul-state={data.reason}>
@@ -83,7 +102,7 @@ function FinderBody({
             Open load
           </Link>
         ) : (
-          <button type="button" className="btn btn-secondary mt-3" onClick={onRetry}>
+          <button type="button" className="btn btn-secondary backhaul-retry" onClick={onRetry}>
             Try again
           </button>
         )}
@@ -180,27 +199,32 @@ export function BackhaulFinderPanel({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), BACKHAUL_CLIENT_TIMEOUT_MS);
     setLoading(true);
     setData(null);
-    fetch(`/api/loads/${loadId}/backhaul`, { cache: "no-store" })
+    fetch(`/api/loads/${loadId}/backhaul`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json()) as BackhaulResponse;
         if (!cancelled) setData(payload);
       })
-      .catch(() => {
-        if (!cancelled) {
-          setData({
-            ok: false,
-            reason: "error",
-            error: BACKHAUL_SEARCH_FAILED,
-          });
-        }
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const aborted = error instanceof Error && error.name === "AbortError";
+        setData(
+          aborted
+            ? { ok: false, reason: "timeout", error: BACKHAUL_TIMEOUT_MESSAGE }
+            : { ok: false, reason: "error", error: BACKHAUL_SEARCH_FAILED },
+        );
       })
       .finally(() => {
+        window.clearTimeout(timer);
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
     };
   }, [open, loadId, retryTick]);
 

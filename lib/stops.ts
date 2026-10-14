@@ -105,6 +105,33 @@ function chunkStopIds(ids: number[], size = 400): number[][] {
   return chunks;
 }
 
+/**
+ * Stops for many loads in one read. Does not run geofence or read GPS.
+ * Same rows as listStops(id, { geofence: false }), loaded once.
+ */
+export function listStopsForLoads(
+  loadIds: number[],
+  locations: ReturnType<typeof listLocations> = listLocations(),
+): Map<number, LoadStop[]> {
+  const ids = [...new Set(loadIds.filter((id) => Number.isFinite(id)))];
+  const grouped = new Map<number, LoadStop[]>();
+  if (ids.length === 0) return grouped;
+  for (const chunk of chunkStopIds(ids)) {
+    const rows = getDb()
+      .prepare(
+        `SELECT * FROM load_stops WHERE load_id IN (${chunk.map(() => "?").join(", ")}) ORDER BY load_id, sequence, id`,
+      )
+      .all(...chunk) as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      const stop = hydrateStopFromLocations(asStop(row), locations);
+      const list = grouped.get(stop.load_id);
+      if (list) list.push(stop);
+      else grouped.set(stop.load_id, [stop]);
+    }
+  }
+  return grouped;
+}
+
 /** First pickup on each load. Does not run geofence writes. */
 export function listPickupStops(loadIds?: number[]): LoadStop[] {
   const ids = loadIds ? [...new Set(loadIds.filter((id) => Number.isFinite(id)))] : null;
