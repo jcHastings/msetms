@@ -47,6 +47,7 @@ export const ITS_IMPORT_ISSUES = {
   stop_parse_uncertain: "ITS import — stop parse uncertain",
   its_update_held: "ITS import — update not applied",
   "duplicate-conflict": "ITS import — duplicate conflict",
+  billing_locked: "ITS import — billed load left unchanged",
 } as const;
 
 export type ItsImportIssue = keyof typeof ITS_IMPORT_ISSUES;

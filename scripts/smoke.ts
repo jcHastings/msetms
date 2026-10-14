@@ -15289,6 +15289,7 @@ DISPATCH CONFIRMATION
   ] as const;
   const previousQbo = Object.fromEntries(qboEnvKeys.map((key) => [key, process.env[key]]));
   for (const key of qboEnvKeys) delete process.env[key];
+  process.env.QBO_INVOICE_SEND_ENABLED = "true";
   process.env.TMS_QBO_REFRESH_PATH = path.join(os.tmpdir(), `qbo-refresh-smoke-${Date.now()}.json`);
   qbo.resetQuickbooksForTests();
 

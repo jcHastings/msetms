@@ -1255,6 +1255,15 @@ export function migrate(db: Database): void {
   migrateDriverApiIdempotencyKey(db);
   migrateFacilityAndCompanyDocs(db);
   migrateLocationArchive(db);
+  ensureColumn(db, "loads", "qbo_send_claimed_at", "TEXT NOT NULL DEFAULT ''");
+  const qboInvoiceIds = migrateQboInvoiceIdUnique(db);
+  if (!qboInvoiceIds.created && qboInvoiceIds.conflicts.length) {
+    console.error(
+      `QuickBooks invoice id unique index was not created. Duplicate ids: ${qboInvoiceIds.conflicts
+        .map((row) => `${row.qbo_invoice_id} on ${row.load_numbers}`)
+        .join("; ")}`,
+    );
+  }
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1976,6 +1985,41 @@ function migrateFacilityAndCompanyDocs(db: Database): void {
 function migrateLocationArchive(db: Database): void {
   ensureColumn(db, "locations", "archived_at", "TEXT");
   ensureColumn(db, "locations", "merged_into", "INTEGER");
+}
+
+export type QboInvoiceIdConflict = {
+  qbo_invoice_id: string;
+  load_numbers: string;
+};
+
+/** Non-blank QuickBooks invoice ids stored on more than one load. Blank and whitespace-only ids are ignored. */
+export function duplicateQboInvoiceIds(db: Database): QboInvoiceIdConflict[] {
+  return db
+    .prepare(
+      `SELECT TRIM(qbo_invoice_id) AS qbo_invoice_id,
+              GROUP_CONCAT(load_number, ', ') AS load_numbers
+       FROM loads
+       WHERE TRIM(IFNULL(qbo_invoice_id, '')) != ''
+       GROUP BY TRIM(qbo_invoice_id)
+       HAVING COUNT(*) > 1
+       ORDER BY qbo_invoice_id`,
+    )
+    .all() as QboInvoiceIdConflict[];
+}
+
+/**
+ * Partial unique index on a saved QuickBooks invoice id.
+ * Skips the index when existing rows already share a non-blank id, so startup still opens.
+ */
+export function migrateQboInvoiceIdUnique(db: Database): { created: boolean; conflicts: QboInvoiceIdConflict[] } {
+  const conflicts = duplicateQboInvoiceIds(db);
+  if (conflicts.length) return { created: false, conflicts };
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_loads_qbo_invoice_id_unique
+    ON loads(TRIM(qbo_invoice_id))
+    WHERE TRIM(qbo_invoice_id) != ''
+  `);
+  return { created: true, conflicts: [] };
 }
 
 function ensureColumn(

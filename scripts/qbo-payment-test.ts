@@ -106,6 +106,7 @@ async function main() {
   const otherId = makeLoad("PAY1003", 800, "inv-other", "quickbooks");
   const secondId = makeLoad("PAY1004", 600, "inv-second", "quickbooks");
   const demoId = makeLoad("PAY1005", 500, "inv-demo", "demo");
+  db.exec("DROP INDEX IF EXISTS idx_loads_qbo_invoice_id_unique");
   const dupA = makeLoad("PAY1006", 400, "inv-dup", "quickbooks");
   const dupB = makeLoad("PAY1007", 400, "inv-dup", "quickbooks");
   const legacyId = makeLoad("PAY1008", 250, "inv-legacy", "quickbooks");

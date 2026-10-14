@@ -36,7 +36,13 @@ export type InvoiceAcctRow = {
   paperwork: Array<{ label: string; found: boolean }>;
 };
 
-export function InvoicesAcctTable({ rows }: { rows: InvoiceAcctRow[] }) {
+export function InvoicesAcctTable({
+  rows,
+  qboSendEnabled = false,
+}: {
+  rows: InvoiceAcctRow[];
+  qboSendEnabled?: boolean;
+}) {
   const [openId, setOpenId] = useState<number | null>(null);
   return (
     <table className="table-grid table-grid-acct table-zones min-w-max" data-table-zones="invoices">
@@ -71,6 +77,7 @@ export function InvoicesAcctTable({ rows }: { rows: InvoiceAcctRow[] }) {
                 key={row.id}
                 row={row}
                 open={open}
+                qboSendEnabled={qboSendEnabled}
                 onToggle={() => setOpenId(open ? null : row.id)}
               />
             );
@@ -84,10 +91,12 @@ export function InvoicesAcctTable({ rows }: { rows: InvoiceAcctRow[] }) {
 function InvoiceAcctRowView({
   row,
   open,
+  qboSendEnabled,
   onToggle,
 }: {
   row: InvoiceAcctRow;
   open: boolean;
+  qboSendEnabled: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -127,7 +136,7 @@ function InvoiceAcctRowView({
         <td className="zone-right zone-right-invoice-total text-right">{row.totalLabel}</td>
         <td className="zone-right zone-right-invoice-balance text-right">{row.balanceLabel}</td>
         <td className="zone-right zone-right-0">
-          <InvoiceCollapsedActions row={row} />
+          <InvoiceCollapsedActions row={row} qboSendEnabled={qboSendEnabled} />
         </td>
       </tr>
       {open ? (
@@ -143,7 +152,7 @@ function InvoiceAcctRowView({
                     </a>
                     <div>View Payment History: {row.paidHistory}</div>
                   </div>
-                  <InvoiceSendPostGroup row={row} />
+                  <InvoiceSendPostGroup row={row} qboSendEnabled={qboSendEnabled} />
                 </div>
                 <div>
                   <div>

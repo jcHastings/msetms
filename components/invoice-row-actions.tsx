@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ConfirmSubmit } from "@/components/confirm-dialog";
 import { EmailInvoiceButton } from "@/components/email-invoice-button";
 import { QboInvoiceSendButton } from "@/components/qbo-invoice-send-button";
+import { QboSendHold } from "@/components/qbo-send-hold";
 import { RowOverflowMenu } from "@/components/row-overflow-menu";
 import {
   markReceivablePaidAction,
@@ -27,7 +28,13 @@ type InvoiceActionRow = {
 
 type InvoiceIntent = "email" | "qbo" | "pay" | "return";
 
-export function InvoiceCollapsedActions({ row }: { row: InvoiceActionRow }) {
+export function InvoiceCollapsedActions({
+  row,
+  qboSendEnabled = false,
+}: {
+  row: InvoiceActionRow;
+  qboSendEnabled?: boolean;
+}) {
   const [intent, setIntent] = useState<InvoiceIntent | null>(null);
   const qboLabel = row.alreadySent ? "Send again to QuickBooks…" : "Send to QuickBooks…";
   return (
@@ -39,9 +46,13 @@ export function InvoiceCollapsedActions({ row }: { row: InvoiceActionRow }) {
         <button className="menu-item w-full text-left" type="button" onClick={() => setIntent("email")}>
           Email invoice…
         </button>
-        <button className="menu-item w-full text-left" type="button" onClick={() => setIntent("qbo")}>
-          {qboLabel}
-        </button>
+        {qboSendEnabled ? (
+          <button className="menu-item w-full text-left" type="button" onClick={() => setIntent("qbo")}>
+            {qboLabel}
+          </button>
+        ) : (
+          <QboSendHold label={qboLabel} variant="menu" />
+        )}
         {row.paid ? null : (
           <button className="menu-item w-full text-left" type="button" onClick={() => setIntent("pay")}>
             Record payment…
@@ -71,7 +82,7 @@ export function InvoiceCollapsedActions({ row }: { row: InvoiceActionRow }) {
           onComposerClose={() => setIntent(null)}
         />
       ) : null}
-      {intent === "qbo" ? (
+      {qboSendEnabled && intent === "qbo" ? (
         <QboInvoiceSendButton
           loadId={row.id}
           alreadySent={row.alreadySent}
@@ -116,7 +127,14 @@ export function InvoiceCollapsedActions({ row }: { row: InvoiceActionRow }) {
   );
 }
 
-export function InvoiceSendPostGroup({ row }: { row: InvoiceActionRow }) {
+export function InvoiceSendPostGroup({
+  row,
+  qboSendEnabled = false,
+}: {
+  row: InvoiceActionRow;
+  qboSendEnabled?: boolean;
+}) {
+  const qboLabel = row.alreadySent ? "Send again to QuickBooks..." : "Send to QuickBooks...";
   return (
     <div className="acct-action-group" data-invoice-send-post="">
       <div className="acct-action-group-label">Send &amp; post</div>
@@ -130,12 +148,16 @@ export function InvoiceSendPostGroup({ row }: { row: InvoiceActionRow }) {
         variant="link"
         label="Email invoice..."
       />
-      <QboInvoiceSendButton
-        loadId={row.id}
-        alreadySent={row.alreadySent}
-        label={row.alreadySent ? "Send again to QuickBooks..." : "Send to QuickBooks..."}
-        variant="link"
-      />
+      {qboSendEnabled ? (
+        <QboInvoiceSendButton
+          loadId={row.id}
+          alreadySent={row.alreadySent}
+          label={qboLabel}
+          variant="link"
+        />
+      ) : (
+        <QboSendHold label={qboLabel} variant="link" />
+      )}
       {row.paid ? null : (
         <ConfirmSubmit
           action={markReceivablePaidAction}

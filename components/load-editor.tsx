@@ -41,6 +41,7 @@ import { listAttachments } from "@/lib/files";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
+import { qboInvoiceSendEnabled } from "@/lib/env";
 import { buildTmsInvoice } from "@/lib/invoice";
 import { invoiceReadyForLoad } from "@/lib/invoice-ready";
 import { getHosForLoad, getLocationForLoad, samsaraGpsEmptyState, samsaraHosEmptyState } from "@/lib/integrations/samsara";
@@ -213,6 +214,7 @@ export async function LoadEditor({
                     canReturn={canAccessAccounting(role)}
                     variant="header"
                     checklist={invoiceChecklist}
+                    qboSendEnabled={qboInvoiceSendEnabled()}
                   />
                 ) : null}
               </div>
@@ -416,7 +418,11 @@ export async function LoadEditor({
                   .map((driver) => assignedLoadName(driver))}
               />
               {loadIsOnAccountingDesk(load) ? (
-                <QuickbooksInvoicePanel loadId={load.id} preview={previewQuickbooksInvoice(load)} />
+                <QuickbooksInvoicePanel
+                  loadId={load.id}
+                  preview={previewQuickbooksInvoice(load)}
+                  sendEnabled={qboInvoiceSendEnabled()}
+                />
               ) : null}
             </>
           ) : null}

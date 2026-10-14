@@ -15,6 +15,7 @@ process.env.TMS_SKIP_SEED = "1";
 process.env.QBO_CLIENT_ID = "test-client";
 process.env.QBO_CLIENT_SECRET = "test-secret";
 process.env.QBO_SANDBOX = "true";
+process.env.QBO_INVOICE_SEND_ENABLED = "true";
 fs.writeFileSync(path.join(tmp, "qbo-refresh.json"), JSON.stringify({ refresh_token: "rt-test", realm_id: "4620000000000001" }));
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -38,6 +39,7 @@ const ACCOUNTS = [
 const CUSTOMERS: Array<{ Id: string; DisplayName: string }> = [];
 const CLASSES: Array<{ Id: string; Name: string }> = [];
 let nextClassId = 500;
+let nextInvoiceId = 900;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = input instanceof Request ? input.url : String(input);
   const method = (init?.method ?? "GET").toUpperCase();
@@ -85,7 +87,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (method === "POST" && url.includes("/invoice")) {
     const lines = Array.isArray(body?.Line) ? body.Line : [];
     const totalAmt = Math.round(lines.reduce((sum: number, line: Json) => sum + (Number(line.Amount) || 0), 0) * 100) / 100;
-    return json({ Invoice: { Id: "900", DocNumber: body.DocNumber || "1006250", SyncToken: "0", TotalAmt: totalAmt } });
+    const id = body?.Id ? String(body.Id) : String(nextInvoiceId++);
+    return json({ Invoice: { Id: id, DocNumber: body.DocNumber || "1006250", SyncToken: "0", TotalAmt: totalAmt } });
   }
   if (method === "POST" && url.includes("/bill")) return json({ Bill: { Id: "901" } });
   return json({});
@@ -141,7 +144,7 @@ async function main() {
   upsertQboItemMap("tonu", "", ""); // blank map row (as saved on prod) must not count as mapped
   calls.length = 0;
   const sent = await qbo.sendLoadToQuickbooks(loadId);
-  assert.equal(sent.invoiceId, "900");
+  assert.match(sent.invoiceId, /^\d+$/);
   const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(invoice.body.CustomerRef.value, "58");
   assert.equal(invoice.body.DocNumber, "QBOMAP1", "DocNumber is the TMS load number");
@@ -217,7 +220,7 @@ async function main() {
   db.prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(spacedLoad);
   calls.length = 0;
   const spacedSent = await qbo.sendLoadToQuickbooks(spacedLoad);
-  assert.equal(spacedSent.invoiceId, "900");
+  assert.match(spacedSent.invoiceId, /^\d+$/);
   const spacedInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(spacedInvoice.body.CustomerRef.value, "88", "case and whitespace collapse to one customer");
   assert.equal(queries.getCustomer(spacedId)?.qbo_customer_id, "88");
@@ -248,7 +251,7 @@ async function main() {
   db.prepare("UPDATE loads SET status = 'delivered' WHERE id = ?").run(dupLoad);
   calls.length = 0;
   const shared = await qbo.sendLoadToQuickbooks(dupLoad);
-  assert.equal(shared.invoiceId, "900");
+  assert.match(shared.invoiceId, /^\d+$/);
   const sharedInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(sharedInvoice.body.CustomerRef.value, "58");
   const sharedCount = db.prepare("SELECT COUNT(*) AS n FROM customers WHERE qbo_customer_id = '58'").get() as { n: number };
@@ -286,7 +289,7 @@ async function main() {
   assert.match(mapPage, /Nothing here creates a customer in QuickBooks/);
   assert.match(mapPage, /Nothing here creates a vendor in QuickBooks/);
   // Re-sync reads the existing invoice first; an Intuit error carries intuit_tid and nothing is written.
-  db.prepare("UPDATE loads SET qbo_source = 'quickbooks', qbo_invoice_id = '900' WHERE id = ?").run(dupLoad);
+  db.prepare("UPDATE loads SET qbo_source = 'quickbooks' WHERE id = ?").run(dupLoad);
   calls.length = 0;
   const quiet = console.error;
   console.error = () => {};
@@ -424,7 +427,7 @@ async function main() {
   qbo.clearQboCatalogCache();
   calls.length = 0;
   const washed = await qbo.sendLoadToQuickbooks(washId);
-  assert.equal(washed.invoiceId, "900");
+  assert.match(washed.invoiceId, /^\d+$/);
   const washedInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(washedInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "106");
 
@@ -434,7 +437,7 @@ async function main() {
   qbo.clearQboCatalogCache();
   calls.length = 0;
   const detentionOnHaul = await qbo.sendLoadToQuickbooks(detentionId);
-  assert.equal(detentionOnHaul.invoiceId, "900");
+  assert.match(detentionOnHaul.invoiceId, /^\d+$/);
   const detentionInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(detentionInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "23", "COGS Detention item is not used");
   assert.match(String(detentionInvoice.body.Line[1].Description), /Detention/);
@@ -461,7 +464,7 @@ async function main() {
   qbo.clearQboCatalogCache();
   calls.length = 0;
   const ownDetention = await qbo.sendLoadToQuickbooks(missingDetention);
-  assert.equal(ownDetention.invoiceId, "900");
+  assert.match(ownDetention.invoiceId, /^\d+$/);
   const ownInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.equal(ownInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "22");
   assert.match(String(ownInvoice.body.Line[1].Description), /Detention/);
@@ -495,7 +498,7 @@ async function main() {
   db.prepare("UPDATE loads SET driver_id = ? WHERE id = ?").run(alexId, alexLoad);
   calls.length = 0;
   const alexSent = await qbo.sendLoadToQuickbooks(alexLoad);
-  assert.equal(alexSent.invoiceId, "900");
+  assert.match(alexSent.invoiceId, /^\d+$/);
   const alexInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
   assert.match(alexInvoice.url, /^https:\/\/quickbooks\.api\.intuit\.com\//);
   assert.equal(alexInvoice.body.ClassRef.value, "510");
@@ -528,7 +531,7 @@ async function main() {
   db.prepare("UPDATE loads SET driver_id = ? WHERE id = ?").run(jamieLower, lowerLoad);
   const beforeLower = calls.filter((c) => c.method === "POST" && /\/class(\?|$)/.test(c.url)).length;
   const lowerSent = await qbo.sendLoadToQuickbooks(lowerLoad);
-  assert.equal(lowerSent.invoiceId, "900");
+  assert.match(lowerSent.invoiceId, /^\d+$/);
   assert.equal(
     calls.filter((c) => c.method === "POST" && /\/class(\?|$)/.test(c.url)).length,
     beforeLower,

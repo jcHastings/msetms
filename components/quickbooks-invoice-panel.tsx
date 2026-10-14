@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { sendToQuickbooksAction } from "@/lib/actions";
+import { QboSendHold } from "@/components/qbo-send-hold";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { QboInvoicePreview } from "@/lib/integrations/quickbooks";
 import type { ActionResult } from "@/lib/types";
@@ -9,9 +10,11 @@ import type { ActionResult } from "@/lib/types";
 export function QuickbooksInvoicePanel({
   loadId,
   preview,
+  sendEnabled = false,
 }: {
   loadId: number;
   preview: QboInvoicePreview;
+  sendEnabled?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     sendToQuickbooksAction as (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>,
@@ -82,6 +85,7 @@ export function QuickbooksInvoicePanel({
         {preview.memo}
       </pre>
 
+      {sendEnabled ? (
       <form action={formAction} className="mt-4 space-y-3">
         {state?.ok ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -110,6 +114,11 @@ export function QuickbooksInvoicePanel({
           {pending ? "Sending…" : buttonLabel}
         </button>
       </form>
+      ) : (
+        <div className="mt-4">
+          <QboSendHold label={buttonLabel} />
+        </div>
+      )}
     </section>
   );
 }

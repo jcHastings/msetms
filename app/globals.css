@@ -224,6 +224,60 @@ button.acct-link:hover {
   color: var(--accent-hover);
 }
 
+.qbo-send-hold {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+  max-width: 18rem;
+}
+
+.qbo-send-hold[data-variant="link"],
+.qbo-send-hold[data-variant="menu"] {
+  max-width: none;
+}
+
+.qbo-send-hold-reason {
+  margin: 0;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+button.qbo-send-hold-action[aria-disabled="true"] {
+  opacity: 1;
+  cursor: not-allowed;
+  background: #e8eef4;
+  color: #334155;
+  border-color: #94a3b8;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+button.qbo-send-hold-action[aria-disabled="true"]:hover,
+button.qbo-send-hold-action[aria-disabled="true"]:focus {
+  background: #e8eef4;
+  color: #334155;
+}
+
+button.qbo-send-hold-action[aria-disabled="true"]:focus-visible {
+  outline: 2px solid #1e3a5f;
+  outline-offset: 2px;
+}
+
+button.acct-link.qbo-send-hold-action[aria-disabled="true"],
+button.menu-item.qbo-send-hold-action[aria-disabled="true"] {
+  background: transparent;
+  border-color: transparent;
+  color: #334155;
+  text-decoration: none;
+}
+
+button.menu-item.qbo-send-hold-action[aria-disabled="true"]:hover {
+  background: transparent;
+  color: #334155;
+}
+
 .acct-expand-panel {
   background: #f3f5f8;
   padding: 0.35rem 0.5rem 0.4rem;
