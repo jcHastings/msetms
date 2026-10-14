@@ -84,6 +84,7 @@ import { normalizeFacilityAddress, type FacilityRecord } from "./location-match"
 import { ACTIVE_LOCATION_SQL, extractStateCode, isArchivedLocation, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
+import { allocateNextLoadNumber, reserveNumericLoadNumber } from "./load-numbers";
 import { complianceWindows, defaultOoPercent, showsSampleData, takeNextLoadNumber } from "./settings";
 import {
   defaultSearchCriteria,
@@ -2081,16 +2082,22 @@ function validateLoadInput(input: LoadInput): void {
   }
 }
 
+function retryableLoadNumberError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /SQLITE_BUSY|database is locked|UNIQUE constraint failed: loads\.load_number/i.test(error.message);
+}
+
 export function createLoad(input: LoadInput): number {
   validateLoadInput(input);
   const timestamp = now();
   const requested = input.load_number?.trim() ?? "";
-  if (requested && findLoadIdByNumber(requested)) {
-    throw new Error(`Load ${requested} already exists.`);
-  }
-  const loadNumber = requested || nextLoadNumber();
   const db = getDb();
   const insert = db.transaction(() => {
+    if (requested && findLoadIdByNumber(requested)) {
+      throw new Error(`Load ${requested} already exists.`);
+    }
+    const loadNumber = requested || allocateNextLoadNumber(db);
+    if (requested) reserveNumericLoadNumber(db, requested);
     const result = db
       .prepare(
         `INSERT INTO loads (
@@ -2147,9 +2154,19 @@ export function createLoad(input: LoadInput): number {
         status: input.status,
       },
     });
-    return id;
-  });
-  const id = insert();
+    return { id, loadNumber };
+  }, "immediate");
+  let created: { id: number; loadNumber: string } | null = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      created = insert();
+      break;
+    } catch (error) {
+      if (requested || attempt === 4 || !retryableLoadNumberError(error)) throw error;
+    }
+  }
+  if (!created) throw new Error("Could not assign a load number.");
+  const { id, loadNumber } = created;
   importCreateRateToFinancials(id, input.rate);
   recordLoadAudit({ loadId: id, action: "create", field: "load", newValue: loadNumber });
   recordLoadChanges(id, "create", [

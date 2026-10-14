@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { recordLoadAudit, recordLoadChanges } from "./audit";
 import { getDb } from "./db";
+import { guardFreeLoadNumber, LoadNumberCollision, reserveNumericLoadNumber } from "./load-numbers";
 import {
   calendarDay,
   exportIsStale,
@@ -404,6 +405,10 @@ export function importItsValues(
     }
     const existingId = findLoadIdByNumber(row.load_number);
     const existing = existingId ? getLoad(existingId) : null;
+    if (existing && options.apply) {
+      const db = getDb();
+      db.transaction(() => reserveNumericLoadNumber(db, row.load_number), "immediate")();
+    }
     if (existing && exportIsStale(existing.updated_at, snapshot)) {
       const rate = rateFill(existing, row, options);
       if (rate && loadBillingLocked(existing)) {
@@ -484,7 +489,17 @@ export function importItsValues(
 
     if (!existing) {
       if (options.apply) {
-        const id = insertLoad(row, customers, truck, trailer, driver, options);
+        let id: number;
+        try {
+          id = insertLoad(row, customers, truck, trailer, driver, options);
+        } catch (error) {
+          if (!(error instanceof LoadNumberCollision)) throw error;
+          const detail = `Load ${row.load_number} was already taken. ITS import left that load alone.`;
+          noteException(summary, row.load_number, "number_collision", detail, year);
+          writeException(itsImportExceptionKey(row.load_number, "number_collision"), "open", detail);
+          summary.skipped_other += 1;
+          continue;
+        }
         replaceOwnedStops(id, plannedStops(row));
         recordLoadAudit({ loadId: id, action: "create", field: "load", newValue: row.load_number });
         syncExceptions(row.load_number, issues, true);
@@ -1142,43 +1157,49 @@ function insertLoad(
   const trailerId = trailer.id;
   const driverId = driver.id;
   const rate = options.importRate ? row.billing_rate : null;
-  const result = getDb()
-    .prepare(
-      `INSERT INTO loads (
-        load_number, customer_id, origin, destination,
-        pickup_start, pickup_end, delivery_start, delivery_end,
-        commodity, rate, notes, status, truck_id, driver_id,
-        reference_number, po_number, customer_reference, trailer_number, trailer_id, equipment,
-        pickup_schedule_source, delivery_schedule_source, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      row.load_number,
-      customerId,
-      laneFrom(row.pickups) || "TBD",
-      laneFrom(row.deliveries) || "TBD",
-      pickupStart,
-      pickupEnd,
-      deliveryStart,
-      deliveryEnd,
-      "",
-      rate,
-      row.notes,
-      row.status_mapped ? row.status : "hold",
-      truckId,
-      driverId,
-      row.wsf_po,
-      row.wsf_po,
-      row.wsf_po,
-      trailer.tmsUnit,
-      trailerId,
-      row.equipment,
-      "its",
-      "its",
-      stamp,
-      stamp,
-    );
-  return Number(result.lastInsertRowid);
+  const db = getDb();
+  const write = db.transaction(() => {
+    guardFreeLoadNumber(db, row.load_number);
+    const result = db
+      .prepare(
+        `INSERT INTO loads (
+          load_number, customer_id, origin, destination,
+          pickup_start, pickup_end, delivery_start, delivery_end,
+          commodity, rate, notes, status, truck_id, driver_id,
+          reference_number, po_number, customer_reference, trailer_number, trailer_id, equipment,
+          pickup_schedule_source, delivery_schedule_source, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        row.load_number,
+        customerId,
+        laneFrom(row.pickups) || "TBD",
+        laneFrom(row.deliveries) || "TBD",
+        pickupStart,
+        pickupEnd,
+        deliveryStart,
+        deliveryEnd,
+        "",
+        rate,
+        row.notes,
+        row.status_mapped ? row.status : "hold",
+        truckId,
+        driverId,
+        row.wsf_po,
+        row.wsf_po,
+        row.wsf_po,
+        trailer.tmsUnit,
+        trailerId,
+        row.equipment,
+        "its",
+        "its",
+        stamp,
+        stamp,
+      );
+    reserveNumericLoadNumber(db, row.load_number);
+    return Number(result.lastInsertRowid);
+  }, "immediate");
+  return write();
 }
 
 const PATCH_COLUMNS = new Set([

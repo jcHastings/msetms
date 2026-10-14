@@ -3383,7 +3383,8 @@ async function main() {
   const created = queries.getLoad(loadId);
   assert.ok(created);
   assert.equal(created.status, "available");
-  assert.match(created.load_number, /^MSE-\d+$/);
+  assert.match(created.load_number, /^\d+$/);
+  assert.doesNotMatch(created.load_number, /^MSE-/);
 
   const { listLoadTimeline } = await import("../lib/load-timeline");
   const { runWithAuditActor, recordLoadAudit } = await import("../lib/audit");
@@ -4866,7 +4867,7 @@ async function main() {
     sentMailReplyTo = input.replyTo ?? "";
   });
   assert.equal(sentMailTo, "pat.mail@msloads.com");
-  assert.match(sentMailSubject, /MSE-/);
+  assert.match(sentMailSubject, new RegExp(queries.getLoad(mailLoadId)!.load_number));
   assert.equal(sentMailHasPdf, true);
   assert.equal(sentMailReplyTo, "noreply@msloads.com");
   assert.doesNotMatch(sentMailReplyTo, /ana@|info@msloads\.com/);
@@ -9590,7 +9591,7 @@ DISPATCH CONFIRMATION
   assert.doesNotMatch(billedDriverText, /Customer Confirmation|2,150|WSF-1006153/);
   const driverPoLoadId = queries.createLoad({
     customer_id: billedCustomerId,
-    load_number: "1006150",
+    load_number: "1005901",
     origin: "Hastings, NE",
     destination: "Bayonne, NJ",
     pickup_start: pickup.toISOString(),
@@ -9633,7 +9634,7 @@ DISPATCH CONFIRMATION
     },
   ]);
   const driverPoPacket = confirmation.buildConfirmationForLoad(driverPoLoadId, { packet: "internal" });
-  assert.equal(driverPoPacket.loadNumber, "1006150");
+  assert.equal(driverPoPacket.loadNumber, "1005901");
   assert.equal(driverPoPacket.customerReference, "");
   assert.equal(driverPoPacket.stops[0]?.poNumber, "STOP-PO-7");
   assert.equal(driverPoPacket.stops[0]?.confirmationNumber, "APPT-22");
@@ -9643,7 +9644,7 @@ DISPATCH CONFIRMATION
     (await extractText(new Uint8Array(await confirmation.renderConfirmationPdf(driverPoPacket)), { mergePages: true }))
       .text ?? "",
   );
-  assert.match(driverPoText, /1006150/);
+  assert.match(driverPoText, /1005901/);
   assert.match(driverPoText, /STOP-PO-7/);
   assert.match(driverPoText, /APPT-22/);
   assert.doesNotMatch(driverPoText, /12345/);
@@ -15335,7 +15336,7 @@ DISPATCH CONFIRMATION
 
     const demoSent = await qbo.sendLoadToQuickbooks(loadId);
     assert.equal(demoSent.source, "demo");
-    assert.match(demoSent.invoiceId, /^demo-MSE-\d+-\d+$/);
+    assert.match(demoSent.invoiceId, /^demo-\d+-\d+$/);
     const afterDemo = queries.getLoad(loadId);
     assert.ok(afterDemo);
     assert.equal(afterDemo.qbo_invoice_id, demoSent.invoiceId);
@@ -16086,12 +16087,13 @@ DISPATCH CONFIRMATION
   );
   dispatcherTotp.resetDispatcherTotp(userId, "MS Test");
   assert.equal(dispatcherTotp.isDispatcherTotpEnrolled(userId), false);
+  const beforePeek = Number(settings.peekNextLoadNumber());
+  assert.ok(beforePeek > 1006149);
   settings.updateLoadManagementSettings({
-    load_number_prefix: "ABC",
-    load_number_next: 2000,
+    load_number_next: beforePeek + 25,
     show_sample_data: true,
   });
-  assert.equal(settings.peekNextLoadNumber(), "ABC-2000");
+  assert.equal(settings.peekNextLoadNumber(), String(beforePeek + 25));
   const numberedId = queries.createLoad({
     customer_id: customerId,
     origin: "Omaha, NE",
@@ -16114,11 +16116,10 @@ DISPATCH CONFIRMATION
     truck_id: null,
     driver_id: null,
   });
-  assert.equal(queries.getLoad(numberedId)?.load_number, "ABC-2000");
-  assert.equal(settings.peekNextLoadNumber(), "ABC-2001");
+  assert.equal(queries.getLoad(numberedId)?.load_number, String(beforePeek + 25));
+  assert.equal(settings.peekNextLoadNumber(), String(beforePeek + 26));
   settings.updateLoadManagementSettings({
-    load_number_prefix: "ABC",
-    load_number_next: 2001,
+    load_number_next: beforePeek + 26,
     show_sample_data: false,
   });
   assert.equal(
@@ -16127,8 +16128,7 @@ DISPATCH CONFIRMATION
     "sample loads hide when the toggle is off",
   );
   settings.updateLoadManagementSettings({
-    load_number_prefix: "MSE",
-    load_number_next: 3000,
+    load_number_next: beforePeek + 26,
     show_sample_data: true,
   });
   assert.ok(queries.listLoads({ status: "all" }).some((load) => load.load_number === "MSE-1042"));
@@ -20962,7 +20962,8 @@ parked for next week
     const saved = saveTieSheetDraft(draft);
     const load = queries.getLoad(saved.id);
     assert.ok(load);
-    assert.match(load.load_number, /^MSE-\d+$/);
+    assert.match(load.load_number, /^\d+$/);
+    assert.doesNotMatch(load.load_number, /^MSE-/);
     assert.doesNotMatch(load.load_number, /0824-/);
     assert.equal(load.customer_name, TIE_SHEET_CUSTOMER);
     assert.equal(load.rate, null);
@@ -21047,7 +21048,8 @@ parked for next week
   const mixedSaved = saveTieSheetDraft(mixedDraft);
   const mixedLoad = queries.getLoad(mixedSaved.id);
   assert.ok(mixedLoad);
-  assert.match(mixedLoad.load_number, /^MSE-\d+$/);
+  assert.match(mixedLoad.load_number, /^\d+$/);
+  assert.doesNotMatch(mixedLoad.load_number, /^MSE-/);
   assert.equal(mixedLoad.customer_name, TIE_SHEET_CUSTOMER);
   assert.equal(mixedLoad.weight, 39629);
   const mixedStops = (await import("../lib/stops")).listStops(mixedSaved.id);
@@ -21084,10 +21086,10 @@ parked for next week
 
   const confirmDraft = draftFromTieSheetExtract(parseTieSheetText(TIE_SHEET_FIXTURE_0824_9E));
   const confirmResult = applyMikeProposal({ draft_json: encodeTieSheetDraft(confirmDraft) }, "build_tie_sheet");
-  assert.match(confirmResult.message, /MSE-/);
   assert.ok(confirmResult.id);
   const confirmed = queries.getLoad(confirmResult.id);
   assert.ok(confirmed);
+  assert.match(confirmResult.message, new RegExp(confirmed.load_number));
   assert.equal(confirmed.customer_name, TIE_SHEET_CUSTOMER);
   const confirmedStops = (await import("../lib/stops")).listStops(confirmResult.id);
   assert.equal(confirmedStops.filter((stop) => stop.kind === "delivery").length, 1);
