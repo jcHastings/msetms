@@ -67,13 +67,6 @@ async function main() {
     capacity_lbs: 44000,
     status: "available",
   });
-  queries.saveTruckGps(truckId, {
-    latitude: DENVER.lat,
-    longitude: DENVER.lng,
-    address: "Denver, CO",
-    recordedAt: recent,
-    source: "samsara",
-  });
 
   const sourceId = queries.createLoad({
     load_number: "BH-SOURCE",
@@ -200,6 +193,17 @@ async function main() {
   insertStop.run(elPasoId, 1, "pickup", "El Paso Dock", "El Paso", "TX", null, recent, recent);
   insertStop.run(oldId, 1, "pickup", "Denver Dock", "Denver", "CO", locationId, "2019-01-15T12:00:00.000Z", "2019-01-15T12:00:00.000Z");
   insertStop.run(cancelledId, 1, "pickup", "Denver Dock", "Denver", "CO", locationId, recent, recent);
+  const createdAt = (
+    db.prepare("SELECT created_at FROM loads WHERE id = ?").get(denverId) as { created_at: string }
+  ).created_at;
+  const pingAt = new Date(new Date(createdAt).getTime() + 60_000).toISOString();
+  queries.saveTruckGps(truckId, {
+    latitude: DENVER.lat,
+    longitude: DENVER.lng,
+    address: "Denver, CO",
+    recordedAt: pingAt,
+    source: "samsara",
+  });
 
   const insertLoad = db.prepare(
     `INSERT INTO loads (
@@ -221,6 +225,8 @@ async function main() {
     }
   });
   seed();
+
+  db.prepare("UPDATE load_stops SET arrived_at = '', departed_at = '' WHERE load_id = ?").run(denverId);
 
   const started = Date.now();
   const found = await findBackhaulForLoad(sourceId, { now });
