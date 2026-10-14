@@ -811,16 +811,19 @@ function planUpdate(
     changes.push(change("customer_id", "customer", current.customer_id, customerId));
   }
   const locked = itsScheduleLocked(current);
+  const handEdited = structureHandEdited(current.id);
   const existingStops = readStops(current.id);
   const planned = plannedStops(row);
   const structural = !row.stops_unpairable;
-  const stopFills = structural ? blankStopFills(existingStops, planned) : [];
-  const stopAdds = structural ? missingStops(existingStops, planned, locked, held) : [];
-  const stopWindows = structural ? changedStopWindows(existingStops, planned, locked, held) : [];
+  const stopFills = structural ? blankStopFills(existingStops, planned, handEdited, held) : [];
+  const stopAdds = structural ? missingStops(existingStops, planned, locked, handEdited, held) : [];
+  const stopWindows = structural ? changedStopWindows(existingStops, planned, locked, handEdited, held) : [];
+  if (structural) considerPickupOrder(existingStops, planned, handEdited, held);
   considerSchedule(
     changes,
     held,
     locked,
+    handEdited,
     current.pickup_schedule_source,
     current.pickup_start,
     current.pickup_end,
@@ -833,6 +836,7 @@ function planUpdate(
     changes,
     held,
     locked,
+    handEdited,
     current.delivery_schedule_source,
     current.delivery_start,
     current.delivery_end,
@@ -916,6 +920,80 @@ function itsScheduleLocked(load: LoadView): boolean {
   return false;
 }
 
+const STRUCTURAL_IMPORT_FIELDS = new Set([
+  "load",
+  "stop",
+  "pickup_start",
+  "pickup_end",
+  "delivery_start",
+  "delivery_end",
+  "pickup_schedule_source",
+  "delivery_schedule_source",
+]);
+
+type AuditStamp = {
+  id: number;
+  actor: string;
+  actor_kind: string;
+  action: string;
+  field: string;
+  old_value: string;
+  new_value: string;
+  created_at: string;
+};
+
+function auditBlob(row: AuditStamp): string {
+  return [row.actor, row.action, row.field, row.old_value, row.new_value].join("\n");
+}
+
+function mentionsHandEdit(row: AuditStamp): boolean {
+  return /hand-edited/i.test(auditBlob(row));
+}
+
+/** System rows that actually wrote stops, dates, or the load itself. A later PO or route audit is not an import. */
+function isItsImportAudit(row: AuditStamp): boolean {
+  if (row.action === "its_import") return true;
+  if (row.actor_kind !== "system") return false;
+  if (row.action !== "create" && row.action !== "update") return false;
+  return STRUCTURAL_IMPORT_FIELDS.has(row.field);
+}
+
+function isUserEdit(row: AuditStamp): boolean {
+  if (mentionsHandEdit(row)) return true;
+  return row.actor_kind === "dispatcher" || row.actor_kind === "driver";
+}
+
+function auditAfter(row: AuditStamp, stamp: string, id: number): boolean {
+  return row.created_at > stamp || (row.created_at === stamp && row.id > id);
+}
+
+/**
+ * Stops, dates, and pickup order stay put when a person edited the load after the last ITS import.
+ * A direct database fix counts too when the audit text says "hand-edited", even with no import row.
+ */
+function structureHandEdited(loadId: number): boolean {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, actor, actor_kind, action, field, old_value, new_value, created_at
+       FROM load_audit WHERE load_id = ? ORDER BY created_at ASC, id ASC`,
+    )
+    .all(loadId) as AuditStamp[];
+  let lastImportAt = "";
+  let lastImportId = 0;
+  let foundImport = false;
+  for (const row of rows) {
+    if (!isItsImportAudit(row)) continue;
+    foundImport = true;
+    lastImportAt = row.created_at;
+    lastImportId = row.id;
+  }
+  return rows.some((row) => {
+    if (!isUserEdit(row)) return false;
+    if (!foundImport) return mentionsHandEdit(row);
+    return auditAfter(row, lastImportAt, lastImportId);
+  });
+}
+
 /** Move a stored timestamp onto an ITS day and keep the clock. A blank field becomes 08:00 or 17:00. */
 function shiftOntoDay(current: string, day: string, fallbackTime: string): string {
   const trimmed = text(current);
@@ -929,6 +1007,7 @@ function considerSchedule(
   changes: Change[],
   held: HeldChange[],
   locked: boolean,
+  handEdited: boolean,
   source: string | null | undefined,
   currentStart: string,
   currentEnd: string,
@@ -940,11 +1019,12 @@ function considerSchedule(
   if (!day) return;
   const nextStart = shiftOntoDay(currentStart, day, "08:00:00");
   const nextEnd = shiftOntoDay(currentEnd, day, "17:00:00");
-  const manual = text(source) === "manual";
+  const manual = text(source) === "manual" || handEdited;
+  const reason: HeldChange["reason"] = manual ? "manual" : "closed";
   let touched = false;
   if (text(currentStart) !== nextStart) {
     if (locked || manual) {
-      held.push({ field: startColumn, from: text(currentStart), to: nextStart, reason: locked ? "closed" : "manual" });
+      held.push({ field: startColumn, from: text(currentStart), to: nextStart, reason });
     } else {
       changes.push(change(startColumn, startColumn, currentStart, nextStart));
       touched = true;
@@ -952,7 +1032,7 @@ function considerSchedule(
   }
   if (text(currentEnd) !== nextEnd) {
     if (locked || manual) {
-      held.push({ field: endColumn, from: text(currentEnd), to: nextEnd, reason: locked ? "closed" : "manual" });
+      held.push({ field: endColumn, from: text(currentEnd), to: nextEnd, reason });
     } else {
       changes.push(change(endColumn, endColumn, currentEnd, nextEnd));
       touched = true;
@@ -1077,7 +1157,7 @@ function patchLoad(loadId: number, changes: Change[]): void {
 
 const STOP_FILL_FIELDS = ["name", "street", "city", "state", "zip", "phone"] as const;
 
-function blankStopFills(existing: StopRow[], planned: PlannedStop[]): StopFill[] {
+function blankStopFills(existing: StopRow[], planned: PlannedStop[], handEdited: boolean, held: HeldChange[]): StopFill[] {
   const fills: StopFill[] = [];
   for (const kind of ["pickup", "delivery"] as const) {
     const current = existing.filter((stop) => stop.kind === kind);
@@ -1095,7 +1175,17 @@ function blankStopFills(existing: StopRow[], planned: PlannedStop[]): StopFill[]
           any = true;
         }
       }
-      if (any) fills.push(fill);
+      if (!any) continue;
+      if (handEdited) {
+        held.push({
+          field: `${kind} stop ${stopLabel(prior)}`,
+          from: "(blank fields)",
+          to: stopLabel(stop),
+          reason: "manual",
+        });
+        continue;
+      }
+      fills.push(fill);
     }
   }
   return fills;
@@ -1145,13 +1235,24 @@ function isPlaceholderStop(stop: PlannedStop): boolean {
   return !text(stop.city) && !text(stop.name);
 }
 
-function missingStops(existing: StopRow[], planned: PlannedStop[], locked: boolean, held: HeldChange[]): PlannedStop[] {
+function missingStops(
+  existing: StopRow[],
+  planned: PlannedStop[],
+  locked: boolean,
+  handEdited: boolean,
+  held: HeldChange[],
+): PlannedStop[] {
   const adds: PlannedStop[] = [];
   for (const stop of planned) {
     if (stop.state_ambiguous || isPlaceholderStop(stop)) continue;
     if (existing.some((row) => sameImportedStop(row, stop))) continue;
-    if (locked) {
-      held.push({ field: `stop ${stop.kind}`, from: "(missing)", to: stopLabel(stop), reason: "closed" });
+    if (locked || handEdited) {
+      held.push({
+        field: `stop ${stop.kind}`,
+        from: "(missing)",
+        to: stopLabel(stop),
+        reason: handEdited ? "manual" : "closed",
+      });
       continue;
     }
     adds.push(stop);
@@ -1159,10 +1260,35 @@ function missingStops(existing: StopRow[], planned: PlannedStop[], locked: boole
   return adds;
 }
 
+function orderKey(stop: { city: string; name: string }): string {
+  return normStopPart(stop.city) || normStopPart(stop.name);
+}
+
+/** ITS pickup order is a diff only. The stored sequence, including a GPS drive order, is left as it is. */
+function considerPickupOrder(existing: StopRow[], planned: PlannedStop[], handEdited: boolean, held: HeldChange[]): void {
+  if (!handEdited) return;
+  const stored = existing.filter((stop) => stop.kind === "pickup" && !isPlaceholderStop(stop));
+  const incoming = planned.filter((stop) => stop.kind === "pickup" && !stop.state_ambiguous && !isPlaceholderStop(stop));
+  const storedKeys = stored.map(orderKey).filter(Boolean);
+  const incomingKeys = incoming.map(orderKey).filter(Boolean);
+  const incomingSet = new Set(incomingKeys);
+  const storedSet = new Set(storedKeys);
+  const storedOverlap = storedKeys.filter((key) => incomingSet.has(key));
+  const incomingOverlap = incomingKeys.filter((key) => storedSet.has(key));
+  if (storedOverlap.length < 2 || storedOverlap.join("\n") === incomingOverlap.join("\n")) return;
+  held.push({
+    field: "pickup order",
+    from: stored.map((stop) => stopLabel(stop)).join(" | "),
+    to: incoming.map((stop) => stopLabel(stop)).join(" | "),
+    reason: "manual",
+  });
+}
+
 function changedStopWindows(
   existing: StopRow[],
   planned: PlannedStop[],
   locked: boolean,
+  handEdited: boolean,
   held: HeldChange[],
 ): StopWindowUpdate[] {
   const updates: StopWindowUpdate[] = [];
@@ -1175,13 +1301,13 @@ function changedStopWindows(
     const nextStart = shiftOntoDay(match.window_start, stop.window_start.slice(0, 10), "08:00:00");
     const nextEnd = shiftOntoDay(match.window_end, stop.window_end.slice(0, 10), "17:00:00");
     if (text(match.window_start) === nextStart && text(match.window_end) === nextEnd) continue;
-    const manual = text(match.schedule_source) === "manual";
+    const manual = text(match.schedule_source) === "manual" || handEdited;
     if (locked || manual) {
       held.push({
         field: `${stop.kind} window ${stopLabel(stop)}`,
         from: `${text(match.window_start)} - ${text(match.window_end)}`,
         to: `${nextStart} - ${nextEnd}`,
-        reason: locked ? "closed" : "manual",
+        reason: manual ? "manual" : "closed",
       });
       continue;
     }

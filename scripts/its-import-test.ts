@@ -1449,6 +1449,181 @@ async function main(): Promise<void> {
   );
   assert.equal(catalogImport.exception_items.some((item) => item.load_number === "1006268" && item.issue === "stop_parse_uncertain"), false);
 
+  db.prepare(
+    `UPDATE loads
+     SET pickup_start = '2026-10-09T14:10:00', pickup_end = '2026-10-09T15:00:00',
+         pickup_schedule_source = '', delivery_schedule_source = ''
+     WHERE id = ?`,
+  ).run(movedId);
+  db.prepare("UPDATE load_stops SET sequence = 1 WHERE load_id = ? AND city = 'Chicago'").run(movedId);
+  db.prepare("UPDATE load_stops SET sequence = 2 WHERE load_id = ? AND city = 'Omaha'").run(movedId);
+  db.prepare("UPDATE load_stops SET sequence = 3 WHERE load_id = ? AND city = 'Des Moines'").run(movedId);
+  db.prepare("UPDATE load_stops SET sequence = 4 WHERE load_id = ? AND city = 'Avenel'").run(movedId);
+  db.prepare(
+    `UPDATE load_stops
+     SET window_start = '2026-10-09T14:10:00', window_end = '2026-10-09T15:00:00', schedule_source = ''
+     WHERE load_id = ? AND kind = 'pickup'`,
+  ).run(movedId);
+  const gpsOrder = db.prepare("SELECT city, sequence FROM load_stops WHERE load_id = ? ORDER BY sequence").all(movedId) as Array<{
+    city: string;
+    sequence: number;
+  }>;
+  assert.deepEqual(
+    gpsOrder.map((stop) => stop.city),
+    ["Chicago", "Omaha", "Des Moines", "Avenel"],
+  );
+  db.prepare(
+    `INSERT INTO load_audit (load_id, load_number, actor, actor_kind, action, field, old_value, new_value, created_at)
+     VALUES (?, '1006267', 'JC', 'dispatcher', 'update', 'stops', '', 'JC-approved data fix, hand-edited', ?)`,
+  ).run(movedId, new Date().toISOString());
+  const gpsHeld = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006267",
+        Status: "On Route",
+        "Ship Date": "10/21/2026",
+        "Del Date": "10/15/2026",
+        "WSF PO": "PO-HAND-6267",
+        Shipper: "Alpha Foods, Beta Cold, Gamma DC",
+        "Shipper City": "Omaha, Des Moines, Chicago",
+        "Shipper St.": "NE, IA, IL",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.deepEqual(
+    (db.prepare("SELECT city FROM load_stops WHERE load_id = ? ORDER BY sequence").all(movedId) as Array<{ city: string }>).map(
+      (stop) => stop.city,
+    ),
+    ["Chicago", "Omaha", "Des Moines", "Avenel"],
+  );
+  assert.deepEqual(
+    db.prepare("SELECT city, sequence FROM load_stops WHERE load_id = ? ORDER BY sequence").all(movedId),
+    gpsOrder,
+  );
+  assert.equal(loadField("1006267", "pickup_start"), "2026-10-09T14:10:00");
+  assert.equal(loadField("1006267", "pickup_end"), "2026-10-09T15:00:00");
+  assert.equal(loadField("1006267", "pickup_schedule_source"), "");
+  assert.equal(loadField("1006267", "po_number"), "PO-HAND-6267");
+  assert.equal(gpsHeld.exception_items.some((item) => item.load_number === "1006267" && item.issue === "its_update_held"), true);
+  assert.equal(gpsHeld.diff_sample.some((row) => row.load_number === "1006267" && row.field === "pickup_start"), false);
+  const gpsReason = (
+    db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1006267:its_update_held'").get() as {
+      reason: string;
+    }
+  ).reason;
+  assert.match(gpsReason, /edited by hand/);
+  assert.match(gpsReason, /pickup_start/);
+  assert.match(
+    gpsReason,
+    /pickup order: Gamma DC Chicago, IL \| Alpha Foods Omaha, NE \| Beta Cold Des Moines, IA -> Alpha Foods Omaha, NE \| Beta Cold Des Moines, IA \| Gamma DC Chicago, IL/,
+  );
+  const gpsAgain = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006267",
+        Status: "On Route",
+        "Ship Date": "10/22/2026",
+        "Del Date": "10/15/2026",
+        "WSF PO": "PO-HAND-6267",
+        Shipper: "Alpha Foods, Beta Cold, Gamma DC",
+        "Shipper City": "Omaha, Des Moines, Chicago",
+        "Shipper St.": "NE, IA, IL",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006267", "pickup_start"), "2026-10-09T14:10:00");
+  assert.deepEqual(
+    (db.prepare("SELECT city FROM load_stops WHERE load_id = ? ORDER BY sequence").all(movedId) as Array<{ city: string }>).map(
+      (stop) => stop.city,
+    ),
+    ["Chicago", "Omaha", "Des Moines", "Avenel"],
+  );
+  assert.equal(gpsAgain.exception_items.some((item) => item.load_number === "1006267" && item.issue === "its_update_held"), true);
+
+  db.prepare(
+    `UPDATE loads
+     SET delivery_start = '2026-10-11T09:30:00', delivery_end = '2026-10-11T16:00:00', delivery_schedule_source = ''
+     WHERE id = ?`,
+  ).run(catalogId);
+  db.prepare(
+    `UPDATE load_stops SET name = 'GPS Yard', city = 'Edison', state = 'NJ', schedule_source = ''
+     WHERE load_id = ? AND city = 'Newark'`,
+  ).run(catalogId);
+  db.prepare(
+    `INSERT INTO load_audit (load_id, load_number, actor, actor_kind, action, field, old_value, new_value, created_at)
+     VALUES (?, '1006268', 'JC', 'dispatcher', 'update', 'stops', 'JC-approved data fix, hand-edited', 'Edison NJ', ?)`,
+  ).run(catalogId, new Date().toISOString());
+  const catalogHeld = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006268",
+        Status: "Dispatched",
+        "Del Date": "10/18/2026",
+        Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+        "Consignee City": "Bronx, Reading, Newark",
+        "Consignee St.": "NJ, NY",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.deepEqual(
+    (
+      db.prepare("SELECT city, state FROM load_stops WHERE load_id = ? AND kind = 'delivery' ORDER BY sequence").all(catalogId) as Array<{
+        city: string;
+        state: string;
+      }>
+    ).map((stop) => `${stop.city} ${stop.state}`),
+    ["Bronx NY", "Reading PA", "Edison NJ"],
+  );
+  assert.equal(loadField("1006268", "delivery_start"), "2026-10-11T09:30:00");
+  assert.equal(loadField("1006268", "delivery_end"), "2026-10-11T16:00:00");
+  assert.equal(loadField("1006268", "delivery_schedule_source"), "");
+  assert.equal(catalogHeld.exception_items.some((item) => item.load_number === "1006268" && item.issue === "its_update_held"), true);
+  const catalogReason = (
+    db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1006268:its_update_held'").get() as {
+      reason: string;
+    }
+  ).reason;
+  assert.match(catalogReason, /edited by hand/);
+  assert.match(catalogReason, /delivery_start/);
+  assert.match(catalogReason, /stop delivery: \(missing\) -> .*Newark, NJ/);
+
+  const priorEditId = officeLoad({ loadNumber: "1006270", status: "assigned", updatedAt: "2026-08-01T00:00:00.000Z" });
+  db.prepare(
+    `INSERT INTO load_audit (load_id, load_number, actor, actor_kind, action, field, old_value, new_value, created_at)
+     VALUES (?, '1006270', 'JC', 'dispatcher', 'update', 'notes', '', 'called the driver', '2026-08-01T00:00:00.000Z')`,
+  ).run(priorEditId);
+  const priorEdit = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006270",
+        Status: "Dispatched",
+        "Ship Date": "10/13/2026",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006270", "pickup_start"), "2026-10-13T08:00:00");
+  assert.equal(priorEdit.exception_items.some((item) => item.load_number === "1006270" && item.issue === "its_update_held"), false);
+  db.prepare(
+    `INSERT INTO load_audit (load_id, load_number, actor, actor_kind, action, field, old_value, new_value, created_at)
+     VALUES (?, '1006270', 'System', 'system', 'route', 'route', '', 'reroute', ?)`,
+  ).run(priorEditId, new Date().toISOString());
+  const afterRoute = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006270",
+        Status: "Dispatched",
+        "Ship Date": "10/16/2026",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006270", "pickup_start"), "2026-10-16T08:00:00");
+  assert.equal(afterRoute.exception_items.some((item) => item.load_number === "1006270" && item.issue === "its_update_held"), false);
+
   assert.equal(calls.qbo, 0);
   assert.equal(calls.mail, 0);
   assert.equal(calls.sms, 0);
