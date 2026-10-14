@@ -6,6 +6,11 @@ export const BACKHAUL_EMPTY_TITLE = "No loads within 150 mi";
 export const BACKHAUL_MISSING_TITLE = "Need a delivery location";
 export const BACKHAUL_SEARCH_FAILED = "Couldn't search";
 export const BACKHAUL_SEARCHING = "Searching within 150 mi…";
+export const BACKHAUL_TIMEOUT_MESSAGE = "Search took too long, try again";
+export const BACKHAUL_SERVER_BUDGET_MS = 15_000;
+export const BACKHAUL_CLIENT_TIMEOUT_MS = 20_000;
+export const BACKHAUL_GEOCODE_TIMEOUT_MS = 8_000;
+export const BACKHAUL_LOOKBACK_MONTHS = 18;
 
 export const BACKHAUL_RULE = "Loads whose pickup is within 150 mi of this delivery.";
 
@@ -62,7 +67,7 @@ export type BackhaulResult = {
 
 export type BackhaulFailure = {
   ok: false;
-  reason: "not_found" | "missing_delivery" | "geocode_failed" | "unauthorized" | "error";
+  reason: "not_found" | "missing_delivery" | "geocode_failed" | "timeout" | "unauthorized" | "error";
   error: string;
   detail?: string;
   source?: { id: number; loadNumber: string };
