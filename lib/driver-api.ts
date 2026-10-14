@@ -23,7 +23,8 @@ import {
 import { getFuelTransaction, listFuelTransactions } from "./fuel-store";
 import type { FuelTransactionView } from "./fuel";
 import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
-import { isCustomerRateDocument } from "./load-documents-shared";
+import { isCustomerRateDocument, isDriverFacingAttachment } from "./load-documents-shared";
+import { listDriverRateConRedactions } from "./rate-con-redact-store";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
 import { DRIVER_PASSWORD_NOT_RECOGNIZED, findDriverIdByLoginEmail } from "./driver-password";
 import { authenticateDriverByEmail, getDriver, isDriverLoginEligible, listLoadsForDriver } from "./queries";
@@ -171,9 +172,16 @@ export type DriverApiAttachment = {
   created_at: string;
 };
 
+export type DriverApiRateConfirmation = {
+  id: number;
+  name: string;
+  href: string;
+};
+
 export type DriverApiLoadDetail = DriverApiLoadSummary & {
   stops: DriverApiStop[];
   attachments: DriverApiAttachment[];
+  rate_confirmations: DriverApiRateConfirmation[];
 };
 
 export class DriverApiHttpError extends Error {
@@ -382,12 +390,18 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
 function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
   const attachments = listAttachments(load.id)
     .filter((file) => !isCustomerRateDocument(file))
-    .filter((file) => file.kind !== "rate_con" && file.kind !== "invoice")
+    .filter((file) => isDriverFacingAttachment(file))
     .map(toAttachmentDto);
+  const rate_confirmations = listDriverRateConRedactions(load.id).map((row) => ({
+    id: row.id,
+    name: "Rate confirmation",
+    href: `/api/driver/v1/loads/${load.id}/rate-confirmation/${row.id}`,
+  }));
   return {
     ...toLoadSummary(load, driverId),
     stops: ensureDefaultStops(load.id).map(toStopDto),
     attachments,
+    rate_confirmations,
   };
 }
 

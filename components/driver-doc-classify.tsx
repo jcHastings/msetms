@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { driverClassifyAction } from "@/lib/driver-actions";
 import { DRIVER_UPLOAD_KINDS, isUnclassifiedUpload, labelForDriverUploadKind } from "@/lib/driver-docs";
-import { isCustomerRateDocument } from "@/lib/load-documents-shared";
+import { isCustomerRateDocument, isDriverFacingAttachment } from "@/lib/load-documents-shared";
 import { labelForAttachmentKind } from "@/lib/types";
 
 export function DriverDocClassify({
@@ -23,9 +23,13 @@ export function DriverDocClassify({
         <ul className="mt-3 space-y-3">
           {visible.map((file) => (
             <li key={file.id} className="rounded-xl bg-slate-800 px-3 py-2">
-              <a href={`/api/attachments/${file.id}`} className="text-base font-medium text-amber-300 underline">
-                {file.original_name}
-              </a>
+              {isDriverFacingAttachment(file) ? (
+                <a href={`/api/attachments/${file.id}`} className="text-base font-medium text-amber-300 underline">
+                  {file.original_name}
+                </a>
+              ) : (
+                <span className="text-base font-medium text-slate-200">{file.original_name}</span>
+              )}
               <div className="mt-1 text-sm text-slate-300">
                 {isUnclassifiedUpload(file.kind)
                   ? "Needs type"

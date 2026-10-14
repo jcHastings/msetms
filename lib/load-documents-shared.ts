@@ -72,6 +72,28 @@ export function isCustomerRateDocument(file: { kind: string; original_name?: str
   return name.includes("customer-confirmation") || name.includes("customer_confirmation");
 }
 
+/**
+ * Documents a driver may open. Anything else, including Needs type
+ * (`unclassified`) and carrier invoices, stays off the driver routes.
+ */
+const DRIVER_FACING_KINDS = new Set([
+  "bol",
+  "pod",
+  "lumper",
+  "photo_trailer",
+  "photo_product",
+  "photo_seals",
+  "temp_log",
+  "scale_ticket",
+  "fuel_receipt",
+  "samsara_still",
+  "claim",
+]);
+
+export function isDriverFacingAttachment(file: { kind: string }): boolean {
+  return DRIVER_FACING_KINDS.has(file.kind) || file.kind.startsWith("photo_");
+}
+
 /** How the TMS classifies a stored load file for invoice-send attach. */
 export type InvoiceMailDocRole =
   | "invoice"
