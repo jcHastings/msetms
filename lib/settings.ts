@@ -31,6 +31,7 @@ import {
 import { DOCUMENT_FONTS, type DocumentFontFamily } from "./document-tags";
 import { DEFAULT_INVOICE_EMAIL_BODY } from "./invoice-email-shared";
 import { MS_EXPRESS_CARRIER } from "./carrier-identity";
+import { allocateNextLoadNumber, maxNumericLoadNumber, peekNextNumericLoadNumber } from "./load-numbers";
 import { LOAD_STATUSES, type CompanyProfile } from "./types";
 import { parseWorkflowSettings, type WorkflowSettings } from "./workflow-shared";
 
@@ -485,18 +486,15 @@ export function updatePaySettings(input: {
 }
 
 export function updateLoadManagementSettings(input: {
-  load_number_prefix: string;
   load_number_next: number;
   show_sample_data: boolean;
 }): CompanySettings {
-  const prefix = input.load_number_prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!prefix) throw new Error("Load number prefix is required.");
   if (!Number.isInteger(input.load_number_next) || input.load_number_next < 1) {
-    throw new Error("Starting load number must be a positive whole number.");
+    throw new Error("Next load number must be a positive whole number.");
   }
+  const floor = Math.max(input.load_number_next, maxNumericLoadNumber(getDb()) + 1);
   return patchSettings({
-    load_number_prefix: prefix,
-    load_number_next: input.load_number_next,
+    load_number_next: floor,
     show_sample_data: input.show_sample_data ? 1 : 0,
   });
 }
@@ -515,15 +513,12 @@ export function complianceWindows(): ComplianceWindows {
 }
 
 export function peekNextLoadNumber(): string {
-  const settings = getCompanySettings();
-  return `${settings.load_number_prefix}-${settings.load_number_next}`;
+  return peekNextNumericLoadNumber(getDb());
 }
 
 export function takeNextLoadNumber(): string {
-  const settings = getCompanySettings();
-  const loadNumber = `${settings.load_number_prefix}-${settings.load_number_next}`;
-  patchSettings({ load_number_next: settings.load_number_next + 1 });
-  return loadNumber;
+  const db = getDb();
+  return db.transaction(() => allocateNextLoadNumber(db), "immediate")();
 }
 
 export function showsSampleData(): boolean {
