@@ -5,7 +5,6 @@ import {
   getQuickbooksClientId,
   getQuickbooksBillExpenseAccountId,
   getQuickbooksClientSecret,
-  getQuickbooksDetentionIncomeAccount,
   getQuickbooksEnvironment,
   getQuickbooksRealmId,
   getQuickbooksRedirectUri,
@@ -31,7 +30,6 @@ import {
   customerUnmatchedMessage,
   DEFAULT_LOAD_PAY_ACCOUNT,
   forbiddenAccountMessage,
-  GROSS_TRUCKING_INCOME,
   INVOICE_RULES,
   itemMissingMessage,
   LINE_HAUL_ITEM,
@@ -43,7 +41,6 @@ import {
   NOT_BILLED_ON_INVOICE,
   notBilledMessage,
   type BillSplitLine,
-  type InvoiceRule,
   type ResolvedAccount,
 } from "../qbo-production-map";
 import { customerInvoiceBillableItems, resolveCustomerLumper } from "../pay-items";
@@ -211,8 +208,8 @@ export function previewQuickbooksInvoice(load: LoadView): QboInvoicePreview {
 
 /**
  * Same lines as the TMS invoice PDF: Flat Rate pay items (or the load rate as Line Haul), then customer extras.
- * Lumper is one amount, shared with the PDF. Fuel surcharge, layover, TONU, and detention stay on their own
- * lines. Those charges use the Line Haul item unless detention is switched to its own income account.
+ * Lumper is one amount, shared with the PDF. Fuel surcharge, layover, and TONU stay on their own
+ * lines on the Line Haul item. Detention posts to the Detention item. Washout posts to Trailer Washout.
  * A cancelled load can only bill its TONU lines.
  */
 export function buildInvoiceLines(load: LoadView): QboInvoiceLine[] {
@@ -804,8 +801,9 @@ function invoiceLinesFromItems(
 
 /**
  * Pay item -> QBO Item: an office override id (still checked against the decided account), else the
- * production item name. The item is read again at send time. A stale id falls through to the name.
- * A missing name is not cached, so a bookkeeper fix is seen on the next send.
+ * production item name. Detention, lumper, and washout ignore an override whose name is not the
+ * decided item, so a stale Line Haul map cannot retarget them. The item is read again at send time.
+ * A missing name is not cached, so a bookkeeper fix is seen on the next send. Nothing here creates an item.
  */
 async function resolveInvoiceItem(line: Pick<QboInvoiceLine, "category" | "name">): Promise<CatalogItem> {
   const rule = INVOICE_RULES[line.category];
@@ -814,44 +812,18 @@ async function resolveInvoiceItem(line: Pick<QboInvoiceLine, "category" | "name"
       `Map pay item "${line.name}" to a QuickBooks item in Accounting > QuickBooks > Map Pay Items, then send again.`,
     );
   }
-  const effective = line.category === "detention" ? await detentionInvoiceRule(rule) : rule;
   const { listQboItemMaps } = await import("../accounting-desk");
   const mappedId = listQboItemMaps().find((row) => row.category === line.category)?.qbo_item_id.trim() ?? "";
   let item = mappedId ? await readItemById(mappedId) : null;
-  if (!item) item = await itemByExactName(effective.itemName);
-  if (!item) throw new Error(itemMissingMessage(effective));
+  if (item && rule.lockItemName && normalizeMatchName(item.name) !== normalizeMatchName(rule.itemName)) {
+    item = null;
+  }
+  if (!item) item = await itemByExactName(rule.itemName);
+  if (!item) throw new Error(itemMissingMessage(rule));
   const account = await accountById(item.incomeAccountId);
-  const problem = accountProblem(effective, item.name || effective.itemName, account);
+  const problem = accountProblem(rule, item.name || rule.itemName, account);
   if (problem) throw new Error(problem);
   return item;
-}
-
-function lineHaulDetentionRule(rule: InvoiceRule): InvoiceRule {
-  return { ...rule, itemName: LINE_HAUL_ITEM, accountName: GROSS_TRUCKING_INCOME, kind: "income" };
-}
-
-/**
- * Unset, blank, or Gross Trucking Income posts detention on the Line Haul item.
- * Any other setting uses the Detention item, and only when that account is income.
- */
-async function detentionInvoiceRule(rule: InvoiceRule): Promise<InvoiceRule> {
-  const setting = getQuickbooksDetentionIncomeAccount();
-  if (setting.useLineHaul) return lineHaulDetentionRule(rule);
-  const account = setting.id ? await accountById(setting.id) : await accountByName(setting.name);
-  const label = setting.id ? `id ${setting.id}` : `"${setting.name}"`;
-  if (!account) {
-    throw new Error(
-      `Detention income account ${label} is not in this company. Set QBO_DETENTION_INCOME_ACCOUNT to an income account, or leave it blank to post detention on ${GROSS_TRUCKING_INCOME}. Nothing was sent.`,
-    );
-  }
-  if (account.fullyQualifiedName === GROSS_TRUCKING_INCOME) return lineHaulDetentionRule(rule);
-  const income = account.accountType === "Income" || account.classification === "Revenue";
-  if (!income) {
-    throw new Error(
-      `Detention cannot post to "${account.fullyQualifiedName}" because that account is not income. Nothing was sent.`,
-    );
-  }
-  return { ...rule, itemName: "Detention", accountName: account.fullyQualifiedName, kind: "income" };
 }
 
 type QboClassRef = { value: string; name: string };

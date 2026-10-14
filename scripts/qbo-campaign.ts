@@ -133,6 +133,8 @@ const fake = {
     acct("418", "Software", "Expense", "Expense", "Office and Admin Expense:Software"),
     acct("419", "Loan - Lumig Transports LLC", "Other Current Asset", "Asset"),
     acct("420", "Cost of Goods Sold", "Cost of Goods Sold", "Expense"),
+    acct("430", "Detention Income", "Income", "Revenue"),
+    acct("431", "Lumper Income", "Income", "Revenue"),
     acct("701", "Owner-Operator Settlements", "Cost of Goods Sold", "Expense"),
     acct("702", "Fuel Expense Override", "Expense", "Expense"),
   ],
@@ -353,14 +355,14 @@ async function main() {
 
   const cats = {
     flat_rate: { item: "Line Haul", income: "Gross Trucking Income" },
-    detention: { item: "Line Haul", income: "Gross Trucking Income" },
+    detention: { item: "Detention", income: "" },
     layover: { item: "Line Haul", income: "Gross Trucking Income" },
     tonu: { item: "Line Haul", income: "Gross Trucking Income" },
     washout: { item: "Trailer Washout", income: "Gross Trucking Income" },
     extra_stop: { item: "Picks and Drops", income: "Gross Trucking Income" },
     fuel_surcharge: { item: "Line Haul", income: "Gross Trucking Income" },
     misc: { item: "Adjustment", income: "Gross Trucking Income" },
-    lumper: { item: "Lumper", income: "Lumper" },
+    lumper: { item: "Lumper", income: "" },
   } as const;
   type Cat = keyof typeof cats;
   const itemId: Record<string, string> = {};
@@ -390,16 +392,17 @@ async function main() {
   };
 
   if (!LIVE) {
-    // Wrong chart first: Lumper is on Gross Trucking Income, Trailer Washout is on Cost of Goods Sold,
-    // and Fuel Surcharge, Layover, TONU, and Adjustment do not exist yet.
+    // 10/14 chart: Detention and Lumper sit on income accounts (names are not checked).
+    // Trailer Washout sits on Gross Trucking Income. Fuel Surcharge, Layover, TONU, and Adjustment
+    // items are not required.
     putItem("101", "Line Haul", "401");
-    putItem("102", "Detention", "401");
+    putItem("102", "Detention", "430");
     putItem("103", "Picks and Drops", "401");
     putItem("104", "Return", "401");
-    putItem("105", "Lumper", "401");
-    putItem("106", "Trailer Washout", "420");
+    putItem("105", "Lumper", "431");
+    putItem("106", "Trailer Washout", "401");
     itemId.flat_rate = "101";
-    itemId.detention = "101";
+    itemId.detention = "102";
     itemId.extra_stop = "103";
     itemId.lumper = "105";
     itemId.washout = "106";
@@ -407,10 +410,10 @@ async function main() {
     itemId.tonu = "101";
     itemId.fuel_surcharge = "101";
     incomeId.flat_rate = "401";
-    incomeId.detention = "401";
+    incomeId.detention = "430";
     incomeId.extra_stop = "401";
-    incomeId.lumper = "401";
-    incomeId.washout = "420";
+    incomeId.lumper = "431";
+    incomeId.washout = "401";
     incomeId.layover = "401";
     incomeId.tonu = "401";
     incomeId.fuel_surcharge = "401";
@@ -435,7 +438,8 @@ async function main() {
     for (const [cat, spec] of Object.entries(cats)) {
       const item = await find("Item", "Name", spec.item);
       itemId[cat] = String(item?.Id);
-      incomeId[cat] = accountIds[spec.income];
+      const fromItem = String(item?.IncomeAccountRef?.value ?? "");
+      incomeId[cat] = spec.income ? accountIds[spec.income] ?? "" : fromItem;
     }
     const billTo = await find("Customer", "DisplayName", "M & S Loads LLC.");
     if (billTo?.Id) customerQboId = String(billTo.Id);
@@ -454,14 +458,15 @@ async function main() {
 
   const applyFixedChart = () => {
     if (LIVE) return;
-    putItem("105", "Lumper", "408");
+    putItem("102", "Detention", "430");
+    putItem("105", "Lumper", "431");
     putItem("106", "Trailer Washout", "401");
     putItem("107", "Layover", "401");
     putItem("108", "TONU", "401");
     putItem("109", "Adjustment", "401");
     putItem("110", "Fuel Surcharge", "401");
     itemId.flat_rate = "101";
-    itemId.detention = "101";
+    itemId.detention = "102";
     itemId.extra_stop = "103";
     itemId.lumper = "105";
     itemId.washout = "106";
@@ -470,13 +475,13 @@ async function main() {
     itemId.misc = "109";
     itemId.fuel_surcharge = "101";
     incomeId.flat_rate = "401";
-    incomeId.detention = "401";
+    incomeId.detention = "430";
     incomeId.extra_stop = "401";
     incomeId.layover = "401";
     incomeId.tonu = "401";
     incomeId.washout = "401";
     incomeId.misc = "401";
-    incomeId.lumper = "408";
+    incomeId.lumper = "431";
     incomeId.fuel_surcharge = "401";
     qbo.clearQboCatalogCache();
   };
@@ -673,7 +678,7 @@ async function main() {
       const maps = db.prepare("SELECT COUNT(*) AS n FROM qbo_item_maps WHERE qbo_item_id != ''").get() as { n: number };
       check(c.checks, "no pay-item map used", "0", String(maps.n));
     });
-    await runCase("C25", "Layover and TONU use Line Haul; washout on a cost account blocks the send", async (c) => {
+    await runCase("C25", "Layover and TONU use Line Haul; washout posts to Trailer Washout on Gross Trucking Income", async (c) => {
       const layover = makeLoad({ rate: 1000, pay: [{ category: "layover", rate: 50, total: 50 }] });
       await qbo.sendLoadToQuickbooks(layover.id);
       await expectInvoice(c, layover.id, { lines: [{ cat: "flat_rate", amount: 1000 }, { cat: "layover", amount: 50 }] });
@@ -693,11 +698,8 @@ async function main() {
         sentLineDescriptions(tonu.loadNumber).some((text) => text.includes("TONU")) ? "yes" : sentLineDescriptions(tonu.loadNumber).join(" | "),
       );
       const wash = makeLoad({ rate: 1000, pay: [{ category: "washout", rate: 75, total: 75 }] });
-      await expectBlocked(
-        c,
-        () => qbo.sendLoadToQuickbooks(wash.id),
-        /Trailer Washout is mapped to a cost account in QuickBooks\. Ask the bookkeeper to point the item to Gross Trucking Income, then resend\./,
-      );
+      await qbo.sendLoadToQuickbooks(wash.id);
+      await expectInvoice(c, wash.id, { lines: [{ cat: "flat_rate", amount: 1000 }, { cat: "washout", amount: 75 }] });
     });
     await runCase("C26", "Fuel surcharge is its own Line Haul line when no Fuel Surcharge item exists", async (c) => {
       const missing = makeLoad({ rate: 1000, pay: [{ category: "fuel_surcharge", rate: 40, total: 40 }] });
@@ -707,13 +709,23 @@ async function main() {
       check(c.checks, "fuel surcharge wording", "yes", descriptions.some((text) => text.includes("Fuel surcharge")) ? "yes" : descriptions.join(" | "));
       check(c.checks, "own line", "2", String(descriptions.length));
     });
-    await runCase("C27", "Lumper on Gross Trucking Income blocks, including a valid line haul beside it", async (c) => {
+    await runCase("C27", "Billed lumper posts to the Lumper item on an income account and blocks a cost account", async (c) => {
       const { id } = makeLoad({ rate: 1500, pay: [{ category: "lumper", rate: 80, total: 80 }] });
-      await expectBlocked(
-        c,
-        () => qbo.sendLoadToQuickbooks(id),
-        /The bookkeeper must repoint the Lumper item to the Lumper COGS account/,
-      );
+      await qbo.sendLoadToQuickbooks(id);
+      await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1500 }, { cat: "lumper", amount: 80 }] });
+      putItem("105", "Lumper", "408");
+      qbo.clearQboCatalogCache();
+      try {
+        const blocked = makeLoad({ rate: 1500, pay: [{ category: "lumper", rate: 40, total: 40 }] });
+        await expectBlocked(
+          c,
+          () => qbo.sendLoadToQuickbooks(blocked.id),
+          /Billed lumper posts to the Lumper item on an income account/,
+        );
+      } finally {
+        putItem("105", "Lumper", "431");
+        qbo.clearQboCatalogCache();
+      }
     });
     await runCase("C29", "Trailer rental, fuel advance fee, and damage claims are not billed", async (c) => {
       const rental = makeLoad({ rate: 1000, pay: [{ category: "trailer_rental", rate: 100, total: 100 }] });
@@ -955,7 +967,7 @@ async function main() {
     ).length;
     check(c.checks, "one lumper line after re-sync", "1", String(lumperCount));
   });
-  await runCase("C04", "Detention (2 h x $75) posts on Line Haul and keeps the Detention wording", async (c) => {
+  await runCase("C04", "Detention (2 h x $75) posts on the Detention item and keeps the Detention wording", async (c) => {
     const { id, loadNumber } = makeLoad({ rate: 1800, pay: [{ category: "detention", rate: 75, qty: 2, total: 150 }] });
     await qbo.sendLoadToQuickbooks(id);
     await expectInvoice(c, id, { lines: [{ cat: "flat_rate", amount: 1800 }, { cat: "detention", amount: 150, qty: 2, unitPrice: 75 }] });
@@ -1355,47 +1367,19 @@ async function main() {
   });
 
   if (!LIVE) {
-    await runCase("C37", "Detention uses Line Haul until an income account is configured", async (c) => {
+    await runCase("C37", "Detention posts to the Detention item on its income account, not Line Haul", async (c) => {
       delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
-      upsertQboItemMap("detention", "", "");
+      upsertQboItemMap("detention", "101", "Line Haul");
+      itemId.detention = "102";
+      incomeId.detention = "430";
       qbo.clearQboCatalogCache();
+      const restoreAccountName = () => {
+        const account = fake.accounts.find((row) => row.Id === "430");
+        if (!account) return;
+        account.Name = "Detention Income";
+        account.FullyQualifiedName = "Detention Income";
+      };
       try {
-        const fallback = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
-        await qbo.sendLoadToQuickbooks(fallback.id);
-        itemId.detention = "101";
-        incomeId.detention = "401";
-        await expectInvoice(c, fallback.id, {
-          lines: [
-            { cat: "flat_rate", amount: 1000 },
-            { cat: "detention", amount: 50 },
-          ],
-        });
-        check(
-          c.checks,
-          "detention wording",
-          "yes",
-          sentLineDescriptions(fallback.loadNumber).some((text) => text.includes("Detention")) ? "yes" : "missing",
-        );
-        process.env.QBO_DETENTION_INCOME_ACCOUNT = "Gross Trucking Income";
-        const named = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 40, total: 40 }] });
-        await qbo.sendLoadToQuickbooks(named.id);
-        await expectInvoice(c, named.id, {
-          lines: [
-            { cat: "flat_rate", amount: 1000 },
-            { cat: "detention", amount: 40 },
-          ],
-        });
-        process.env.QBO_DETENTION_INCOME_ACCOUNT = "Detention Income";
-        const missing = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 30, total: 30 }] });
-        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(missing.id), /Detention income account "Detention Income" is not in this company/);
-        fake.accounts.push(acct("430", "Detention Income", "Income", "Revenue"));
-        qbo.clearQboCatalogCache();
-        const wrong = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
-        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(wrong.id), /It must be on "Detention Income"/);
-        putItem("102", "Detention", "430");
-        itemId.detention = "102";
-        incomeId.detention = "430";
-        qbo.clearQboCatalogCache();
         const own = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 50, total: 50 }] });
         await qbo.sendLoadToQuickbooks(own.id);
         await expectInvoice(c, own.id, {
@@ -1406,34 +1390,53 @@ async function main() {
         });
         check(
           c.checks,
-          "configured detention wording",
+          "detention wording",
           "yes",
           sentLineDescriptions(own.loadNumber).some((text) => text.includes("Detention")) ? "yes" : "missing",
         );
-        process.env.QBO_DETENTION_INCOME_ACCOUNT = "Cost of Goods Sold";
+        const account = fake.accounts.find((row) => row.Id === "430");
+        if (account) {
+          account.Name = "Detention";
+          account.FullyQualifiedName = "Detention";
+        }
         qbo.clearQboCatalogCache();
-        const cogs = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 15, total: 15 }] });
-        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(cogs.id), /Detention cannot post to "Cost of Goods Sold" because that account is not income/);
-        delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
-        putItem("102", "Detention", "420");
-        itemId.detention = "101";
-        incomeId.detention = "401";
-        qbo.clearQboCatalogCache();
-        const ignoreCogs = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 18, total: 18 }] });
-        await qbo.sendLoadToQuickbooks(ignoreCogs.id);
-        await expectInvoice(c, ignoreCogs.id, {
+        const prodName = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 40, total: 40 }] });
+        await qbo.sendLoadToQuickbooks(prodName.id);
+        await expectInvoice(c, prodName.id, {
           lines: [
             { cat: "flat_rate", amount: 1000 },
-            { cat: "detention", amount: 18 },
+            { cat: "detention", amount: 40 },
           ],
         });
+        process.env.QBO_DETENTION_INCOME_ACCOUNT = "Gross Trucking Income";
+        const ignored = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 22, total: 22 }] });
+        await qbo.sendLoadToQuickbooks(ignored.id);
+        await expectInvoice(c, ignored.id, {
+          lines: [
+            { cat: "flat_rate", amount: 1000 },
+            { cat: "detention", amount: 22 },
+          ],
+        });
+        delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
+        fake.items.delete("102");
+        qbo.clearQboCatalogCache();
+        const missing = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 30, total: 30 }] });
+        await expectBlocked(c, () => qbo.sendLoadToQuickbooks(missing.id), /QuickBooks has no item named "Detention"/);
+        putItem("102", "Detention", "420");
+        qbo.clearQboCatalogCache();
+        const cogs = makeLoad({ rate: 1000, pay: [{ category: "detention", rate: 15, total: 15 }] });
+        await expectBlocked(
+          c,
+          () => qbo.sendLoadToQuickbooks(cogs.id),
+          /Detention posts to the Detention item on an income account/,
+        );
       } finally {
         delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
-        putItem("102", "Detention", "401");
-        itemId.detention = "101";
-        incomeId.detention = "401";
-        upsertQboItemMap("detention", "101", "Line Haul");
-        fake.accounts = fake.accounts.filter((row) => row.Id !== "430");
+        restoreAccountName();
+        putItem("102", "Detention", "430");
+        itemId.detention = "102";
+        incomeId.detention = "430";
+        upsertQboItemMap("detention", "102", "Detention");
         qbo.clearQboCatalogCache();
       }
     });

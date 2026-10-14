@@ -135,7 +135,7 @@ async function main() {
   assert.match(lines[0].description, /QBOMAP1/);
 
   // Unmapped "Line Haul" with no same-named item: refuse instead of using "Concrete".
-  await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId), /Map pay item "Line Haul"/);
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(loadId), /QuickBooks has no item named "Line Haul"/);
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("quickbooks.api.intuit.com")), false, "no QBO writes when a line is unmapped");
   assert.equal(calls.some((c) => /Type%20%3D%20'Service'|Type = 'Service'/.test(decodeURIComponent(c.url))), false);
 
@@ -166,10 +166,10 @@ async function main() {
     invoice.body.Line.every((line: Json) => String(line.Description ?? "").includes("QBOMAP1")),
     "every line description keeps the load number",
   );
-  assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "23", "23"], "map, Line Haul, Line Haul");
+  assert.deepEqual(invoice.body.Line.map((l: Json) => l.SalesItemLineDetail.ItemRef.value), ["21", "22", "23"], "map, Detention, Line Haul");
   assert.match(String(invoice.body.Line[1].Description), /Detention/);
   assert.match(String(invoice.body.Line[2].Description), /TONU/);
-  assert.equal(invoice.body.Line[1].SalesItemLineDetail.ItemRef.name, "Line Haul");
+  assert.equal(invoice.body.Line[1].SalesItemLineDetail.ItemRef.name, "Detention");
   assert.equal(invoice.body.Line[2].SalesItemLineDetail.ItemRef.name, "Line Haul");
 
   const longNumber = "N".repeat(22);
@@ -298,17 +298,22 @@ async function main() {
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "no write after a failed read");
 
   const { accountProblem, forbiddenAccountMessage, INVOICE_RULES } = await import("../lib/qbo-production-map");
-  const { getQuickbooksDetentionIncomeAccount, qboClassAutoCreateEnabled } = await import("../lib/env");
+  const { qboClassAutoCreateEnabled } = await import("../lib/env");
   assert.equal(INVOICE_RULES.fuel_surcharge.itemName, "Line Haul");
   assert.equal(INVOICE_RULES.fuel_surcharge.accountName, "Gross Trucking Income");
   assert.equal(INVOICE_RULES.fuel_surcharge.kind, "income");
   assert.equal(INVOICE_RULES.layover.itemName, "Line Haul");
   assert.equal(INVOICE_RULES.tonu.itemName, "Line Haul");
-  assert.equal(INVOICE_RULES.lumper.accountName, "Lumper");
-  assert.equal(INVOICE_RULES.lumper.kind, "cogs");
+  assert.equal(INVOICE_RULES.lumper.itemName, "Lumper");
+  assert.equal(INVOICE_RULES.lumper.accountName, "");
+  assert.equal(INVOICE_RULES.lumper.kind, "income");
   assert.equal(INVOICE_RULES.layover.accountName, "Gross Trucking Income");
   assert.equal(INVOICE_RULES.tonu.accountName, "Gross Trucking Income");
-  assert.equal(INVOICE_RULES.detention.itemName, "Line Haul");
+  assert.equal(INVOICE_RULES.detention.itemName, "Detention");
+  assert.equal(INVOICE_RULES.detention.accountName, "");
+  assert.equal(INVOICE_RULES.detention.kind, "income");
+  assert.equal(INVOICE_RULES.washout.itemName, "Trailer Washout");
+  assert.equal(INVOICE_RULES.washout.accountName, "Gross Trucking Income");
   assert.equal(INVOICE_RULES.misc.itemName, "Adjustment", "Adjustment mapping is unchanged");
   assert.equal(INVOICE_RULES.misc.accountName, "Gross Trucking Income");
   assert.match(forbiddenAccountMessage("Uncategorized Income"), /uncategorized/);
@@ -323,13 +328,6 @@ async function main() {
     }),
     /uncategorized/i,
   );
-  assert.equal(getQuickbooksDetentionIncomeAccount().useLineHaul, true);
-  assert.equal(getQuickbooksDetentionIncomeAccount().name, "Gross Trucking Income");
-  process.env.QBO_DETENTION_INCOME_ACCOUNT = "Gross Trucking Income";
-  assert.equal(getQuickbooksDetentionIncomeAccount().useLineHaul, true);
-  process.env.QBO_DETENTION_INCOME_ACCOUNT = "88";
-  assert.deepEqual(getQuickbooksDetentionIncomeAccount(), { id: "88", name: "", useLineHaul: false });
-  delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
   assert.equal(qboClassAutoCreateEnabled(), true, "sandbox defaults class auto-create on");
   process.env.QBO_CLASS_AUTO_CREATE = "off";
   assert.equal(qboClassAutoCreateEnabled(), false);
@@ -394,91 +392,195 @@ async function main() {
   );
   assert.match(String(accessorial.body.Line[1].Description), /Fuel surcharge/);
   assert.match(String(accessorial.body.Line[2].Description), /Layover/);
+  assert.equal(accessorial.body.Line[2].SalesItemLineDetail.ItemRef.name, "Line Haul");
   assert.equal(accessorial.body.Line.length, 3, "fuel surcharge and layover stay on their own lines");
 
   const adjustmentId = delivered("QBOMAP6", 800);
   addPayItem(adjustmentId, { side: "income", bill_to: "customer", payee: "", category: "misc", rate: -15, qty: 1, total: -15, notes: "Rate adjustment" });
   upsertQboItemMap("misc", "", "");
   calls.length = 0;
-  await assert.rejects(() => qbo.sendLoadToQuickbooks(adjustmentId), /Map pay item "Adjustment"/);
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(adjustmentId), /QuickBooks has no item named "Adjustment"/);
   assert.equal(calls.some((c) => c.method === "POST" && c.url.includes("/invoice")), false, "a blank Adjustment map is not a mapped item");
+  assert.equal(calls.some((c) => c.method === "POST" && /\/(item|account)(\?|$)/.test(c.url)), false, "a missing Adjustment item is not created");
 
-  ACCOUNTS.push({
-    Id: "408",
-    Name: "Lumper",
-    FullyQualifiedName: "Lumper",
-    AccountType: "Cost of Goods Sold",
-    Classification: "Expense",
-    Active: true,
-  });
-  ITEMS.push({ Id: "106", Name: "Trailer Washout", Type: "Service", IncomeAccountRef: { value: "408", name: "Lumper" } });
+  ACCOUNTS.push(
+    {
+      Id: "408",
+      Name: "Lumper",
+      FullyQualifiedName: "Lumper",
+      AccountType: "Cost of Goods Sold",
+      Classification: "Expense",
+      Active: true,
+    },
+    {
+      Id: "430",
+      Name: "Detention Income",
+      FullyQualifiedName: "Detention Income",
+      AccountType: "Income",
+      Classification: "Revenue",
+      Active: true,
+    },
+    {
+      Id: "431",
+      Name: "Detention",
+      FullyQualifiedName: "Detention",
+      AccountType: "Income",
+      Classification: "Revenue",
+      Active: true,
+    },
+    {
+      Id: "432",
+      Name: "Lumper Income",
+      FullyQualifiedName: "Lumper Income",
+      AccountType: "Income",
+      Classification: "Revenue",
+      Active: true,
+    },
+  );
+  ITEMS.push(
+    { Id: "105", Name: "Lumper", Type: "Service", IncomeAccountRef: { value: "432", name: "Lumper Income" } },
+    { Id: "106", Name: "Trailer Washout", Type: "Service", IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } },
+  );
+  const detentionItem = ITEMS.find((item) => item.Id === "22");
+  assert.ok(detentionItem);
+  detentionItem.IncomeAccountRef = { value: "431", name: "Detention" };
   qbo.clearQboCatalogCache();
-  const washId = delivered("QBOMAP7", 700);
-  addPayItem(washId, { side: "income", bill_to: "customer", payee: "", category: "washout", rate: 75, qty: 1, total: 75, notes: "" });
+
+  function postedInvoice(): Json {
+    const invoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"));
+    assert.ok(invoice, "invoice was posted");
+    return invoice.body;
+  }
+
+  // Lumper: the Lumper item on an income account. A cost account and a missing item both stop the send.
+  const lumperId = delivered("QBOMAP7", 700);
+  addPayItem(lumperId, { side: "income", bill_to: "customer", payee: "", category: "lumper", rate: 80, qty: 1, total: 80, notes: "" });
+  calls.length = 0;
+  const lumperSent = await qbo.sendLoadToQuickbooks(lumperId);
+  assert.match(lumperSent.invoiceId, /^\d+$/);
+  const lumperInvoice = postedInvoice();
+  assert.equal(lumperInvoice.Line[1].SalesItemLineDetail.ItemRef.value, "105");
+  assert.equal(lumperInvoice.Line[1].SalesItemLineDetail.ItemRef.name, "Lumper");
+  const lumperItem = ITEMS.find((item) => item.Id === "105");
+  assert.ok(lumperItem);
+  lumperItem.IncomeAccountRef = { value: "408", name: "Lumper" };
+  qbo.clearQboCatalogCache();
+  const lumperCostId = delivered("QBOMAP7B", 710);
+  addPayItem(lumperCostId, { side: "income", bill_to: "customer", payee: "", category: "lumper", rate: 80, qty: 1, total: 80, notes: "" });
   calls.length = 0;
   await assert.rejects(
-    () => qbo.sendLoadToQuickbooks(washId),
-    /Trailer Washout is mapped to a cost account in QuickBooks\. Ask the bookkeeper to point the item to Gross Trucking Income, then resend\./,
+    () => qbo.sendLoadToQuickbooks(lumperCostId),
+    /Billed lumper posts to the Lumper item on an income account/,
   );
-  assert.equal(calls.some((c) => c.method === "POST"), false, "a washout on a cost account posts nothing");
-  const washItem = ITEMS.find((item) => item.Id === "106");
-  assert.ok(washItem);
-  washItem.IncomeAccountRef = { value: "401", name: "Gross Trucking Income" };
+  assert.equal(calls.some((c) => c.method === "POST"), false, "lumper on a cost account posts nothing");
+  const lumperIndex = ITEMS.findIndex((item) => item.Id === "105");
+  const removedLumper = ITEMS.splice(lumperIndex, 1)[0];
   qbo.clearQboCatalogCache();
   calls.length = 0;
-  const washed = await qbo.sendLoadToQuickbooks(washId);
-  assert.match(washed.invoiceId, /^\d+$/);
-  const washedInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
-  assert.equal(washedInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "106");
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(lumperCostId), /QuickBooks has no item named "Lumper"/);
+  assert.equal(calls.some((c) => c.method === "POST" && /\/(item|account)(\?|$)/.test(c.url)), false, "a missing Lumper item is not created");
+  ITEMS.push({ ...removedLumper, IncomeAccountRef: { value: "432", name: "Lumper Income" } });
+  qbo.clearQboCatalogCache();
 
+  // Detention: the Detention item. Production account "Detention" and sandbox account "Detention Income" both post.
   const detentionId = delivered("QBOMAP8", 600);
   addPayItem(detentionId, { side: "income", bill_to: "customer", payee: "", category: "detention", rate: 50, qty: 1, total: 50, notes: "" });
-  ITEMS.find((item) => item.Id === "22")!.IncomeAccountRef = { value: "408", name: "Lumper" };
-  qbo.clearQboCatalogCache();
+  upsertQboItemMap("detention", "23", "Line Haul");
   calls.length = 0;
-  const detentionOnHaul = await qbo.sendLoadToQuickbooks(detentionId);
-  assert.match(detentionOnHaul.invoiceId, /^\d+$/);
-  const detentionInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
-  assert.equal(detentionInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "23", "COGS Detention item is not used");
-  assert.match(String(detentionInvoice.body.Line[1].Description), /Detention/);
-  process.env.QBO_DETENTION_INCOME_ACCOUNT = "Detention Income";
-  const missingDetention = delivered("QBOMAP9", 610);
-  addPayItem(missingDetention, { side: "income", bill_to: "customer", payee: "", category: "detention", rate: 20, qty: 1, total: 20, notes: "" });
-  calls.length = 0;
-  await assert.rejects(() => qbo.sendLoadToQuickbooks(missingDetention), /Detention income account "Detention Income" is not in this company/);
-  assert.equal(calls.some((c) => c.method === "POST"), false);
-  ACCOUNTS.push({
-    Id: "430",
-    Name: "Detention Income",
-    FullyQualifiedName: "Detention Income",
-    AccountType: "Income",
-    Classification: "Revenue",
-    Active: true,
-  });
-  ITEMS.find((item) => item.Id === "22")!.IncomeAccountRef = { value: "401", name: "Gross Trucking Income" };
+  const detentionSent = await qbo.sendLoadToQuickbooks(detentionId);
+  assert.match(detentionSent.invoiceId, /^\d+$/);
+  const detentionInvoice = postedInvoice();
+  assert.equal(detentionInvoice.Line[1].SalesItemLineDetail.ItemRef.value, "22", "a Line Haul map does not retarget detention");
+  assert.equal(detentionInvoice.Line[1].SalesItemLineDetail.ItemRef.name, "Detention");
+  assert.match(String(detentionInvoice.Line[1].Description), /Detention/);
+  detentionItem.IncomeAccountRef = { value: "430", name: "Detention Income" };
   qbo.clearQboCatalogCache();
+  const sandboxDetentionId = delivered("QBOMAP8B", 605);
+  addPayItem(sandboxDetentionId, { side: "income", bill_to: "customer", payee: "", category: "detention", rate: 40, qty: 1, total: 40, notes: "" });
   calls.length = 0;
-  await assert.rejects(() => qbo.sendLoadToQuickbooks(missingDetention), /It must be on "Detention Income"/);
-  assert.equal(calls.some((c) => c.method === "POST"), false);
-  ITEMS.find((item) => item.Id === "22")!.IncomeAccountRef = { value: "430", name: "Detention Income" };
+  const sandboxDetention = await qbo.sendLoadToQuickbooks(sandboxDetentionId);
+  assert.match(sandboxDetention.invoiceId, /^\d+$/);
+  assert.equal(postedInvoice().Line[1].SalesItemLineDetail.ItemRef.value, "22", "sandbox account name Detention Income still uses the Detention item");
+  process.env.QBO_DETENTION_INCOME_ACCOUNT = "Gross Trucking Income";
   qbo.clearQboCatalogCache();
+  const ignoredEnvId = delivered("QBOMAP8D", 608);
+  addPayItem(ignoredEnvId, { side: "income", bill_to: "customer", payee: "", category: "detention", rate: 30, qty: 1, total: 30, notes: "" });
   calls.length = 0;
-  const ownDetention = await qbo.sendLoadToQuickbooks(missingDetention);
-  assert.match(ownDetention.invoiceId, /^\d+$/);
-  const ownInvoice = calls.find((c) => c.method === "POST" && c.url.includes("/invoice"))!;
-  assert.equal(ownInvoice.body.Line[1].SalesItemLineDetail.ItemRef.value, "22");
-  assert.match(String(ownInvoice.body.Line[1].Description), /Detention/);
-  process.env.QBO_DETENTION_INCOME_ACCOUNT = "Lumper";
+  const ignoredEnv = await qbo.sendLoadToQuickbooks(ignoredEnvId);
+  assert.match(ignoredEnv.invoiceId, /^\d+$/);
+  assert.equal(postedInvoice().Line[1].SalesItemLineDetail.ItemRef.name, "Detention", "QBO_DETENTION_INCOME_ACCOUNT does not route detention to Line Haul");
+  delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
+  detentionItem.IncomeAccountRef = { value: "408", name: "Lumper" };
   qbo.clearQboCatalogCache();
-  const cogsDetention = delivered("QBOMAP10", 620);
+  const cogsDetention = delivered("QBOMAP8C", 610);
   addPayItem(cogsDetention, { side: "income", bill_to: "customer", payee: "", category: "detention", rate: 20, qty: 1, total: 20, notes: "" });
   calls.length = 0;
   await assert.rejects(
     () => qbo.sendLoadToQuickbooks(cogsDetention),
-    /Detention cannot post to "Lumper" because that account is not income/,
+    /Detention posts to the Detention item on an income account/,
   );
   assert.equal(calls.some((c) => c.method === "POST"), false, "detention never posts to a non-income account");
-  delete process.env.QBO_DETENTION_INCOME_ACCOUNT;
+  const detentionIndex = ITEMS.findIndex((item) => item.Id === "22");
+  const removedDetention = ITEMS.splice(detentionIndex, 1)[0];
+  qbo.clearQboCatalogCache();
+  calls.length = 0;
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(cogsDetention), /QuickBooks has no item named "Detention"/);
+  assert.equal(calls.some((c) => c.method === "POST" && /\/(item|account)(\?|$)/.test(c.url)), false, "a missing Detention item is not created");
+  ITEMS.push({ ...removedDetention, IncomeAccountRef: { value: "431", name: "Detention" } });
+  upsertQboItemMap("detention", "", "");
+  qbo.clearQboCatalogCache();
+
+  // Trailer washout posts to Trailer Washout on Gross Trucking Income.
+  const washId = delivered("QBOMAP9", 720);
+  addPayItem(washId, { side: "income", bill_to: "customer", payee: "", category: "washout", rate: 75, qty: 1, total: 75, notes: "" });
+  calls.length = 0;
+  const washed = await qbo.sendLoadToQuickbooks(washId);
+  assert.match(washed.invoiceId, /^\d+$/);
+  const washedInvoice = postedInvoice();
+  assert.equal(washedInvoice.Line[1].SalesItemLineDetail.ItemRef.value, "106");
+  assert.equal(washedInvoice.Line[1].SalesItemLineDetail.ItemRef.name, "Trailer Washout");
+  const washItem = ITEMS.find((item) => item.Id === "106");
+  assert.ok(washItem);
+  washItem.IncomeAccountRef = { value: "408", name: "Lumper" };
+  qbo.clearQboCatalogCache();
+  calls.length = 0;
+  await assert.rejects(
+    () => qbo.sendLoadToQuickbooks(washId, { confirmResend: true }),
+    /QuickBooks item "Trailer Washout" is on "Lumper"\. It must be on "Gross Trucking Income"/,
+  );
+  assert.equal(calls.some((c) => c.method === "POST"), false, "washout on a cost account posts nothing");
+  const washIndex = ITEMS.findIndex((item) => item.Id === "106");
+  const removedWash = ITEMS.splice(washIndex, 1)[0];
+  qbo.clearQboCatalogCache();
+  calls.length = 0;
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(washId, { confirmResend: true }), /QuickBooks has no item named "Trailer Washout"/);
+  assert.equal(calls.some((c) => c.method === "POST" && /\/(item|account)(\?|$)/.test(c.url)), false, "a missing washout item is not created");
+  ITEMS.push({ ...removedWash, IncomeAccountRef: { value: "401", name: "Gross Trucking Income" } });
+  qbo.clearQboCatalogCache();
+
+  // Layover and TONU stay on Line Haul / Gross Trucking Income.
+  const layoverId = delivered("QBOMAP10", 730);
+  addPayItem(layoverId, { side: "income", bill_to: "customer", payee: "", category: "layover", rate: 25, qty: 1, total: 25, notes: "" });
+  calls.length = 0;
+  await qbo.sendLoadToQuickbooks(layoverId);
+  const layoverInvoice = postedInvoice();
+  assert.equal(layoverInvoice.Line[1].SalesItemLineDetail.ItemRef.value, "23");
+  assert.equal(layoverInvoice.Line[1].SalesItemLineDetail.ItemRef.name, "Line Haul");
+  assert.match(String(layoverInvoice.Line[1].Description), /Layover/);
+  const tonuId = delivered("QBOMAP10B", 740);
+  addPayItem(tonuId, { side: "income", bill_to: "customer", payee: "", category: "tonu", rate: 50, qty: 1, total: 50, notes: "" });
+  calls.length = 0;
+  await qbo.sendLoadToQuickbooks(tonuId);
+  const tonuInvoice = postedInvoice();
+  assert.equal(tonuInvoice.Line[1].SalesItemLineDetail.ItemRef.value, "23");
+  assert.equal(tonuInvoice.Line[1].SalesItemLineDetail.ItemRef.name, "Line Haul");
+  assert.match(String(tonuInvoice.Line[1].Description), /TONU/);
+
+  process.env.QBO_INVOICE_SEND_ENABLED = "false";
+  calls.length = 0;
+  await assert.rejects(() => qbo.sendLoadToQuickbooks(tonuId, { confirmResend: true }), /QuickBooks sending is off/);
+  assert.equal(calls.some((c) => c.method === "POST"), false, "the send gate still blocks a mapped invoice");
+  process.env.QBO_INVOICE_SEND_ENABLED = "true";
   qbo.clearQboCatalogCache();
 
   const savedSandboxForClass = process.env.QBO_SANDBOX;
