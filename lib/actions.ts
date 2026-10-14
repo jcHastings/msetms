@@ -1578,13 +1578,18 @@ export async function rememberFacilityAliasFormAction(
   _prev: { ok: true; location: Location } | { ok: false; error: string } | null,
   formData: FormData,
 ): Promise<{ ok: true; location: Location } | { ok: false; error: string }> {
-  return rememberFacilityAliasAction(Number(formData.get("location_id")), {
-    name: String(formData.get("name") ?? ""),
-    street: String(formData.get("street") ?? ""),
-    city: String(formData.get("city") ?? ""),
-    state: String(formData.get("state") ?? ""),
-    zip: String(formData.get("zip") ?? ""),
-  });
+  try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
+    return rememberFacilityAliasAction(Number(formData.get("location_id")), {
+      name: String(formData.get("name") ?? ""),
+      street: String(formData.get("street") ?? ""),
+      city: String(formData.get("city") ?? ""),
+      state: String(formData.get("state") ?? ""),
+      zip: String(formData.get("zip") ?? ""),
+    });
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
 }
 
 export async function rememberFacilityAliasAction(
