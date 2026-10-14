@@ -81,6 +81,7 @@ import { relayForDriver } from "@/lib/relay-store";
 import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { mapsBrowserKey } from "@/lib/load-map";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks, locationsForIds } from "@/lib/queries";
 import { getLoadSwap } from "@/lib/load-swap";
 import { listRelays } from "@/lib/relay-store";
@@ -120,6 +121,7 @@ export async function LoadEditor({
   const trucks = listTrucks();
   const trailers = listTrailers();
   const drivers = listDrivers();
+  const unitFacts = loadAssignmentUnitFacts();
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
   const claims = listClaims(load.id);
@@ -332,6 +334,7 @@ export async function LoadEditor({
             {...formSettings}
             action={boundAction}
             submitLabel="Save load"
+            unitFacts={unitFacts}
           />
         </LoadTabPanel>
 
@@ -497,6 +500,7 @@ export async function LoadEditor({
             locations={locations}
             drivers={drivers}
             formSettings={formSettings}
+            unitFacts={unitFacts}
           />
           <section className="card mb-4 overflow-hidden">
             <div className="section-head px-3 py-1.5">

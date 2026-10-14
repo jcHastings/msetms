@@ -13,6 +13,7 @@ import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average
 import { customerRefFromRateCon, rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
+import { EMPTY_ASSIGNMENT_UNIT_FACTS, type AssignmentUnitFacts } from "@/lib/driver-unit";
 import type { ActionResult, Customer, DriverWithTruck, Load, Location, Trailer, Truck } from "@/lib/types";
 
 export function RateConApply({
@@ -23,6 +24,7 @@ export function RateConApply({
   locations = [],
   drivers,
   formSettings,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: {
   load: Load;
   customers: Customer[];
@@ -41,6 +43,7 @@ export function RateConApply({
     mapsBrowserKey?: string;
     alertWindows: ComplianceWindows;
   };
+  unitFacts?: AssignmentUnitFacts;
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
@@ -131,6 +134,7 @@ export function RateConApply({
           formSettings={formSettings}
           action={boundAction}
           facilityMatches={"facilityMatches" in state ? state.facilityMatches : null}
+          unitFacts={unitFacts}
         />
       ) : null}
     </section>
@@ -152,6 +156,7 @@ function RateConAppliedLoad({
   formSettings,
   action,
   facilityMatches = null,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: {
   parsed: ParsedRateCon;
   inboxId: string;
@@ -177,6 +182,7 @@ function RateConAppliedLoad({
   };
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
   facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
+  unitFacts?: AssignmentUnitFacts;
 }) {
   const [discarded, setDiscarded] = useState(false);
   const book = useRateConLocationBook(
@@ -234,6 +240,7 @@ function RateConAppliedLoad({
         {...formSettings}
         action={action}
         submitLabel="Confirm and apply rate con"
+        unitFacts={unitFacts}
       />
       <div className="mt-3">
         <button className="btn btn-secondary" type="button" data-rate-con-discard="" onClick={() => setDiscarded(true)}>

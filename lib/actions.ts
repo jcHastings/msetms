@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { withRequestAuditActor } from "./audit";
 import { parseDriverLoginPassword } from "./driver-password";
 import { cleanDateInput, parseDriverPin, parseOptionalFloat, parseOptionalInt, requiredString } from "./format";
+import { applyDriverTruckDefault } from "./driver-unit-db";
+import { formRequestsExplicitTruck } from "./driver-unit";
 import { parseLoadInput } from "./load-input";
 import { safeReturnTo } from "./load-page-shared";
 import { addPayItem, deletePayItem } from "./pay-items";
@@ -497,6 +499,17 @@ export async function createLoadAction(
     try {
       const actor = await requireLoadEditor();
       const input = applyLoadPermissions(parseLoadInput(formData), actor.role);
+      if (canAssignLoads(actor.role)) {
+        input.truck_id = applyDriverTruckDefault({
+          previousDriverId: null,
+          nextDriverId: input.driver_id,
+          previousTruckId: null,
+          submittedTruckId: input.truck_id,
+          truckFieldPresent: formData.has("truck_id"),
+          truckExplicit: formRequestsExplicitTruck(formData.get("truck_explicit")),
+          creating: true,
+        });
+      }
       const inboxId = String(formData.get("inbox_id") ?? "").trim();
       if (inboxId) {
         const { readInboxParse } = await import("./files");
@@ -548,6 +561,17 @@ export async function updateLoadAction(
         assertCanEditLoadRecord(existing, actor.role);
       }
       const input = applyLoadPermissions(parseLoadInput(formData, true, existing), actor.role, existing ?? undefined);
+      if (canAssignLoads(actor.role)) {
+        input.truck_id = applyDriverTruckDefault({
+          previousDriverId: existing?.driver_id ?? null,
+          nextDriverId: input.driver_id,
+          previousTruckId: existing?.truck_id ?? null,
+          submittedTruckId: formData.has("truck_id") ? parseOptionalInt(formData.get("truck_id")) : null,
+          truckFieldPresent: formData.has("truck_id"),
+          truckExplicit: formRequestsExplicitTruck(formData.get("truck_explicit")),
+          creating: false,
+        });
+      }
       enforceAssignmentCompliance(formData, input.truck_id, input.driver_id, input.trailer_id ?? null);
       updateLoad(id, input);
       if (input.driver_id && input.driver_id !== existing?.driver_id) applyWorkflowOnDriverAssign(id);
@@ -606,13 +630,21 @@ export async function assignLoadAction(formData: FormData): Promise<ActionResult
     try {
       const actor = await requireLoadAssigner();
       const loadId = parseOptionalInt(formData.get("load_id"));
-      const truckId = parseOptionalInt(formData.get("truck_id"));
       const driverId = parseOptionalInt(formData.get("driver_id"));
       const trailerId = parseOptionalInt(formData.get("trailer_id"));
+      const existing = getLoad(loadId ?? 0);
+      const truckId = applyDriverTruckDefault({
+        previousDriverId: existing?.driver_id ?? null,
+        nextDriverId: driverId,
+        previousTruckId: existing?.truck_id ?? null,
+        submittedTruckId: parseOptionalInt(formData.get("truck_id")),
+        truckFieldPresent: formData.has("truck_id"),
+        truckExplicit: formRequestsExplicitTruck(formData.get("truck_explicit")),
+        creating: false,
+      });
       if (!loadId || !truckId || !driverId) {
         throw new Error("Pick a truck and a driver.");
       }
-      const existing = getLoad(loadId);
       if (existing) {
         const { assertCanEditLoadRecord } = await import("./accounting-desk");
         assertCanEditLoadRecord(existing, actor.role);

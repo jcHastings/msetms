@@ -36,6 +36,7 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { RateConImport } from "@/components/rate-con-import";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, canWrite, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
@@ -97,6 +98,7 @@ export default async function DashboardPage({
           locations={[]}
           drivers={drivers}
           formSettings={loadFormSettings()}
+          unitFacts={loadAssignmentUnitFacts()}
         />
       </div>
 
