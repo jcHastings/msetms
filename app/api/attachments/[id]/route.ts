@@ -45,6 +45,9 @@ export async function GET(
     if (receiptOwner != null && receiptOwner !== driver.id) {
       return new Response("Forbidden", { status: 403 });
     }
+    if (driver && isCustomerRateDocument(attachment)) {
+      return new Response("Not found", { status: 404 });
+    }
     if (!driverMaySeeAttachment(attachment, driver)) {
       return new Response("Not found", { status: 404 });
     }
