@@ -20673,6 +20673,8 @@ DISPATCH CONFIRMATION
     recordedAt: "2026-08-25T16:00:00.000Z",
     source: "samsara",
   });
+  getDb().prepare("UPDATE loads SET created_at = ? WHERE id = ?").run("2026-08-24T12:00:00.000Z", histLoadId);
+  getDb().prepare("UPDATE load_audit SET created_at = ? WHERE load_id = ?").run("2026-08-24T12:00:00.000Z", histLoadId);
   applyGeofenceArrivals(histLoadId);
   const histStop = loadStops.getStop(histStopId);
   assert.equal(histStop?.arrived_at, "2026-08-25T13:00:00.000Z");

@@ -10,6 +10,7 @@ export function DeadheadPrompt({
   loadId,
   driverName,
   place,
+  alternativePlace = "",
   notes,
   readOnly = false,
   locations,
@@ -18,6 +19,7 @@ export function DeadheadPrompt({
   loadId: number;
   driverName: string;
   place: string;
+  alternativePlace?: string;
   notes: string[];
   readOnly?: boolean;
   locations: LocationPickerRow[];
@@ -29,6 +31,11 @@ export function DeadheadPrompt({
     <section className="card mb-4 p-4" data-deadhead-prompt="">
       <p className="text-sm font-semibold text-slate-900">{deadheadPromptText(driverName, place)}</p>
       <p className="mt-1 text-sm text-slate-600">Empty miles stay pending until you confirm the start.</p>
+      {alternativePlace.trim() ? (
+        <p className="mt-1 text-sm text-slate-600" data-deadhead-alternative="">
+          Other start: {alternativePlace}
+        </p>
+      ) : null}
       {notes.length ? (
         <ul
           className="mt-2 space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
