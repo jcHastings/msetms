@@ -8,7 +8,7 @@ import { extractRateConFormData, RateConPicker } from "@/components/rate-con-pic
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { RateConFinePrint } from "@/components/rate-con-fine-print";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
-import { parseRateConAction, createLoadAction } from "@/lib/actions";
+import { parseRateConAction, createLoadAction, type FacilityMatchPreview } from "@/lib/actions";
 import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
@@ -132,6 +132,7 @@ export function RateConImport({
           locations={locations}
           drivers={drivers}
           formSettings={formSettings}
+          facilityMatches={"facilityMatches" in state ? state.facilityMatches : null}
         />
       ) : (
         children
@@ -154,6 +155,7 @@ function RateConImportedLoad({
   locations,
   drivers,
   formSettings,
+  facilityMatches = null,
 }: {
   parsed: ParsedRateCon;
   inboxId: string;
@@ -168,9 +170,16 @@ function RateConImportedLoad({
   locations: Location[];
   drivers: DriverWithTruck[];
   formSettings?: LoadFormSettings;
+  facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
 }) {
   const [discarded, setDiscarded] = useState(false);
-  const book = useRateConLocationBook(parsed, locations, formSettings?.mapsBrowserKey ?? "");
+  const book = useRateConLocationBook(
+    parsed,
+    locations,
+    formSettings?.mapsBrowserKey ?? "",
+    locations.length === 0,
+    facilityMatches,
+  );
   if (discarded) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-rate-con-discarded="">

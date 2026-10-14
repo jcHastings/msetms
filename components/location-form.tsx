@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { FacilityMatchPrompt } from "@/components/facility-match-prompt";
 import { FormBanner } from "@/components/form-banner";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import {
@@ -26,34 +27,37 @@ type Props = {
 
 export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }: Props) {
   const [state, formAction, pending] = useActionState(action, null);
-  const [name, setName] = useState(location?.name ?? "");
-  const [street, setStreet] = useState(location?.street ?? "");
-  const [city, setCity] = useState(location?.city ?? "");
-  const [region, setRegion] = useState(location?.state ?? "");
-  const [zip, setZip] = useState(location?.zip ?? "");
-  const [country, setCountry] = useState(location?.country ?? "");
-  const [latitude, setLatitude] = useState(location?.latitude != null ? String(location.latitude) : "");
-  const [longitude, setLongitude] = useState(location?.longitude != null ? String(location.longitude) : "");
-  const [placeId, setPlaceId] = useState(location?.google_place_id ?? "");
-  const [placePicked, setPlacePicked] = useState(false);
+  const draft = state && !state.ok ? state.draft : undefined;
+  const [name, setName] = useState(draft?.name ?? location?.name ?? "");
+  const [street, setStreet] = useState(draft?.street ?? location?.street ?? "");
+  const [city, setCity] = useState(draft?.city ?? location?.city ?? "");
+  const [region, setRegion] = useState(draft?.state ?? location?.state ?? "");
+  const [zip, setZip] = useState(draft?.zip ?? location?.zip ?? "");
+  const [country, setCountry] = useState(draft?.country ?? location?.country ?? "");
+  const [latitude, setLatitude] = useState(
+    draft?.latitude ?? (location?.latitude != null ? String(location.latitude) : ""),
+  );
+  const [longitude, setLongitude] = useState(
+    draft?.longitude ?? (location?.longitude != null ? String(location.longitude) : ""),
+  );
+  const [placeId, setPlaceId] = useState(draft?.google_place_id ?? location?.google_place_id ?? "");
+  const [placePicked, setPlacePicked] = useState(draft?.place_picked === "1");
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
       {state && !state.ok && state.duplicate ? (
-        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          <p className="font-medium">Location already exists.</p>
-          <p className="mt-1">Create a second copy, or keep the one already on file.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button className="btn btn-secondary" type="submit" name="confirm_duplicate" value="1">
-              Create anyway
-            </button>
-            {state.existingId ? (
-              <a className="btn btn-ghost" href={`/locations/${state.existingId}`}>
-                Keep existing
-              </a>
-            ) : null}
-          </div>
-        </div>
+        <FacilityMatchPrompt
+          facilityName={state.existingName || "this facility"}
+          existingId={state.existingId}
+          useName="use_existing"
+          createName="confirm_duplicate"
+          autoFocus
+          extraNote={
+            <p className="mt-1 text-sm leading-relaxed text-[#5b6b7c]">
+              Location already exists. Create anyway only when this is a different facility.
+            </p>
+          }
+        />
       ) : (
         <FormBanner result={state} />
       )}
@@ -125,11 +129,11 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
         <input type="hidden" name="place_picked" value={placePicked ? "1" : ""} />
         <div className="field">
           <label htmlFor="phone">Phone</label>
-          <input id="phone" name="phone" defaultValue={location?.phone} />
+          <input id="phone" name="phone" defaultValue={draft?.phone ?? location?.phone} />
         </div>
         <div className="field">
           <label htmlFor="role">Role</label>
-          <select id="role" name="role" defaultValue={location?.role ?? "both"}>
+          <select id="role" name="role" defaultValue={draft?.role ?? location?.role ?? "both"}>
             {LOCATION_ROLES.map((role) => (
               <option key={role.value} value={role.value}>
                 {role.label}
@@ -139,7 +143,7 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
         </div>
         <div className="field">
           <label htmlFor="scheduling_type">Scheduling</label>
-          <select id="scheduling_type" name="scheduling_type" defaultValue={location?.scheduling_type ?? "fcfs"}>
+          <select id="scheduling_type" name="scheduling_type" defaultValue={draft?.scheduling_type ?? location?.scheduling_type ?? "fcfs"}>
             {SCHEDULING_TYPES.map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
@@ -152,13 +156,13 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
           <input
             id="hours"
             name="hours"
-            defaultValue={location?.hours}
+            defaultValue={draft?.hours ?? location?.hours}
             placeholder="Mon–Fri 07:00–15:00"
           />
         </div>
         <div className="field md:col-span-2">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" name="call_before" value="1" defaultChecked={Boolean(location?.call_before)} />
+            <input type="checkbox" name="call_before" value="1" defaultChecked={draft ? draft.call_before === "1" : Boolean(location?.call_before)} />
             Call before pickup/delivery
           </label>
         </div>
@@ -169,7 +173,7 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
             name="scheduling_notes"
             rows={3}
             aria-describedby="scheduling_notes-help"
-            defaultValue={location?.scheduling_notes}
+            defaultValue={draft?.scheduling_notes ?? location?.scheduling_notes}
             placeholder="Appointment window, dock numbers, gate instructions"
           />
           <p id="scheduling_notes-help" className="mt-1 text-xs text-slate-600">
@@ -250,7 +254,7 @@ export function LocationForm({ location, action, submitLabel, mapsApiKey = "" }:
       <div className="grid gap-4 md:grid-cols-2">
         <div className="field md:col-span-2 note-private">
           <label htmlFor="notes">Private notes</label>
-          <textarea id="notes" name="notes" rows={3} aria-describedby="notes-help" defaultValue={location?.notes} />
+          <textarea id="notes" name="notes" rows={3} aria-describedby="notes-help" defaultValue={draft?.notes ?? location?.notes} />
           <p id="notes-help" className="mt-1 text-xs text-slate-600">
             Office only. Drivers never see these.
           </p>

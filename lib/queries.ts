@@ -80,6 +80,7 @@ import {
   type FleetDivision,
 } from "./types";
 import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
+import { normalizeFacilityAddress, type FacilityRecord } from "./location-match";
 import { ACTIVE_LOCATION_SQL, extractStateCode, isArchivedLocation, locationPlaceKey } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
@@ -427,8 +428,93 @@ export function deleteLocation(id: number): void {
   db.transaction(() => {
     db.prepare("UPDATE loads SET shipper_location_id = NULL WHERE shipper_location_id = ?").run(id);
     db.prepare("UPDATE loads SET consignee_location_id = NULL WHERE consignee_location_id = ?").run(id);
+    db.prepare("DELETE FROM location_aliases WHERE location_id = ?").run(id);
     db.prepare("DELETE FROM locations WHERE id = ?").run(id);
   })();
+}
+
+export type LocationAlias = {
+  id: number;
+  location_id: number;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  created_at: string;
+};
+
+export function listLocationAliases(locationId?: number): LocationAlias[] {
+  if (locationId == null) {
+    return getDb().prepare("SELECT * FROM location_aliases ORDER BY id").all() as LocationAlias[];
+  }
+  return getDb()
+    .prepare("SELECT * FROM location_aliases WHERE location_id = ? ORDER BY id")
+    .all(locationId) as LocationAlias[];
+}
+
+export function listFacilityMatchRecords(): FacilityRecord[] {
+  const grouped = new Map<number, LocationAlias[]>();
+  for (const alias of listLocationAliases()) {
+    const list = grouped.get(alias.location_id) ?? [];
+    list.push(alias);
+    grouped.set(alias.location_id, list);
+  }
+  return listLocations().map((location) => ({
+    id: location.id,
+    name: location.name,
+    street: location.street,
+    city: location.city,
+    state: location.state,
+    zip: location.zip,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    archived_at: location.archived_at,
+    aliases: grouped.get(location.id) ?? [],
+  }));
+}
+
+/**
+ * Remember a name/address variant on an existing location.
+ * Does not change the location's own name, address, or pin.
+ * Returns null when the variant is already the canonical record or an alias.
+ */
+export function addLocationAlias(
+  locationId: number,
+  input: { name: string; street: string; city: string; state: string; zip: string },
+): LocationAlias | null {
+  const location = getLocation(locationId);
+  if (!location || isArchivedLocation(location)) throw new Error("Location not found.");
+  const variant = {
+    name: input.name.trim(),
+    street: input.street.trim(),
+    city: input.city.trim(),
+    state: input.state.trim().toUpperCase(),
+    zip: input.zip.trim(),
+  };
+  if (!variant.name && !variant.street) return null;
+  const key = facilityVariantKey(variant);
+  if (key === facilityVariantKey(location)) return null;
+  const existing = listLocationAliases(locationId).find((alias) => facilityVariantKey(alias) === key);
+  if (existing) return existing;
+  const timestamp = now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO location_aliases (location_id, name, street, city, state, zip, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(locationId, variant.name, variant.street, variant.city, variant.state, variant.zip, timestamp);
+  return {
+    id: Number(result.lastInsertRowid),
+    location_id: locationId,
+    ...variant,
+    created_at: timestamp,
+  };
+}
+
+function facilityVariantKey(input: { name: string; street: string; city: string; state: string; zip: string }): string {
+  const address = normalizeFacilityAddress(input);
+  return [input.name.trim().toLowerCase().replace(/\s+/g, " "), address.line, address.zip5].join("|");
 }
 
 export function locationsForLoad(load: {

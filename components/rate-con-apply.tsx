@@ -8,7 +8,7 @@ import { extractRateConFormData, RateConPicker } from "@/components/rate-con-pic
 import { useRateConLocationBook } from "@/components/rate-con-location-review";
 import { RateConFinePrint } from "@/components/rate-con-fine-print";
 import { RateConFieldFlags, RateConNeedsReviewNote } from "@/components/rate-con-review";
-import { parseRateConAction, updateLoadAction } from "@/lib/actions";
+import { parseRateConAction, updateLoadAction, type FacilityMatchPreview } from "@/lib/actions";
 import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { customerRefFromRateCon, rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
@@ -130,6 +130,7 @@ export function RateConApply({
           drivers={drivers}
           formSettings={formSettings}
           action={boundAction}
+          facilityMatches={"facilityMatches" in state ? state.facilityMatches : null}
         />
       ) : null}
     </section>
@@ -150,6 +151,7 @@ function RateConAppliedLoad({
   drivers,
   formSettings,
   action,
+  facilityMatches = null,
 }: {
   parsed: ParsedRateCon;
   inboxId: string;
@@ -174,9 +176,16 @@ function RateConAppliedLoad({
     alertWindows: ComplianceWindows;
   };
   action: (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+  facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
 }) {
   const [discarded, setDiscarded] = useState(false);
-  const book = useRateConLocationBook(parsed, locations, formSettings?.mapsBrowserKey ?? "");
+  const book = useRateConLocationBook(
+    parsed,
+    locations,
+    formSettings?.mapsBrowserKey ?? "",
+    locations.length === 0,
+    facilityMatches,
+  );
   if (discarded) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-rate-con-discarded="">

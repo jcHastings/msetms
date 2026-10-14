@@ -1,10 +1,17 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import { FacilityMatchPrompt } from "@/components/facility-match-prompt";
 import { FormBanner } from "@/components/form-banner";
 import { LocationPicker } from "@/components/location-picker";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
-import { saveRateConLocationAction } from "@/lib/actions";
+import {
+  rememberFacilityAliasAction,
+  rememberFacilityAliasFormAction,
+  saveRateConLocationAction,
+  suggestFacilityMatchAction,
+  type FacilityMatchPreview,
+} from "@/lib/actions";
 import { US_STATES } from "@/lib/locations";
 import { applyNyBoroughState } from "@/lib/places-shared";
 import {
@@ -22,12 +29,11 @@ export function useRateConLocationBook(
   locations: Location[],
   mapsApiKey = "",
   catalog = locations.length === 0,
+  facilityMatches: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null = null,
 ) {
   const [book, setBook] = useState(locations);
-  const [shipperId, setShipperId] = useState(parsed.shipper_location_id ? String(parsed.shipper_location_id) : "");
-  const [consigneeId, setConsigneeId] = useState(
-    parsed.consignee_location_id ? String(parsed.consignee_location_id) : "",
-  );
+  const [shipperId, setShipperId] = useState("");
+  const [consigneeId, setConsigneeId] = useState("");
 
   const remember = (location: Location, role: "shipper" | "receiver") => {
     setBook((current) => (current.some((item) => item.id === location.id) ? current : [...current, location]));
@@ -62,6 +68,7 @@ export function useRateConLocationBook(
         consigneeId={consigneeId}
         mapsApiKey={mapsApiKey}
         catalog={catalog}
+        facilityMatches={facilityMatches}
         onSaved={remember}
         onPick={pickExisting}
       />
@@ -76,6 +83,7 @@ function RateConLocationReview({
   consigneeId,
   mapsApiKey,
   catalog = false,
+  facilityMatches = null,
   onSaved,
   onPick,
 }: {
@@ -85,6 +93,7 @@ function RateConLocationReview({
   consigneeId: string;
   mapsApiKey: string;
   catalog?: boolean;
+  facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
@@ -105,6 +114,8 @@ function RateConLocationReview({
           matched={book.find((location) => String(location.id) === shipperId) ?? null}
           mapsApiKey={mapsApiKey}
           catalog={catalog}
+          suggested={facilityMatches?.shipper ?? null}
+          suggestionReady={facilityMatches != null}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -119,6 +130,8 @@ function RateConLocationReview({
           matched={book.find((location) => String(location.id) === consigneeId) ?? null}
           mapsApiKey={mapsApiKey}
           catalog={catalog}
+          suggested={facilityMatches?.consignee ?? null}
+          suggestionReady={facilityMatches != null}
           onSaved={onSaved}
           onPick={onPick}
         />
@@ -169,6 +182,54 @@ function StopMeta({ stop }: { stop: ParsedStop }) {
   );
 }
 
+function AliasUseForm({
+  suggestion,
+  stop,
+  role,
+  autoFocus,
+  onSaved,
+  onCreateNew,
+}: {
+  suggestion: { id: number; name: string };
+  stop: ParsedStop;
+  role: "shipper" | "receiver";
+  autoFocus: boolean;
+  onSaved: (location: Location, role: "shipper" | "receiver") => void;
+  onCreateNew: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(rememberFacilityAliasFormAction, null);
+  const reportedId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!state?.ok || reportedId.current === state.location.id) return;
+    reportedId.current = state.location.id;
+    onSaved(state.location, role);
+  }, [onSaved, role, state]);
+
+  return (
+    <form action={formAction} className="mt-3">
+      <input type="hidden" name="location_id" value={suggestion.id} />
+      <input type="hidden" name="name" value={stop.name} />
+      <input type="hidden" name="street" value={stop.street} />
+      <input type="hidden" name="city" value={stop.city} />
+      <input type="hidden" name="state" value={stop.state} />
+      <input type="hidden" name="zip" value={stop.zip} />
+      {state && !state.ok ? (
+        <p role="alert" className="mb-2 text-sm text-rose-800">
+          {state.error}
+        </p>
+      ) : null}
+      <FacilityMatchPrompt
+        facilityName={suggestion.name}
+        pending={pending}
+        autoFocus={autoFocus}
+        useName="use_existing"
+        onCreateNew={onCreateNew}
+      />
+    </form>
+  );
+}
+
 function StopReviewCard({
   title,
   role,
@@ -178,6 +239,8 @@ function StopReviewCard({
   matched,
   mapsApiKey,
   catalog = false,
+  suggested = null,
+  suggestionReady = false,
   onSaved,
   onPick,
 }: {
@@ -189,35 +252,94 @@ function StopReviewCard({
   matched: Location | null;
   mapsApiKey: string;
   catalog?: boolean;
+  suggested?: FacilityMatchPreview;
+  suggestionReady?: boolean;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
   onPick: (locationId: string, role: "shipper" | "receiver") => void;
 }) {
+  const stopKey = [stop.name, stop.street, stop.city, stop.state, stop.zip].join("|");
+  const [choice, setChoice] = useState<"checking" | "prompt" | "create">(
+    suggestionReady ? (suggested ? "prompt" : "create") : "checking",
+  );
+  const [suggestion, setSuggestion] = useState<FacilityMatchPreview>(suggested ?? null);
+  const [queriedKey, setQueriedKey] = useState(stopKey);
+  if (queriedKey !== stopKey) {
+    setQueriedKey(stopKey);
+    setChoice("checking");
+    setSuggestion(null);
+  }
+
+  useEffect(() => {
+    if (suggestionReady) return;
+    let cancelled = false;
+    const incoming = {
+      name: stop.name,
+      street: stop.street,
+      city: stop.city,
+      state: stop.state,
+      zip: stop.zip,
+    };
+    startTransition(async () => {
+      try {
+        const match = await suggestFacilityMatchAction(incoming);
+        if (cancelled) return;
+        if (match) {
+          setSuggestion({ id: match.id, name: match.name });
+          setChoice("prompt");
+        } else {
+          setChoice("create");
+        }
+      } catch {
+        if (!cancelled) setChoice("create");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [suggestionReady, stopKey, stop.name, stop.street, stop.city, stop.state, stop.zip]);
+
+  const showPrompt = !matched && choice === "prompt" && suggestion;
+  const showCreate = !matched && choice === "create";
+
   return (
     <section
       className={`rounded-lg border px-4 py-3 text-sm ${
         matched
           ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-          : "border-amber-200 bg-amber-50 text-amber-950"
+          : "border-slate-200 bg-white text-slate-950"
       }`}
     >
       <div
         className={`text-xs font-semibold uppercase tracking-wide ${
-          matched ? "text-emerald-800" : "text-amber-800"
+          matched ? "text-emerald-800" : "text-slate-600"
         }`}
       >
         {title}
       </div>
       {matched ? (
         <p className="mt-1 text-xs">Matched a saved location. Change it below if this is the wrong place.</p>
+      ) : choice === "checking" ? (
+        <p className="mt-1 text-slate-600" role="status">
+          Checking saved locations.
+        </p>
       ) : (
         <>
-          <p className="mt-1 font-medium">No matching Locations row</p>
+          {showCreate ? <p className="mt-1 font-medium">No matching Locations row</p> : null}
           <p className="mt-1">{formatParsedStop(stop)}</p>
-          <StopMeta stop={stop} />
         </>
       )}
-      {matched ? <StopMeta stop={stop} /> : null}
-      <p className={`mt-2 text-xs ${matched ? "text-emerald-800" : "text-amber-800"}`}>
+      <StopMeta stop={stop} />
+      {showPrompt && suggestion ? (
+        <AliasUseForm
+          suggestion={suggestion}
+          stop={stop}
+          role={role}
+          autoFocus={role === "shipper"}
+          onSaved={onSaved}
+          onCreateNew={() => setChoice("create")}
+        />
+      ) : null}
+      <p className={`mt-2 text-xs ${matched ? "text-emerald-800" : "text-slate-600"}`}>
         Type a name or address to pick a different saved location.
       </p>
       <div className="mt-2">
@@ -230,7 +352,15 @@ function StopReviewCard({
           placeholder="Type any name or address"
         />
       </div>
-      {!matched ? <SaveNewLocationCard role={role} stop={stop} mapsApiKey={mapsApiKey} onSaved={onSaved} /> : null}
+      {showCreate ? (
+        <SaveNewLocationCard
+          role={role}
+          stop={stop}
+          mapsApiKey={mapsApiKey}
+          declinedLocationId={suggestion?.id ?? null}
+          onSaved={onSaved}
+        />
+      ) : null}
     </section>
   );
 }
@@ -239,43 +369,86 @@ function SaveNewLocationCard({
   role,
   stop,
   mapsApiKey,
+  declinedLocationId = null,
   onSaved,
 }: {
   role: "shipper" | "receiver";
   stop: ParsedStop;
   mapsApiKey: string;
+  declinedLocationId?: number | null;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
 }) {
   const [state, formAction, pending] = useActionState(saveRateConLocationAction, null);
   const prefix = role === "shipper" ? "rate-con-pickup" : "rate-con-delivery";
   const savedId = state && state.ok ? state.location.id : null;
-  const [name, setName] = useState(stop.name);
-  const [street, setStreet] = useState(stop.street);
-  const [city, setCity] = useState(stop.city);
-  const [region, setRegion] = useState(stop.state);
-  const [zip, setZip] = useState(stop.zip);
+  const draft = state && !state.ok ? state.draft : undefined;
+  const [name, setName] = useState(draft?.name ?? stop.name);
+  const [street, setStreet] = useState(draft?.street ?? stop.street);
+  const [city, setCity] = useState(draft?.city ?? stop.city);
+  const [region, setRegion] = useState(draft?.state ?? stop.state);
+  const [zip, setZip] = useState(draft?.zip ?? stop.zip);
   const [country, setCountry] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [placeId, setPlaceId] = useState("");
   const [placePicked, setPlacePicked] = useState(false);
+  const [aliasError, setAliasError] = useState("");
 
   useEffect(() => {
     if (state && state.ok) onSaved(state.location, role);
   }, [savedId]);
 
+  const duplicate = state && !state.ok && state.duplicate ? state : null;
+
+  async function acceptDuplicate() {
+    if (!duplicate?.existingId) return;
+    setAliasError("");
+    const result = await rememberFacilityAliasAction(duplicate.existingId, {
+      name,
+      street,
+      city,
+      state: region,
+      zip,
+    });
+    if (!result.ok) {
+      setAliasError(result.error);
+      return;
+    }
+    onSaved(result.location, role);
+  }
+
   return (
-    <div className="mt-3 border-t border-amber-200 pt-3">
+    <div className="mt-3 border-t border-slate-200 pt-3">
       <p className="font-medium">Save as new location?</p>
-      <p className="mt-1 text-amber-900">
+      <p className="mt-1 text-slate-600">
         Confirm to add this to the book — we will not create it automatically from the typed search.
       </p>
-      {state && !state.ok ? (
+      {aliasError ? (
+        <p role="alert" className="mt-2 text-sm text-rose-800">
+          {aliasError}
+        </p>
+      ) : null}
+      {state && !state.ok && !state.duplicate ? (
         <div className="mt-2">
           <FormBanner result={state} />
         </div>
       ) : null}
       <form action={formAction} className="mt-3 grid gap-2 md:grid-cols-2">
+        {duplicate ? (
+          <div className="md:col-span-2">
+            <FacilityMatchPrompt
+              facilityName={duplicate.existingName || "this facility"}
+              existingId={duplicate.existingId}
+              createName="confirm_duplicate"
+              pending={pending}
+              autoFocus
+              onUse={() => {
+                void acceptDuplicate();
+              }}
+            />
+          </div>
+        ) : null}
+        {declinedLocationId ? <input type="hidden" name="declined_location_id" value={declinedLocationId} /> : null}
         <input type="hidden" name="role" value={role} />
         <input type="hidden" name="notes" value="Added from rate confirmation" />
         <div className="field md:col-span-2">

@@ -693,6 +693,26 @@ export type DashboardStats = {
   unassignedLoads: number;
 };
 
+export type LocationFormDraft = {
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+  phone: string;
+  latitude: string;
+  longitude: string;
+  google_place_id: string;
+  place_picked: string;
+  role: string;
+  scheduling_type: string;
+  hours: string;
+  scheduling_notes: string;
+  notes: string;
+  call_before: string;
+};
+
 export type ActionResult =
   | {
       ok: true;
@@ -707,7 +727,15 @@ export type ActionResult =
       recoveryCodes?: string[];
       invoicePrompt?: { loadId: number; email: string };
     }
-  | { ok: false; error: string; status?: number; duplicate?: boolean; existingId?: number };
+  | {
+      ok: false;
+      error: string;
+      status?: number;
+      duplicate?: boolean;
+      existingId?: number;
+      existingName?: string;
+      draft?: LocationFormDraft;
+    };
 
 export function labelForLoadStatus(status: string): string {
   switch (status) {

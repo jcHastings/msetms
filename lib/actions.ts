@@ -14,9 +14,11 @@ import {
   createCustomer,
   createDriver,
   createLoad,
+  addLocationAlias,
   createLocation,
   findDuplicateLocation,
   getLoad,
+  listFacilityMatchRecords,
   getLocation,
   createSavedReport,
   createTrailer,
@@ -71,6 +73,7 @@ import {
   type DriverKind,
   type DriverStatus,
   type Location,
+  type LocationFormDraft,
   type LocationRole,
   type SchedulingType,
   type TruckStatus,
@@ -86,6 +89,7 @@ import {
 import { assertLoadStatusTransition } from "./load-status-transition";
 import { complianceWindows } from "./settings";
 import { decodeCsvBuffer, type LocationCsvImportResult } from "./location-csv";
+import { suggestFacilityMatch } from "./location-match";
 import { assertNyBoroughState, parseCoordPair } from "./places-shared";
 import { type FuelImportResult } from "./fuel";
 import { importFuelFromUpload } from "./fuel-import";
@@ -806,6 +810,8 @@ export async function updateLoadTruckStatusAction(formData: FormData): Promise<A
   });
 }
 
+export type FacilityMatchPreview = { id: number; name: string } | null;
+
 export type RateConParseState = {
   ok: true;
   inboxId: string;
@@ -815,7 +821,27 @@ export type RateConParseState = {
   finePrint: import("./rate-con-fine-print-shared").FinePrintHit[];
   laneAverage: import("./lane-average-shared").LaneAverageSnapshot | null;
   laneMiles: number | null;
+  facilityMatches: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview };
 } | ActionResult;
+
+const emptyFacilityMatches = { shipper: null, consignee: null } as const;
+
+function previewFacilityMatch(
+  records: ReturnType<typeof listFacilityMatchRecords>,
+  stop: { name?: string; street?: string; city?: string; state?: string; zip?: string } | null | undefined,
+): FacilityMatchPreview {
+  const name = String(stop?.name ?? "").trim();
+  const street = String(stop?.street ?? "").trim();
+  if (!name && !street) return null;
+  const match = suggestFacilityMatch(records, {
+    name,
+    street,
+    city: stop?.city,
+    state: stop?.state,
+    zip: stop?.zip,
+  });
+  return match ? { id: match.id, name: match.name } : null;
+}
 
 export type FinePrintScanState = {
   ok: true;
@@ -884,6 +910,7 @@ export async function parseRateConAction(
         finePrint: [],
         laneAverage: null,
         laneMiles: null,
+        facilityMatches: emptyFacilityMatches,
       };
     }
     const customers = listCustomers();
@@ -908,6 +935,11 @@ export async function parseRateConAction(
       }
     }
     parsed = attachParsedLocationMatches(parsed, listLocations());
+    const facilityRecords = listFacilityMatchRecords();
+    const facilityMatches = {
+      shipper: previewFacilityMatch(facilityRecords, parsed.shipper),
+      consignee: previewFacilityMatch(facilityRecords, parsed.consignee),
+    };
     const thin =
       !parsed.origin && !parsed.destination && parsed.weight == null && parsed.rate == null;
     if (thin && !warning) {
@@ -936,6 +968,7 @@ export async function parseRateConAction(
         consignee_location_id: parsed.consignee_location_id,
       }),
       laneMiles: parsePrintedLaneMiles(parsed.raw_text || text),
+      facilityMatches,
     };
   } catch (error) {
     return fail(error);
@@ -1493,9 +1526,82 @@ function withLocationVerification<T extends ReturnType<typeof parseLocationInput
   return { ...input, verified_at };
 }
 
+function locationDraft(formData: FormData, input: ReturnType<typeof parseLocationInput>): LocationFormDraft {
+  return {
+    name: input.name,
+    street: input.street,
+    city: input.city,
+    state: input.state,
+    zip: input.zip,
+    country: input.country ?? "",
+    phone: input.phone,
+    latitude: input.latitude != null ? String(input.latitude) : "",
+    longitude: input.longitude != null ? String(input.longitude) : "",
+    google_place_id: input.google_place_id ?? "",
+    place_picked: input.place_picked ? "1" : "",
+    role: input.role,
+    scheduling_type: input.scheduling_type,
+    hours: input.hours,
+    scheduling_notes: input.scheduling_notes,
+    notes: String(formData.get("notes") ?? ""),
+    call_before: input.call_before ? "1" : "",
+  };
+}
+
 export type SaveRateConLocationState =
   | { ok: true; location: Location }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      duplicate?: boolean;
+      existingId?: number;
+      existingName?: string;
+      draft?: LocationFormDraft;
+    };
+
+export async function suggestFacilityMatchAction(input: {
+  name?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}): Promise<{ id: number; name: string; reason: "alias" | "geocode" | "address" | "zip_house" } | null> {
+  await requireLoadEditor();
+  const match = suggestFacilityMatch(listFacilityMatchRecords(), input);
+  if (!match) return null;
+  return { id: match.id, name: match.name, reason: match.reason };
+}
+
+export async function rememberFacilityAliasFormAction(
+  _prev: { ok: true; location: Location } | { ok: false; error: string } | null,
+  formData: FormData,
+): Promise<{ ok: true; location: Location } | { ok: false; error: string }> {
+  return rememberFacilityAliasAction(Number(formData.get("location_id")), {
+    name: String(formData.get("name") ?? ""),
+    street: String(formData.get("street") ?? ""),
+    city: String(formData.get("city") ?? ""),
+    state: String(formData.get("state") ?? ""),
+    zip: String(formData.get("zip") ?? ""),
+  });
+}
+
+export async function rememberFacilityAliasAction(
+  locationId: number,
+  variant: { name: string; street: string; city: string; state: string; zip: string },
+): Promise<{ ok: true; location: Location } | { ok: false; error: string }> {
+  try {
+    await requireCapability(canEditLocations, "You cannot save locations.");
+    if (!Number.isInteger(locationId) || locationId <= 0) throw new Error("Location not found.");
+    addLocationAlias(locationId, variant);
+    const location = getLocation(locationId);
+    if (!location) throw new Error("Location not found.");
+    return { ok: true, location };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Something went wrong." };
+  }
+}
 
 export async function saveRateConLocationAction(
   _prev: SaveRateConLocationState | null,
@@ -1503,8 +1609,24 @@ export async function saveRateConLocationAction(
 ): Promise<SaveRateConLocationState> {
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
+    const input = withLocationVerification(parseLocationInput(formData), null);
+    const confirmed = String(formData.get("confirm_duplicate") ?? "") === "1";
+    const declined = Number.parseInt(String(formData.get("declined_location_id") ?? ""), 10);
+    if (!confirmed) {
+      const match = suggestFacilityMatch(listFacilityMatchRecords(), input);
+      if (match && match.id !== declined) {
+        return {
+          ok: false,
+          error: `Looks like ${match.name}. Use it?`,
+          duplicate: true,
+          existingId: match.id,
+          existingName: match.name,
+          draft: locationDraft(formData, input),
+        };
+      }
+    }
     const id = createLocation({
-      ...withLocationVerification(parseLocationInput(formData), null),
+      ...input,
       notes: String(formData.get("notes") ?? "").trim() || "Added from rate confirmation",
       scheduling_type: parseSchedulingType(formData.get("scheduling_type") || "appointment"),
     });
@@ -1525,14 +1647,25 @@ export async function createLocationAction(
   try {
     await requireCapability(canEditLocations, "You cannot save locations.");
     const input = withLocationVerification(parseLocationInput(formData), null);
+    if (String(formData.get("use_existing") ?? "") === "1") {
+      const existingId = Number.parseInt(String(formData.get("existing_id") ?? ""), 10);
+      if (!Number.isInteger(existingId) || existingId <= 0) throw new Error("Location not found.");
+      addLocationAlias(existingId, input);
+      refresh();
+      redirect(`/locations/${existingId}`);
+    }
     if (String(formData.get("confirm_duplicate") ?? "") !== "1") {
-      const existing = findDuplicateLocation(input);
+      const exact = findDuplicateLocation(input);
+      const suggested = exact ? null : suggestFacilityMatch(listFacilityMatchRecords(), input);
+      const existing = exact ?? (suggested ? getLocation(suggested.id) : null);
       if (existing) {
         return {
           ok: false,
-          error: "Location already exists.",
+          error: exact ? "Location already exists." : `Looks like ${existing.name}. Use it?`,
           duplicate: true,
           existingId: existing.id,
+          existingName: existing.name,
+          draft: locationDraft(formData, input),
         };
       }
     }
