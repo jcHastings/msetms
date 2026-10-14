@@ -2,13 +2,16 @@ import { listPayItems } from "./pay-items";
 import { listLoads } from "./queries";
 import { splitLoadRevenueByRelayMiles } from "./reports-relay-revenue";
 import type { ReportCategory, ReportDateBasis } from "./reports-shared";
+import { emptyMilesPending } from "./empty-miles-shared";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import type { LoadView } from "./types";
 
-function officialReportMiles(load: LoadView): { loaded: number | null; empty: number | null } {
+function officialReportMiles(load: LoadView): { loaded: number | null; empty: number | null; emptyPending: boolean } {
+  const emptyPending = emptyMilesPending(load);
   return {
     loaded: routeGuideFromLoad(load).totalMiles,
-    empty: officialEmptyMiles(load.empty_miles, load.empty_source),
+    empty: emptyPending ? null : officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed),
+    emptyPending,
   };
 }
 
@@ -47,6 +50,7 @@ export type StatsDrillRow = {
   destination: string;
   miles: number | null;
   emptyMiles: number | null;
+  emptyPending: boolean;
   revenue: number | null;
   fees: number | null;
   allocatedRevenue: number | null;
@@ -141,7 +145,7 @@ export function buildStatistics(input: {
           const slice: StatsMetrics = {
             loads: 1,
             miles: leg.miles ?? 0,
-            emptyMiles: leg.driverId === load.driver_id ? officialReportMiles(load).empty ?? 0 : 0,
+            emptyMiles: leg.driverId === load.driver_id && !officialReportMiles(load).emptyPending ? officialReportMiles(load).empty ?? 0 : 0,
             gross,
             fees: feeShare,
             net: Math.round((gross - feeShare) * 100) / 100,
@@ -159,7 +163,7 @@ export function buildStatistics(input: {
     const slice: StatsMetrics = {
       loads: 1,
       miles: officialReportMiles(load).loaded ?? 0,
-      emptyMiles: officialReportMiles(load).empty ?? 0,
+      emptyMiles: officialReportMiles(load).emptyPending ? 0 : officialReportMiles(load).empty ?? 0,
       gross,
       fees,
       net: Math.round((gross - fees) * 100) / 100,
@@ -207,7 +211,8 @@ export function listStatisticsDrill(input: {
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles,
-            emptyMiles: leg.driverId === load.driver_id ? officialReportMiles(load).empty ?? 0 : 0,
+            emptyMiles: leg.driverId === load.driver_id && !officialReportMiles(load).emptyPending ? officialReportMiles(load).empty ?? 0 : null,
+            emptyPending: leg.driverId === load.driver_id && officialReportMiles(load).emptyPending,
             revenue: load.rate,
             fees: feeShare,
             allocatedRevenue: leg.allocatedRevenue,
@@ -228,7 +233,8 @@ export function listStatisticsDrill(input: {
       origin: load.origin,
       destination: load.destination,
       miles: officialReportMiles(load).loaded,
-      emptyMiles: officialReportMiles(load).empty ?? 0,
+      emptyMiles: officialReportMiles(load).emptyPending ? null : officialReportMiles(load).empty ?? 0,
+      emptyPending: officialReportMiles(load).emptyPending,
       revenue: load.rate,
       fees,
       allocatedRevenue: load.rate,

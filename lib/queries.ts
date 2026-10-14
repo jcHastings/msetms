@@ -166,6 +166,10 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     samsara_route_eta: row.samsara_route_eta || "",
     samsara_route_note: row.samsara_route_note || "",
     samsara_route_synced_at: row.samsara_route_synced_at || "",
+    empty_confirmed: Number(row.empty_confirmed) === 1 ? 1 : 0,
+    empty_suggestion: row.empty_suggestion || "",
+    pickup_schedule_source: row.pickup_schedule_source || "",
+    delivery_schedule_source: row.delivery_schedule_source || "",
     parent_load_id: row.parent_load_id ?? null,
     master_suffix: row.master_suffix || "",
     is_master: row.is_master ? 1 : 0,
@@ -1609,9 +1613,24 @@ export function listLoadsForDriver(driverId: number): LoadView[] {
          WHEN 'loading' THEN 1
          WHEN 'assigned' THEN 2
          ELSE 3
-       END, loads.pickup_start ASC`,
+       END,
+       COALESCE(
+         (SELECT MIN(NULLIF(arrived_at, '')) FROM load_stops WHERE load_id = loads.id),
+         (SELECT MIN(NULLIF(departed_at, '')) FROM load_stops WHERE load_id = loads.id),
+         loads.pickup_start
+       ) ASC, loads.id ASC`,
     )
     .all(driverId, driverId, driverId) as LoadView[];
+}
+
+export function listLoadsForTruck(truckId: number): LoadView[] {
+  return getDb()
+    .prepare(
+      `${LOAD_SELECT}
+       WHERE loads.status != 'cancelled' AND loads.truck_id = ?
+       ORDER BY loads.pickup_start ASC, loads.id ASC`,
+    )
+    .all(truckId) as LoadView[];
 }
 
 export function findOrCreateCustomer(name: string): number {
@@ -2107,6 +2126,12 @@ export function updateLoad(id: number, input: LoadInput): void {
       now(),
       id,
     );
+    if (input.pickup_start !== existing.pickup_start || input.pickup_end !== existing.pickup_end) {
+      db.prepare("UPDATE loads SET pickup_schedule_source = 'manual' WHERE id = ?").run(id);
+    }
+    if (input.delivery_start !== existing.delivery_start || input.delivery_end !== existing.delivery_end) {
+      db.prepare("UPDATE loads SET delivery_schedule_source = 'manual' WHERE id = ?").run(id);
+    }
     persistLoadPageFields(id, input, existing);
     syncAssignment(id, input.status, input.truck_id, input.driver_id, input.trailer_id ?? null);
     applyLoadCustody({

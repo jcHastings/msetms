@@ -98,7 +98,10 @@ export function SettlementDocument({
                   </div>
                   <div>
                     <dt>Miles</dt>
-                    <dd>{milesLabel(line.miles)}</dd>
+                    <dd>
+                      {milesLabel(line.miles)}
+                      {line.emptyLabel ? <span className="statement-basis">{line.emptyLabel}</span> : null}
+                    </dd>
                   </div>
                   <div>
                     <dt>Linehaul</dt>
@@ -137,7 +140,10 @@ export function SettlementDocument({
                     <td>
                       {formatMdYDisplay(line.pickup)} – {formatMdYDisplay(line.delivery)}
                     </td>
-                    <td>{milesLabel(line.miles)}</td>
+                    <td>
+                      {milesLabel(line.miles)}
+                      {line.emptyLabel ? <span className="statement-basis">{line.emptyLabel}</span> : null}
+                    </td>
                     <td>
                       {line.linehaul == null ? "—" : formatStatementMoney(line.linehaul)}
                       <span className="statement-basis">{line.basis}</span>

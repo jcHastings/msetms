@@ -130,6 +130,27 @@ async function main(): Promise<void> {
   assert.equal(uncertain.deliveries[0]?.state, "NY");
   assert.equal(uncertain.deliveries[1]?.state, "PA");
   assert.equal(uncertain.deliveries[2]?.state, "");
+  assert.equal(uncertain.stops_unpairable, false);
+  assert.equal(uncertain.deliveries[0]?.state_ambiguous, false);
+  assert.equal(uncertain.deliveries[1]?.state_ambiguous, false);
+  assert.equal(uncertain.deliveries[2]?.state_ambiguous, true);
+  const inferred = status.mapLoadRecord(
+    {
+      "Load #": "1006267",
+      Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+      "Consignee City": "Bronx, Reading, Newark",
+      "Consignee St.": "NJ, NY",
+    },
+    [
+      { name: "May's", city: "Bronx", state: "NY" },
+      { name: "Bozzuto's", city: "Reading", state: "PA" },
+      { name: "Elite Cold Storage", city: "Newark", state: "NJ" },
+    ],
+  );
+  assert.equal(inferred.stops_uncertain, false);
+  assert.equal(inferred.stops_unpairable, false);
+  assert.equal(inferred.deliveries.map((stop) => stop.state).join("|"), "NY|PA|NJ");
+  assert.equal(inferred.deliveries.some((stop) => stop.state_ambiguous), false);
   assert.deepEqual(status.splitImportList("NY, CO", "plain"), ["NY", "CO"]);
   assert.deepEqual(status.splitImportList("Elite Cold Storage, LLC, Foo, Inc., Bar, L.L.C."), [
     "Elite Cold Storage, LLC",
@@ -787,8 +808,8 @@ async function main(): Promise<void> {
   );
   assert.equal(loadField("1006185", "destination"), "Bronx, NY");
   assert.equal(loadField("1006185", "origin"), "Kansas City, MO");
-  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", bronxId), bronxStopsBefore);
-  const bronxStop = db.prepare("SELECT name, city, state, arrived_at FROM load_stops WHERE load_id = ? AND kind = 'delivery'").get(bronxId) as {
+  assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", bronxId), bronxStopsBefore + 2);
+  const bronxStop = db.prepare("SELECT name, city, state, arrived_at FROM load_stops WHERE load_id = ? AND kind = 'delivery' AND name = 'May''s'").get(bronxId) as {
     name: string;
     city: string;
     state: string;
@@ -798,6 +819,15 @@ async function main(): Promise<void> {
   assert.equal(bronxStop.city, "Bronx");
   assert.equal(bronxStop.state, "NY");
   assert.equal(bronxStop.arrived_at, "2026-09-22T15:00:00.000Z");
+  const bronxAdded = db.prepare("SELECT kind, name, city, state FROM load_stops WHERE load_id = ?").all(bronxId) as Array<{
+    kind: string;
+    name: string;
+    city: string;
+    state: string;
+  }>;
+  assert.equal(bronxAdded.some((stop) => stop.kind === "pickup" && stop.city === "Kansas City" && stop.state === "MO"), true);
+  assert.equal(bronxAdded.some((stop) => stop.name === "Bozzuto's" && stop.city === "Reading" && stop.state === "PA"), true);
+  assert.equal(bronxAdded.some((stop) => stop.city === "Newark"), false);
   assert.equal(switched.exception_items.some((item) => item.load_number === "1006185" && item.issue === "stop_parse_uncertain"), true);
 
   const blankCityId = loadId("1008101")!;
@@ -1216,10 +1246,15 @@ async function main(): Promise<void> {
     sheet([loadRow({ "Load #": "1006226", Status: "Delivered", "Ship Date": "8/22/2026", "Del Date": "8/24/2026" })]),
     { apply: true, snapshot: FRESH },
   );
-  assert.equal(loadField("1006226", "pickup_start"), "2026-08-22T08:00:00");
+  assert.equal(loadField("1006226", "pickup_start"), "");
   assert.equal(loadField("1006226", "pickup_end"), "2026-09-23T17:00:00");
   assert.equal(loadField("1006226", "delivery_start"), "2026-09-22T08:00:00");
   assert.equal(loadField("1006226", "delivery_end"), "2026-09-22T17:00:00");
+  const held6226 = db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1006226:its_update_held'").get() as {
+    reason: string;
+  };
+  assert.match(held6226.reason, /pickup_start/);
+  assert.match(held6226.reason, /delivered or invoiced/);
 
   officeLoad({ loadNumber: "1006093", status: "completed", updatedAt: "2026-08-01T00:00:00.000Z" });
   db.prepare("UPDATE loads SET trailer_number = '1919', trailer_id = NULL WHERE load_number = '1006093'").run();
@@ -1328,6 +1363,91 @@ async function main(): Promise<void> {
     snapshotExit = (error as { status?: number }).status ?? 0;
   }
   assert.equal(snapshotExit, 2);
+
+  const movedId = officeLoad({ loadNumber: "1006267", status: "in_transit", updatedAt: "2026-08-01T00:00:00.000Z" });
+  const moved = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006267",
+        Status: "On Route",
+        "Ship Date": "10/13/2026",
+        "Del Date": "10/15/2026",
+        Shipper: "Alpha Foods, Beta Cold, Gamma DC",
+        "Shipper City": "Omaha, Des Moines, Chicago",
+        "Shipper St.": "NE, IA, IL",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006267", "pickup_start"), "2026-10-13T08:00:00");
+  assert.equal(loadField("1006267", "pickup_end"), "2026-10-13T17:00:00");
+  assert.equal(loadField("1006267", "delivery_start"), "2026-10-15T08:00:00");
+  assert.equal(loadField("1006267", "delivery_end"), "2026-10-15T17:00:00");
+  assert.equal(loadField("1006267", "pickup_schedule_source"), "its");
+  assert.equal(loadField("1006267", "delivery_schedule_source"), "its");
+  const movedStops = db.prepare("SELECT kind, name, city, state FROM load_stops WHERE load_id = ? ORDER BY sequence").all(movedId) as Array<{
+    kind: string;
+    name: string;
+    city: string;
+    state: string;
+  }>;
+  assert.equal(movedStops.filter((stop) => stop.kind === "pickup").length, 3);
+  assert.equal(movedStops.some((stop) => stop.city === "Chicago" && stop.state === "IL"), true);
+  assert.equal(movedStops.some((stop) => stop.city === "Avenel" && stop.state === "NJ"), true);
+  assert.equal(moved.exception_items.some((item) => item.load_number === "1006267" && item.issue === "its_update_held"), false);
+  db.prepare("UPDATE loads SET pickup_schedule_source = 'manual' WHERE id = ?").run(movedId);
+  const handEdit = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006267",
+        Status: "On Route",
+        "Ship Date": "10/20/2026",
+        "Del Date": "10/15/2026",
+        Shipper: "Alpha Foods, Beta Cold, Gamma DC",
+        "Shipper City": "Omaha, Des Moines, Chicago",
+        "Shipper St.": "NE, IA, IL",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  assert.equal(loadField("1006267", "pickup_start"), "2026-10-13T08:00:00");
+  assert.equal(loadField("1006267", "pickup_schedule_source"), "manual");
+  assert.equal(handEdit.exception_items.some((item) => item.load_number === "1006267" && item.issue === "its_update_held"), true);
+  const handHeld = db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1006267:its_update_held'").get() as {
+    reason: string;
+  };
+  assert.match(handHeld.reason, /edited by hand/);
+  assert.match(handHeld.reason, /pickup_start/);
+
+  db.prepare(
+    `INSERT INTO locations (name, street, city, state, zip, phone, notes, role, scheduling_type, hours, scheduling_notes, created_at, updated_at)
+     VALUES ('May''s', '', 'Bronx', 'NY', '', '', '', 'receiver', 'fcfs', '', '', ?, ?),
+            ('Bozzuto''s', '', 'Reading', 'PA', '', '', '', 'receiver', 'fcfs', '', '', ?, ?),
+            ('Elite Cold Storage', '', 'Newark', 'NJ', '', '', '', 'receiver', 'fcfs', '', '', ?, ?)`,
+  ).run(FRESH, FRESH, FRESH, FRESH, FRESH, FRESH);
+  const catalogId = officeLoad({ loadNumber: "1006268", status: "assigned", updatedAt: "2026-08-01T00:00:00.000Z" });
+  const catalogImport = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1006268",
+        Status: "Dispatched",
+        Consignee: "May&#039;s, Bozzuto&#039;s, Elite Cold Storage, LLC",
+        "Consignee City": "Bronx, Reading, Newark",
+        "Consignee St.": "NJ, NY",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH },
+  );
+  const catalogStops = db.prepare("SELECT kind, city, state FROM load_stops WHERE load_id = ? AND kind = 'delivery' ORDER BY sequence").all(catalogId) as Array<{
+    kind: string;
+    city: string;
+    state: string;
+  }>;
+  assert.deepEqual(
+    catalogStops.map((stop) => `${stop.city} ${stop.state}`),
+    ["Bronx NY", "Reading PA", "Newark NJ"],
+  );
+  assert.equal(catalogImport.exception_items.some((item) => item.load_number === "1006268" && item.issue === "stop_parse_uncertain"), false);
 
   assert.equal(calls.qbo, 0);
   assert.equal(calls.mail, 0);

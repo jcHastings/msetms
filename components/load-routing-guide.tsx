@@ -9,12 +9,14 @@ export function LoadRoutingGuide({
   loadId,
   guide,
   emptyMiles = null,
+  emptyPending = false,
   emptyLane = "",
   emptyStates = [],
 }: {
   loadId: number;
   guide: LoadRouteGuide;
   emptyMiles?: number | null;
+  emptyPending?: boolean;
   emptyLane?: string;
   emptyStates?: RouteStateMile[];
 }) {
@@ -53,7 +55,9 @@ export function LoadRoutingGuide({
         </div>
         <div>
           <dt className="text-slate-500">Empty miles</dt>
-          <dd className="font-semibold">{formatRouteMiles(emptyMiles)}</dd>
+          <dd className="font-semibold" data-empty-miles="">
+            {emptyPending ? "Pending" : formatRouteMiles(emptyMiles)}
+          </dd>
         </div>
         <div>
           <dt className="text-slate-500">Source</dt>

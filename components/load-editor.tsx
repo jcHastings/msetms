@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { AssignedFleetDocs } from "@/components/assigned-fleet-docs";
+import { DeadheadPrompt } from "@/components/deadhead-prompt";
 import { AttachmentsPanel } from "@/components/attachments-panel";
 import { HosBadge, LocationBadge, SamsaraRouteBadge, TrailerLocationBadge } from "@/components/fleet-badges";
 import { IftaPanel } from "@/components/ifta-panel";
@@ -53,6 +54,7 @@ import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
 import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured, loadRuntimeEnv } from "@/lib/env";
 import { listExceptionInbox, loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
+import { emptyMilesPending, parseDeadheadSuggestion } from "@/lib/empty-miles-shared";
 import { emptyStateMilesFromLoad, officialEmptyMiles, routeGuideFromLoad } from "@/lib/routing-shared";
 import { scheduleLoadOpenWork } from "@/lib/load-open-work";
 import { usableRouteStops } from "@/lib/routing";
@@ -125,7 +127,19 @@ export async function LoadEditor({
     ),
   );
   scheduleLoadOpenWork(load.id);
-  const routed = getLoad(load.id) ?? load;
+  let routed = getLoad(load.id) ?? load;
+  if (Number(routed.empty_confirmed) !== 1 && !parseDeadheadSuggestion(routed.empty_suggestion) && !routed.empty_from) {
+    try {
+      const { refreshLoadEmptyMiles } = await import("@/lib/empty-miles");
+      await refreshLoadEmptyMiles(routed.id);
+      routed = getLoad(load.id) ?? routed;
+    } catch {
+      routed = getLoad(load.id) ?? routed;
+    }
+  }
+  const deadhead = parseDeadheadSuggestion(routed.empty_suggestion);
+  const deadheadPlace = deadhead?.place || routed.empty_from;
+  const deadheadPending = emptyMilesPending(routed) && Boolean(deadheadPlace);
   const routeGuide = routeGuideFromLoad(routed, { stopCount: usableRouteStops(stops).length });
   const payItems = listPayItems(load.id);
   const yours = load.driver_id ? relayForDriver(load.id, load.driver_id) : null;
@@ -236,6 +250,16 @@ export async function LoadEditor({
         contactEmail={resolveLoadCustomerEmail(load)}
         driverEmail={resolveLoadDriverEmail(load)}
       >
+        {deadheadPending ? (
+          <DeadheadPrompt
+            loadId={load.id}
+            driverName={deadhead?.driverName || load.driver_name || "the driver"}
+            place={deadheadPlace}
+            notes={deadhead?.notes ?? []}
+            readOnly={readOnly}
+            locations={locations}
+          />
+        ) : null}
         {dispatchAck.state !== "none" ? (
           <div className="mb-3 text-sm text-slate-700" data-office-dispatch-ack="">
             <DispatchAckStatus ack={dispatchAck} />
@@ -334,8 +358,13 @@ export async function LoadEditor({
           <LoadRoutingGuide
             loadId={load.id}
             guide={routeGuide}
-            emptyMiles={officialEmptyMiles(routed.empty_miles, routed.empty_source)}
-            emptyLane={routed.empty_from && routed.empty_to ? `${routed.empty_from} → ${routed.empty_to}` : ""}
+            emptyMiles={officialEmptyMiles(routed.empty_miles, routed.empty_source, routed.empty_confirmed)}
+            emptyPending={emptyMilesPending(routed)}
+            emptyLane={
+              Number(routed.empty_confirmed) === 1 && routed.empty_from && routed.empty_to
+                ? `${routed.empty_from} → ${routed.empty_to}`
+                : ""
+            }
             emptyStates={emptyStateMilesFromLoad(routed)}
           />
         </LoadTabPanel>

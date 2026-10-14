@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { emptyMilesPending } from "./empty-miles-shared";
 import { extractStateCode } from "./locations";
 import { getDriver, getTruck } from "./queries";
 import {
@@ -35,6 +36,7 @@ export type IftaWaypointReview = {
   emptyLane: string;
   loaded: number;
   empty: number;
+  emptyPending: boolean;
   states: RouteStateMile[];
   emptyStates: RouteStateMile[];
 };
@@ -44,6 +46,7 @@ export type IftaAssetMiles = {
   name: string;
   loaded: number;
   empty: number;
+  emptyPending: number;
   total: number;
 };
 
@@ -64,6 +67,7 @@ export type IftaQuarterEstimate = {
   miles: number;
   loadsWithMiles: number;
   loadsWithoutMiles: number;
+  emptyPendingLoads: number;
 };
 
 const QUARTER_LABELS = ["Q1 Jan–Mar", "Q2 Apr–Jun", "Q3 Jul–Sep", "Q4 Oct–Dec"] as const;
@@ -111,11 +115,13 @@ function addAssetMiles(
   name: string,
   loaded: number,
   empty: number,
+  emptyPending = false,
 ): void {
   if (!id) return;
-  const current = map.get(id) ?? { id, name, loaded: 0, empty: 0, total: 0 };
+  const current = map.get(id) ?? { id, name, loaded: 0, empty: 0, emptyPending: 0, total: 0 };
   current.loaded += loaded;
   current.empty += empty;
+  if (emptyPending) current.emptyPending += 1;
   current.total = Math.round((current.loaded + current.empty) * 10) / 10;
   if (!current.name) current.name = name;
   map.set(id, current);
@@ -160,6 +166,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
       `SELECT id, load_number, origin, destination, pickup_start, delivery_end,
               route_miles, route_leg_miles, route_state_miles, route_source, route_polyline,
               empty_miles, empty_state_miles, empty_from, empty_to, empty_source, empty_polyline,
+              empty_confirmed, empty_suggestion,
               driver_id, truck_id
        FROM loads
        WHERE status != 'cancelled'
@@ -183,6 +190,8 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     empty_to: string;
     empty_source: string;
     empty_polyline: string;
+    empty_confirmed: number;
+    empty_suggestion: string;
     driver_id: number | null;
     truck_id: number | null;
   }>;
@@ -195,14 +204,17 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
   let loadsWithoutMiles = 0;
   let loadedMiles = 0;
   let emptyMiles = 0;
+  let emptyPendingLoads = 0;
 
   for (const load of loads) {
     const guide = routeGuideFromLoad(load);
     const loadedStates = guide.states;
     const emptyStates = emptyStateMilesFromLoad(load);
     const loaded = guide.totalMiles ?? (loadedStates.length ? loadedStates.reduce((sum, row) => sum + row.miles, 0) : 0);
-    const empty = officialEmptyMiles(load.empty_miles, load.empty_source) ?? 0;
-    if (loadedStates.length === 0 && empty <= 0 && loaded <= 0) {
+    const emptyPending = emptyMilesPending(load);
+    const empty = officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed) ?? 0;
+    if (emptyPending) emptyPendingLoads += 1;
+    if (loadedStates.length === 0 && empty <= 0 && loaded <= 0 && !emptyPending) {
       loadsWithoutMiles += 1;
       continue;
     }
@@ -216,6 +228,7 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
       emptyLane: load.empty_from && load.empty_to ? `${load.empty_from} → ${load.empty_to}` : "",
       loaded: Math.round(loaded * 10) / 10,
       empty: Math.round(empty * 10) / 10,
+      emptyPending,
       states: loadedStates,
       emptyStates,
     });
@@ -246,8 +259,8 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
       if (!current.name) current.name = row.name;
       mileMap.set(row.state, current);
     }
-    addAssetMiles(drivers, load.driver_id, getDriver(load.driver_id ?? 0)?.name ?? "Unassigned", loaded, empty);
-    addAssetMiles(trucks, load.truck_id, getTruck(load.truck_id ?? 0)?.unit_number ?? "Unassigned", loaded, empty);
+    addAssetMiles(drivers, load.driver_id, getDriver(load.driver_id ?? 0)?.name ?? "Unassigned", loaded, empty, emptyPending);
+    addAssetMiles(trucks, load.truck_id, getTruck(load.truck_id ?? 0)?.unit_number ?? "Unassigned", loaded, empty, emptyPending);
   }
 
   const fuelByState = [...fuelMap.values()].sort((a, b) => a.state.localeCompare(b.state));
@@ -277,5 +290,6 @@ export function buildIftaQuarterEstimate(quarter: IftaQuarter): IftaQuarterEstim
     miles: Math.round((loadedMiles + emptyMiles) * 10) / 10,
     loadsWithMiles,
     loadsWithoutMiles,
+    emptyPendingLoads,
   };
 }

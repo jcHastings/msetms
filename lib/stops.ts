@@ -36,6 +36,7 @@ function asStop(row: Record<string, unknown>): LoadStop {
     departed_at: String(row.departed_at ?? ""),
     delivered: stopDeliveredFlag(row.delivered),
     schedule_type: String(row.schedule_type ?? ""),
+    schedule_source: String(row.schedule_source ?? ""),
   };
 }
 
@@ -268,12 +269,17 @@ export function updateStop(stopId: number, input: StopInput): void {
     | undefined;
   if (!stop) throw new Error("Stop not found.");
   input = resolveStopLocation(input);
+  const windowChanged =
+    (input.window_start ?? "") !== String(stop.window_start ?? "") ||
+    (input.window_end ?? "") !== String(stop.window_end ?? "");
+  const scheduleSource = windowChanged ? "manual" : String(stop.schedule_source ?? "");
   getDb()
     .prepare(
       `UPDATE load_stops SET
         kind = ?, location_id = ?, name = ?, street = ?, city = ?, state = ?, zip = ?, phone = ?,
         window_start = ?, window_end = ?, confirmation = ?, cargo = ?, reference = ?,
-        instructions = ?, notes = ?, arrived_at = ?, departed_at = ?, delivered = ?, schedule_type = ?
+        instructions = ?, notes = ?, arrived_at = ?, departed_at = ?, delivered = ?, schedule_type = ?,
+        schedule_source = ?
        WHERE id = ?`,
     )
     .run(
@@ -298,8 +304,13 @@ export function updateStop(stopId: number, input: StopInput): void {
         ? input.delivered
         : stopDeliveredFlag(stop.delivered),
       input.schedule_type ?? String(stop.schedule_type ?? ""),
+      scheduleSource,
       stopId,
     );
+  if (windowChanged) {
+    const column = asStopKind(input.kind) === "delivery" ? "delivery_schedule_source" : "pickup_schedule_source";
+    getDb().prepare(`UPDATE loads SET ${column} = 'manual' WHERE id = ?`).run(Number(stop.load_id));
+  }
   syncLoadLaneFromStops(Number(stop.load_id));
 }
 

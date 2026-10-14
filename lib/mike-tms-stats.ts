@@ -55,7 +55,7 @@ function countableLoad(load: LoadView): boolean {
 
 export function tmsMilesForLoad(load: LoadView): number {
   const loaded = routeGuideFromLoad(load).totalMiles ?? 0;
-  const empty = officialEmptyMiles(load.empty_miles, load.empty_source) ?? 0;
+  const empty = officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed) ?? 0;
   return Math.round((loaded + empty) * 10) / 10;
 }
 

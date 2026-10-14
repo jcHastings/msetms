@@ -13530,9 +13530,26 @@ DISPATCH CONFIRMATION
     .run(mpgPoly, mpgLoadId);
   const mpgJamesLoad = queries.getLoad(mpgLoadId);
   assert.ok(mpgJamesLoad);
+  assert.equal(mpgJamesLoad.empty_confirmed, 0);
   assert.equal(
     googleMilesForDriverInRange(
       [mpgJamesLoad],
+      mpgJames.id,
+      mpgTruckId,
+      startOfLocalWeek(mpgNow).toISOString(),
+      mpgNow.toISOString(),
+    ),
+    210.3,
+  );
+  const jamesMpgPending = listDriverMpg("week", mpgNow).rows.find((row) => row.driverName === "James Whitaker Smoke");
+  assert.ok(jamesMpgPending);
+  assert.equal(jamesMpgPending.miles, 210.3);
+  getDb().prepare("UPDATE loads SET empty_confirmed = 1 WHERE id = ?").run(mpgLoadId);
+  const mpgJamesConfirmed = queries.getLoad(mpgLoadId);
+  assert.ok(mpgJamesConfirmed);
+  assert.equal(
+    googleMilesForDriverInRange(
+      [mpgJamesConfirmed],
       mpgJames.id,
       mpgTruckId,
       startOfLocalWeek(mpgNow).toISOString(),
@@ -20034,20 +20051,60 @@ DISPATCH CONFIRMATION
     const deadheadEmpty = await refreshLoadEmptyMiles(hastingsLoadId);
     assert.equal(deadheadEmpty.miles, 158);
     assert.equal(deadheadEmpty.source, "google");
+    assert.equal(deadheadEmpty.pending, true);
     assert.match(deadheadEmpty.from, /Omaha/i);
     assert.match(deadheadEmpty.to, /Hastings/i);
     assert.ok(deadheadEmpty.states.some((row) => row.state === "NE"));
     assert.ok(emptyGoogleCalls > omahaBefore);
     const storedDeadhead = queries.getLoad(hastingsLoadId);
-    assert.equal(storedDeadhead?.empty_miles, 158);
+    assert.equal(storedDeadhead?.empty_miles ?? null, null);
+    assert.equal(storedDeadhead?.empty_confirmed, 0);
+    assert.match(storedDeadhead?.empty_suggestion ?? "", /Omaha/i);
     assert.equal(storedDeadhead?.route_miles, 250);
-    assert.equal(storedDeadhead?.empty_source, "google");
-    assert.match(storedDeadhead?.empty_from ?? "", /Omaha/i);
-    assert.match(storedDeadhead?.empty_to ?? "", /Hastings/i);
-    assert.match(storedDeadhead?.empty_state_miles ?? "", /NE/);
+    assert.equal(storedDeadhead?.empty_source ?? "", "");
     assert.equal(queries.getLoad(omahaLoadId)?.empty_miles, 0);
+    assert.equal(queries.getLoad(omahaLoadId)?.empty_confirmed, 1);
     assert.equal(queries.getLoad(omahaLoadId)?.route_miles, 100);
     const iftaQ3 = parseIftaQuarter("2026-3");
+    const pendingEstimate = buildIftaQuarterEstimate(iftaQ3);
+    const pendingDriver = pendingEstimate.drivers.find((row) => row.id === deadheadDriverId);
+    assert.ok(pendingDriver);
+    assert.equal(pendingDriver.loaded, 350);
+    assert.equal(pendingDriver.empty, 0);
+    assert.equal(pendingDriver.total, 350);
+    assert.ok(pendingDriver.emptyPending >= 1);
+    const pendingWaypoint = pendingEstimate.waypoints.find((row) => row.loadId === hastingsLoadId);
+    assert.ok(pendingWaypoint);
+    assert.equal(pendingWaypoint.empty, 0);
+    assert.equal(pendingWaypoint.emptyPending, true);
+    const { buildStatistics } = await import("../lib/reports-stats");
+    const { listReportExportRows } = await import("../lib/reports-export");
+    const pendingStats = buildStatistics({
+      category: "driver",
+      entityId: deadheadDriverId,
+      dateBasis: "pickup",
+      end: new Date(2026, 7, 28),
+    });
+    assert.equal(pendingStats.rows.find((row) => row.id === deadheadDriverId)?.totals.emptyMiles, 0);
+    const pendingExport = listReportExportRows({
+      category: "driver",
+      entityId: deadheadDriverId,
+      dateBasis: "pickup",
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-31",
+    }).find((row) => row.empty_miles === "Pending");
+    assert.ok(pendingExport);
+    const { confirmLoadDeadhead } = await import("../lib/empty-miles");
+    const confirmedEmpty = await confirmLoadDeadhead(hastingsLoadId);
+    assert.equal(confirmedEmpty.miles, 158);
+    assert.equal(confirmedEmpty.pending, false);
+    const confirmedStored = queries.getLoad(hastingsLoadId);
+    assert.equal(confirmedStored?.empty_miles, 158);
+    assert.equal(confirmedStored?.empty_confirmed, 1);
+    assert.equal(confirmedStored?.empty_source, "google");
+    assert.match(confirmedStored?.empty_from ?? "", /Omaha/i);
+    assert.match(confirmedStored?.empty_to ?? "", /Hastings/i);
+    assert.match(confirmedStored?.empty_state_miles ?? "", /NE/);
     const deadheadEstimate = buildIftaQuarterEstimate(iftaQ3);
     const deadheadDriverMiles = deadheadEstimate.drivers.find((row) => row.id === deadheadDriverId);
     const deadheadTruckMiles = deadheadEstimate.trucks.find((row) => row.id === deadheadTruckId);
@@ -20063,6 +20120,7 @@ DISPATCH CONFIRMATION
     assert.ok(hastingsWaypoint);
     assert.equal(hastingsWaypoint.loaded, 250);
     assert.equal(hastingsWaypoint.empty, 158);
+    assert.equal(hastingsWaypoint.emptyPending, false);
     assert.match(hastingsWaypoint.emptyLane, /Omaha/i);
     assert.match(hastingsWaypoint.emptyLane, /Hastings/i);
     assert.ok(hastingsWaypoint.emptyStates.some((row) => row.state === "NE"));
@@ -20070,8 +20128,6 @@ DISPATCH CONFIRMATION
     assert.ok(omahaWaypoint);
     assert.equal(omahaWaypoint.loaded, 100);
     assert.equal(omahaWaypoint.empty, 0);
-    const { buildStatistics } = await import("../lib/reports-stats");
-    const { listReportExportRows } = await import("../lib/reports-export");
     const driverStats = buildStatistics({
       category: "driver",
       entityId: deadheadDriverId,

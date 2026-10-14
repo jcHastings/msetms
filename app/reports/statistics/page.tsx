@@ -241,7 +241,7 @@ export default async function StatisticsPage({
                           {row.origin} → {row.destination}
                         </td>
                         <td>{row.miles ?? "—"}</td>
-                        <td>{row.emptyMiles ?? "—"}</td>
+                        <td>{row.emptyPending ? "Pending" : (row.emptyMiles ?? "—")}</td>
                         <td className="zone-right zone-right-stats-3">
                           {row.allocatedRevenue != null ? formatMoney(row.allocatedRevenue) : "—"}
                         </td>

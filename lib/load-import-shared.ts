@@ -144,6 +144,15 @@ export type ImportedStop = {
   street?: string;
   zip?: string;
   phone?: string;
+  /** True when this stop's state could not be read from ITS or from a single city/location record. */
+  state_ambiguous?: boolean;
+};
+
+/** A TMS location, or any city/state record the parser can use to fill a missing ITS state. */
+export type CityLocationRecord = {
+  city?: string;
+  state?: string;
+  name?: string;
 };
 
 export type LoadImportValues = {
@@ -165,8 +174,10 @@ export type LoadImportValues = {
   date_problems: string[];
   pickups: ImportedStop[];
   deliveries: ImportedStop[];
-  /** True when names, cities, and states could not be paired without guessing. */
+  /** True when at least one stop is still ambiguous, or names and cities cannot be paired. */
   stops_uncertain: boolean;
+  /** True when names and cities (or an over-long state list) cannot be paired. Stop updates are skipped. */
+  stops_unpairable: boolean;
   stop_parse_detail: string;
 };
 
@@ -292,11 +303,13 @@ export function splitImportList(value: string, mode: "name" | "plain" = "name"):
  * - State count equals the stop count (max of names and cities): pair by index. Certain.
  * - Exactly one state and more than one stop: that state is the whole lane. ITS writes a
  *   repeated state once. Certain. This is the only carry-forward.
- * - Any other state count (for example 3 cities and 2 states): do not carry the previous
- *   state into the gap. Pair the states that are present and leave the rest blank.
- *   The parse is uncertain.
- * - Names and cities of different non-zero lengths are uncertain. A name is not copied
- *   onto later stops. A missing name or city stays blank.
+ * - Fewer states than cities (for example 3 cities and "NJ, NY"): do not mark the whole
+ *   lane uncertain. Infer each stop's state from city/location records. A listed state
+ *   still fills a stop that has no unique location match. Flag only the stops that
+ *   stay ambiguous.
+ * - More states than stops: the lane cannot be paired. Uncertain.
+ * - Names and cities of different non-zero lengths are uncertain and unpairable. A name
+ *   is not copied onto later stops. A missing name or city stays blank.
  */
 export function parseLaneStops(
   kind: "pickup" | "delivery",
@@ -306,7 +319,8 @@ export function parseLaneStops(
   streetText = "",
   zipText = "",
   phoneText = "",
-): { stops: ImportedStop[]; uncertain: boolean; detail: string } {
+  locations: CityLocationRecord[] = [],
+): { stops: ImportedStop[]; uncertain: boolean; unpairable: boolean; detail: string } {
   const names = splitImportList(nameText, "name");
   const cities = splitImportList(cityText, "plain");
   const states = splitImportList(stateText, "plain");
@@ -316,27 +330,44 @@ export function parseLaneStops(
   const stopCount = Math.max(names.length, cities.length);
   if (stopCount === 0) {
     const detail = states.length > 0 ? `${kind} has states but no names or cities.` : "";
-    return { stops: [], uncertain: states.length > 0, detail };
+    return { stops: [], uncertain: states.length > 0, unpairable: states.length > 0, detail };
   }
   const details: string[] = [];
   let uncertain = false;
+  let unpairable = false;
   if (names.length > 0 && cities.length > 0 && names.length !== cities.length) {
     uncertain = true;
+    unpairable = true;
     details.push(`${kind} names (${names.length}) and cities (${cities.length}) do not line up`);
   }
+  const hinted = states.map((state) => state.trim().toUpperCase()).filter(Boolean);
   let pairedStates: string[];
+  let ambiguousFlags: boolean[];
   if (states.length === 0) {
     pairedStates = Array.from({ length: stopCount }, () => "");
+    ambiguousFlags = Array.from({ length: stopCount }, () => false);
   } else if (states.length === stopCount) {
-    pairedStates = states;
+    pairedStates = states.map((state) => state.trim().toUpperCase());
+    ambiguousFlags = Array.from({ length: stopCount }, () => false);
   } else if (states.length === 1) {
-    pairedStates = Array.from({ length: stopCount }, () => states[0] ?? "");
+    pairedStates = Array.from({ length: stopCount }, () => states[0]?.trim().toUpperCase() ?? "");
+    ambiguousFlags = Array.from({ length: stopCount }, () => false);
+  } else if (states.length < stopCount) {
+    const resolved = resolveShortStateList(kind, names, cities, hinted, locations);
+    pairedStates = resolved.states;
+    ambiguousFlags = resolved.ambiguous;
+    if (resolved.ambiguous.some(Boolean)) {
+      uncertain = true;
+      details.push(resolved.detail);
+    }
   } else {
     uncertain = true;
+    unpairable = true;
     details.push(
       `${kind} states (${states.length}) and cities (${cities.length}) do not line up; missing states were not carried forward`,
     );
-    pairedStates = Array.from({ length: stopCount }, (_, index) => states[index] ?? "");
+    pairedStates = Array.from({ length: stopCount }, (_, index) => states[index]?.trim().toUpperCase() ?? "");
+    ambiguousFlags = Array.from({ length: stopCount }, () => true);
   }
   const stops = Array.from({ length: stopCount }, (_, index) => ({
     kind,
@@ -346,8 +377,75 @@ export function parseLaneStops(
     street: streets[index] ?? "",
     zip: zips[index] ?? "",
     phone: phones[index] ?? "",
+    state_ambiguous: ambiguousFlags[index] ?? false,
   }));
-  return { stops, uncertain, detail: details.join("; ") };
+  return { stops, uncertain, unpairable, detail: details.join("; ") };
+}
+
+function normalizePlaceKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+}
+
+function statesForPlace(city: string, name: string, records: CityLocationRecord[]): string[] {
+  const cityKey = normalizePlaceKey(city);
+  const nameKey = normalizePlaceKey(name);
+  const states = new Set<string>();
+  for (const record of records) {
+    const recordCity = normalizePlaceKey(record.city ?? "");
+    const recordName = normalizePlaceKey(record.name ?? "");
+    const state = (record.state ?? "").trim().toUpperCase();
+    if (!state || state.length !== 2) continue;
+    const cityHit = Boolean(cityKey) && recordCity === cityKey;
+    const nameHit = Boolean(nameKey) && (recordName === nameKey || recordCity === nameKey);
+    if (cityHit || nameHit) states.add(state);
+  }
+  return [...states];
+}
+
+/**
+ * Fewer ITS states than cities. Location records fill each stop. A listed state is
+ * only a fallback for a city that does not match one location state.
+ */
+function resolveShortStateList(
+  kind: "pickup" | "delivery",
+  names: string[],
+  cities: string[],
+  hinted: string[],
+  locations: CityLocationRecord[],
+): { states: string[]; ambiguous: boolean[]; detail: string } {
+  const states: string[] = [];
+  const ambiguous: boolean[] = [];
+  const flagged: string[] = [];
+  const count = Math.max(names.length, cities.length);
+  for (let index = 0; index < count; index += 1) {
+    const looked = statesForPlace(cities[index] ?? "", names[index] ?? "", locations);
+    if (looked.length === 1) {
+      states.push(looked[0] ?? "");
+      ambiguous.push(false);
+      continue;
+    }
+    if (looked.length > 1) {
+      const overlap = looked.filter((state) => hinted.includes(state));
+      if (overlap.length === 1) {
+        states.push(overlap[0] ?? "");
+        ambiguous.push(false);
+        continue;
+      }
+    }
+    const positional = hinted[index] ?? "";
+    if (positional) {
+      states.push(positional);
+      ambiguous.push(false);
+      continue;
+    }
+    states.push("");
+    ambiguous.push(true);
+    flagged.push(cities[index] || names[index] || `${kind} ${index + 1}`);
+  }
+  const detail = flagged.length
+    ? `${kind} ${flagged.join(", ")}: state is still ambiguous (${cities.length} cities, ${hinted.length} states)`
+    : "";
+  return { states, ambiguous, detail };
 }
 
 export function zipImportedStops(
@@ -369,6 +467,7 @@ export function zipImportedStops(
     street: streets[index] || "",
     zip: zips[index] || "",
     phone: phones[index] || "",
+    state_ambiguous: false,
   }));
 }
 
@@ -441,7 +540,7 @@ export function buildLoadImportPreview(
   });
 }
 
-export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues {
+export function mapLoadRecord(record: Record<string, unknown>, locations: CityLocationRecord[] = []): LoadImportValues {
   const get = (...aliases: string[]) => asImportText(pickRaw(record, aliases));
   const pickups = parseLaneStops(
     "pickup",
@@ -451,6 +550,7 @@ export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues
     get("shipper street", "shipper address", "shipper addr", "shipper address 1", "pickup street", "pickup address"),
     get("shipper zip", "shipper zip code", "shipper postal", "pickup zip"),
     get("shipper phone", "shipper phone #", "shipper tel", "pickup phone"),
+    locations,
   );
   const deliveries = parseLaneStops(
     "delivery",
@@ -460,6 +560,7 @@ export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues
     get("consignee street", "consignee address", "consignee addr", "consignee address 1", "delivery street", "delivery address"),
     get("consignee zip", "consignee zip code", "consignee postal", "delivery zip"),
     get("consignee phone", "consignee phone #", "consignee tel", "delivery phone"),
+    locations,
   );
   const stopDetails = [pickups.detail, deliveries.detail].filter(Boolean);
   const notes = NOTE_COLUMNS.map((column) => {
@@ -496,6 +597,7 @@ export function mapLoadRecord(record: Record<string, unknown>): LoadImportValues
     pickups: pickups.stops,
     deliveries: deliveries.stops,
     stops_uncertain: pickups.uncertain || deliveries.uncertain,
+    stops_unpairable: pickups.unpairable || deliveries.unpairable,
     stop_parse_detail: stopDetails.join("; "),
   };
 }
