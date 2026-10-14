@@ -10,6 +10,9 @@ import { gpsInstantMs, instantMs, timeZoneForStop } from "./wall-time";
 
 /** How far back to read pings when timing a delivery. The geofence floor drops the stale ones. */
 export const DELIVERY_GPS_HISTORY_MS = 120 * 24 * 60 * 60 * 1000;
+/** A window years away from created_at is a copied placeholder, not an appointment. */
+export const MILE_WINDOW_SANE_MS = 366 * 24 * 60 * 60 * 1000;
+const FALLBACK_ZONE = "America/New_York";
 
 export type StartMode = "legacy" | "current";
 
@@ -84,7 +87,20 @@ function pickupStopOf(stops: readonly MileStop[]): MileStop | undefined {
   return stops.find((row) => row.kind === "pickup") ?? stops[0];
 }
 
-/** A stamp from before the load existed, or more than a day off the appointment, is not the stop. */
+function zoneFor(stop: MileStop | undefined): string {
+  if (!trim(stop?.state)) return FALLBACK_ZONE;
+  return timeZoneForStop(stop?.state, stop?.city);
+}
+
+/** Epoch millis, or null when the clock is blank or years away from when the load was created. */
+export function saneClockMs(value: string | null | undefined, zone: string, createdMs: number | null): number | null {
+  const ms = instantMs(trim(value), zone);
+  if (ms == null) return null;
+  if (createdMs != null && Math.abs(ms - createdMs) > MILE_WINDOW_SANE_MS) return null;
+  return ms;
+}
+
+/** A stamp from before the load existed, or more than a day off a real appointment, is not the stop. */
 export function stopStampUsable(
   stamp: string,
   windowStart: string,
@@ -92,15 +108,55 @@ export function stopStampUsable(
   createdAt: string,
   zone: string,
 ): boolean {
-  const stampMs = instantMs(stamp, zone);
-  if (stampMs == null) return false;
+  if (!trim(stamp)) return false;
   const createdMs = instantMs(createdAt);
+  const stampMs = saneClockMs(stamp, zone, createdMs);
+  if (stampMs == null) return false;
   if (createdMs != null && stampMs < createdMs) return false;
-  const startMs = instantMs(windowStart, zone);
-  const endMs = instantMs(windowEnd, zone) ?? startMs;
+  const startMs = saneClockMs(windowStart, zone, createdMs);
+  const endMs = saneClockMs(windowEnd, zone, createdMs) ?? startMs;
   if (startMs == null) return true;
   const end = endMs ?? startMs;
   return stampMs >= startMs - PICKUP_ACTUAL_SLACK_MS && stampMs <= end + PICKUP_ACTUAL_SLACK_MS;
+}
+
+/** When to start reading this load. A junk 2020 window falls through to created_at. */
+export function pickupInstant(load: MileLoad, stops: readonly MileStop[]): { at: string; atMs: number } | null {
+  const stop = pickupStopOf(stops);
+  const zone = zoneFor(stop);
+  const createdMs = instantMs(load.createdAt);
+  const windowValue = trim(stop?.window_start) || trim(load.pickupStart);
+  const windowEnd = trim(stop?.window_end) || trim(load.pickupEnd);
+  const windowMs = saneClockMs(windowValue, zone, createdMs);
+  const endMs = saneClockMs(windowEnd, zone, createdMs);
+  for (const stamp of [trim(stop?.arrived_at), trim(stop?.departed_at)]) {
+    if (!stamp || !stopStampUsable(stamp, windowValue, windowEnd, load.createdAt, zone)) continue;
+    const atMs = saneClockMs(stamp, zone, createdMs);
+    if (atMs == null) continue;
+    if (windowMs != null && atMs < windowMs - PICKUP_ACTUAL_SLACK_MS) continue;
+    return { at: stamp, atMs };
+  }
+  if (windowMs != null) return { at: windowValue, atMs: windowMs };
+  if (endMs != null) return { at: windowEnd, atMs: endMs };
+  if (createdMs != null && trim(load.createdAt)) return { at: trim(load.createdAt), atMs: createdMs };
+  return null;
+}
+
+/** Latest moment the truck had started this trip. Stale stamps from before the appointment are ignored. */
+function tripStartedMs(load: MileLoad, stops: readonly MileStop[]): number | null {
+  const stop = pickupStopOf(stops);
+  const zone = zoneFor(stop);
+  const createdMs = instantMs(load.createdAt);
+  const windowMs = saneClockMs(trim(stop?.window_start) || trim(load.pickupStart), zone, createdMs);
+  let best = windowMs;
+  for (const stamp of [trim(stop?.arrived_at), trim(stop?.departed_at)]) {
+    const atMs = saneClockMs(stamp, zone, createdMs);
+    if (atMs == null) continue;
+    if (createdMs != null && atMs < createdMs) continue;
+    if (windowMs != null && atMs < windowMs - PICKUP_ACTUAL_SLACK_MS) continue;
+    if (best == null || atMs > best) best = atMs;
+  }
+  return best;
 }
 
 export function deliveryKey(load: MileLoad, stops: readonly MileStop[], mode: StartMode): string {
@@ -119,61 +175,129 @@ export function deliveryKey(load: MileLoad, stops: readonly MileStop[], mode: St
   return fallback;
 }
 
-function usableStamp(load: MileLoad, stop: MileStop | undefined, zone: string): string {
+function usableStamp(load: MileLoad, stops: readonly MileStop[], zone: string): string {
+  const stop = deliveryStopOf(stops);
   const departed = trim(stop?.departed_at);
   const arrived = trim(stop?.arrived_at);
   const windowEnd = trim(stop?.window_end) || trim(load.deliveryEnd);
   const windowStart = trim(stop?.window_start) || trim(load.deliveryStart);
-  const scheduledStart = windowStart || windowEnd;
-  const scheduledEnd = windowEnd || windowStart;
-  if (departed && stopStampUsable(departed, scheduledStart, scheduledEnd, load.createdAt, zone)) return departed;
-  if (arrived && stopStampUsable(arrived, scheduledStart, scheduledEnd, load.createdAt, zone)) return arrived;
+  const started = tripStartedMs(load, stops);
+  const pick = (stamp: string) => {
+    if (!stamp || !stopStampUsable(stamp, windowStart, windowEnd, load.createdAt, zone)) return false;
+    const atMs = saneClockMs(stamp, zone, instantMs(load.createdAt));
+    if (atMs == null) return false;
+    if (started != null && atMs < started) return false;
+    return true;
+  };
+  if (pick(departed)) return departed;
+  if (pick(arrived)) return arrived;
   return "";
 }
 
-/** First ping inside the delivery fence after the load existed and the appointment opened. */
+function addressInPlace(address: string, city: string, state: string): boolean {
+  const place = city.trim().toLowerCase();
+  const region = state.trim().toLowerCase();
+  if (place.length < 3 || region.length !== 2) return false;
+  const parts = address.split(",").map((part) => part.trim().toLowerCase());
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    if (parts[index] !== place) continue;
+    const next = parts[index + 1] ?? "";
+    if (next === region || next.startsWith(`${region} `)) return true;
+  }
+  return false;
+}
+
+function pingAt(ping: GpsSample): number | null {
+  return gpsInstantMs(ping.recordedAt);
+}
+
+/** First ping inside the delivery fence after this trip had started. */
 function gpsArrival(
   load: MileLoad,
-  stop: MileStop | undefined,
+  stops: readonly MileStop[],
   gps: readonly GpsSample[],
 ): { at: string; atMs: number } | null {
-  const dest = stopPoint(stop);
-  if (!dest || !gps.length) return null;
-  const zone = timeZoneForStop(stop?.state, stop?.city);
-  const windowRaw = trim(stop?.window_start) || trim(stop?.window_end) || trim(load.deliveryStart) || trim(load.deliveryEnd);
-  const windowMs = instantMs(windowRaw, zone);
+  const stop = deliveryStopOf(stops);
+  if (!stop || !gps.length) return null;
+  const zone = zoneFor(stop);
   const createdMs = instantMs(load.createdAt);
+  const windowMs = saneClockMs(
+    trim(stop.window_start) || trim(stop.window_end) || trim(load.deliveryStart) || trim(load.deliveryEnd),
+    zone,
+    createdMs,
+  );
+  const started = tripStartedMs(load, stops);
   const marks: number[] = [];
   if (createdMs != null) marks.push(createdMs);
+  if (started != null) marks.push(started);
   if (windowMs != null) marks.push(windowMs - GEOFENCE_WINDOW_LEAD_MS);
   const floor = marks.length ? Math.max(...marks) : null;
+  const dest = stopPoint(stop);
   const hits = gps
     .map((ping) => {
-      const atMs = gpsInstantMs(ping.recordedAt);
+      const atMs = pingAt(ping);
       if (atMs == null) return null;
       if (floor != null && atMs <= floor) return null;
       if (ping.latitude == null || ping.longitude == null) return null;
       if (!Number.isFinite(ping.latitude) || !Number.isFinite(ping.longitude)) return null;
-      if (milesBetween({ latitude: ping.latitude, longitude: ping.longitude }, dest) > GEOFENCE_MILES) return null;
-      return { at: ping.recordedAt, atMs };
+      const point = { latitude: ping.latitude, longitude: ping.longitude };
+      if (dest) {
+        if (milesBetween(point, dest) > GEOFENCE_MILES) return null;
+      } else if (!addressInPlace(ping.address, trim(stop.city), trim(stop.state))) {
+        return null;
+      }
+      return { at: ping.recordedAt, atMs, point };
     })
-    .filter((row): row is { at: string; atMs: number } => row != null)
+    .filter((row): row is { at: string; atMs: number; point: { latitude: number; longitude: number } } => row != null)
     .sort((left, right) => left.atMs - right.atMs);
-  return hits[0] ?? null;
+  if (dest) return hits[0] ? { at: hits[0].at, atMs: hits[0].atMs } : null;
+  const dwellMs = 30 * 60 * 1000;
+  const settled = hits.find((ping, index) =>
+    hits.slice(index + 1).some((later) => later.atMs - ping.atMs >= dwellMs && milesBetween(ping.point, later.point) <= GEOFENCE_MILES),
+  );
+  return settled ? { at: settled.at, atMs: settled.atMs } : null;
+}
+
+function scheduledMoment(
+  load: MileLoad,
+  stop: MileStop | undefined,
+  zone: string,
+  beforeMs: number,
+): { at: string; atMs: number; source: DeliverySource } | null {
+  const createdMs = instantMs(load.createdAt);
+  const fields = [
+    trim(stop?.window_end),
+    trim(stop?.window_start),
+    trim(load.deliveryEnd),
+    trim(load.deliveryStart),
+  ];
+  let best: { at: string; atMs: number } | null = null;
+  for (const value of fields) {
+    const atMs = saneClockMs(value, zone, createdMs);
+    if (atMs == null || atMs > beforeMs) continue;
+    if (!best || atMs > best.atMs) best = { at: value, atMs };
+  }
+  if (!best) return null;
+  const source: DeliverySource = trim(stop?.schedule_source).toLowerCase() === "its" ? "its" : "window";
+  return { ...best, source };
 }
 
 /**
  * Actual delivery time. Usable stamps, then the truck's geofence arrival, then an ITS
- * appointment, then the scheduled window. Legacy still trusts the raw stamp.
+ * appointment, then the scheduled window. Blank clocks are missing. A window years away
+ * from created_at is ignored. Legacy still trusts the raw stamp.
+ * `beforeMs` is the next pickup. A window that ends after that pickup can still count
+ * from its start. A GPS hit after that pickup means an in-progress delivery is not done yet.
  */
 export function deliveryMoment(
   load: MileLoad,
   stops: readonly MileStop[],
   mode: StartMode,
   gps: readonly GpsSample[] = [],
+  beforeMs = Number.POSITIVE_INFINITY,
 ): { at: string; atMs: number; source: DeliverySource } | null {
   const stop = deliveryStopOf(stops);
-  const zone = timeZoneForStop(stop?.state, stop?.city);
+  const zone = zoneFor(stop);
   if (mode === "legacy") {
     const at = deliveryKey(load, stops, "legacy");
     if (!at) return null;
@@ -181,33 +305,33 @@ export function deliveryMoment(
     if (atMs == null) return null;
     return { at, atMs, source: "stamp" };
   }
-  const stamp = usableStamp(load, stop, zone);
+  const stamp = usableStamp(load, stops, zone);
   if (stamp) {
-    const atMs = instantMs(stamp, zone);
+    const atMs = saneClockMs(stamp, zone, instantMs(load.createdAt));
     if (atMs != null) return { at: stamp, atMs, source: "stamp" };
   }
-  const arrivedByGps = gpsArrival(load, stop, gps);
-  if (arrivedByGps) return { ...arrivedByGps, source: "gps" };
-  const scheduled = trim(stop?.window_end) || trim(stop?.window_start) || trim(load.deliveryEnd) || trim(load.deliveryStart);
-  if (!scheduled) return null;
-  const atMs = instantMs(scheduled, zone);
-  if (atMs == null) return null;
-  const source: DeliverySource = trim(stop?.schedule_source).toLowerCase() === "its" ? "its" : "window";
-  return { at: scheduled, atMs, source };
+  const arrivedByGps = gpsArrival(load, stops, gps);
+  if (arrivedByGps) {
+    if (arrivedByGps.atMs <= beforeMs || !isFinishedForEmptyMiles(load.status)) {
+      return { ...arrivedByGps, source: "gps" };
+    }
+  }
+  return scheduledMoment(load, stop, zone, beforeMs);
 }
 
 export function pickupKey(load: MileLoad, stops: readonly MileStop[]): string {
-  const stop = pickupStopOf(stops);
-  const zone = timeZoneForStop(stop?.state, stop?.city);
-  const arrived = trim(stop?.arrived_at);
-  const departed = trim(stop?.departed_at);
-  const windowStart = trim(stop?.window_start) || trim(load.pickupStart);
-  const windowEnd = trim(stop?.window_end) || trim(load.pickupEnd);
-  if (arrived) {
-    if (stopStampUsable(arrived, windowStart, windowEnd, load.createdAt, zone)) return arrived;
-    if (windowStart) return windowStart;
-  }
-  return departed || windowStart || "";
+  return pickupInstant(load, stops)?.at ?? "";
+}
+
+/** Query bound for GPS history. Ignores a placeholder pickup year. */
+export function historyBoundMs(createdAt: string, pickupStart: string, pickupEnd: string): number {
+  const createdMs = instantMs(createdAt);
+  const marks = [pickupEnd, pickupStart]
+    .map((value) => saneClockMs(value, FALLBACK_ZONE, createdMs))
+    .filter((ms): ms is number => ms != null);
+  if (createdMs != null) marks.push(createdMs);
+  const bound = marks.length ? Math.max(...marks) : Date.now();
+  return bound + 36 * 60 * 60 * 1000;
 }
 
 /** Street, city, state. Blank when the stop has no place a dispatcher could confirm. */
@@ -245,7 +369,7 @@ function latestDelivery(
     .map((row) => {
       const rows = stops.get(row.id) ?? [];
       const gps = row.truckId == null || !gpsByTruck ? [] : (gpsByTruck.get(row.truckId) ?? []);
-      const moment = deliveryMoment(row, rows, mode, gps);
+      const moment = deliveryMoment(row, rows, mode, gps, hereMs);
       if (!moment) return null;
       if (mode === "current" && !isDeliveryCandidate(row.status, moment.source)) return null;
       return { load: row, at: moment.at, atMs: moment.atMs };
@@ -276,8 +400,9 @@ export function choosePrior(input: {
   gpsByTruck?: GpsByTruck;
 }): PriorChoice {
   const pickupStops = input.stops.get(input.load.id) ?? [];
-  const pickupAt = pickupKey(input.load, pickupStops);
-  const pickupMs = instantMs(pickupAt, timeZoneForStop(pickupStopOf(pickupStops)?.state, pickupStopOf(pickupStops)?.city));
+  const pickup = pickupInstant(input.load, pickupStops);
+  const pickupAt = pickup?.at ?? "";
+  const pickupMs = pickup?.atMs ?? null;
   const empty: PriorChoice = { load: null, place: "", at: "", atMs: null, pickupAt, pickupMs };
   if (pickupMs == null) return empty;
   const driverLoads = input.driverLoads.filter(

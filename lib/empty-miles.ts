@@ -4,6 +4,7 @@ import {
   DELIVERY_GPS_HISTORY_MS,
   deliveryKey,
   deliveryMoment,
+  historyBoundMs,
   isDeliveryCandidate,
   pickupKey,
   type GpsSample,
@@ -209,9 +210,7 @@ type PriorBundle = {
 };
 
 function pickupBoundMs(load: LoadView): number {
-  const marks = [load.pickup_start, load.pickup_end, load.delivery_start].map((value) => instantMs(value) ?? 0);
-  const bound = Math.max(...marks);
-  return bound > 0 ? bound + 36 * 60 * 60 * 1000 : Date.now();
+  return historyBoundMs(load.created_at, load.pickup_start, load.pickup_end);
 }
 
 /** Pings for the trucks that actually ran the candidate loads. Not the assigned unit's history. */

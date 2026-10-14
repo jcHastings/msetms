@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import {
   choosePrior,
   DELIVERY_GPS_HISTORY_MS,
+  historyBoundMs,
   legacySuggestedPlace,
   stopPoint,
   type GpsSample,
@@ -18,7 +19,6 @@ import {
   type MileStop,
 } from "../lib/empty-mile-start";
 import { ACTIVE_LOAD_STATUSES } from "../lib/types";
-import { instantMs } from "../lib/wall-time";
 import { archiveCutoffIso, DEFAULT_WORKING_WINDOW_DAYS } from "../lib/working-loads-shared";
 
 type LoadRow = {
@@ -84,9 +84,7 @@ function gpsSince(pickupMs: number): string {
 const ACTIVITY_SQL = `COALESCE(NULLIF(loads.delivery_end, ''), NULLIF(loads.delivery_start, ''), NULLIF(loads.pickup_end, ''), NULLIF(loads.pickup_start, ''), '1970-01-01T00:00:00.000Z')`;
 
 function pickupBoundMs(load: LoadRow): number {
-  const marks = [load.pickup_start, load.pickup_end].map((value) => instantMs(value) ?? 0);
-  const bound = Math.max(...marks);
-  return bound > 0 ? bound + 36 * 60 * 60 * 1000 : Date.now();
+  return historyBoundMs(load.created_at, load.pickup_start, load.pickup_end);
 }
 
 export function auditEmptyMileStarts(dbPath: string, limit: number): string {

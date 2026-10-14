@@ -1344,6 +1344,200 @@ async function main() {
   assert.equal(countedRows.filter((line) => line.startsWith("ROW-A-")).length, 9);
   assert.equal(countedRows.filter((line) => line.startsWith("ROW-R-")).length, 6);
 
+  const openDelivery = {
+    id: 11,
+    status: "at_delivery",
+    driverId: 4,
+    truckId: 8,
+    createdAt: "2026-10-10T23:35:24.000Z",
+    pickupStart: "2026-10-09T08:00:00",
+    pickupEnd: "2026-10-09T17:00:00",
+    deliveryStart: "2026-10-11T08:00:00",
+    deliveryEnd: "2026-10-11T17:00:00",
+  };
+  const laterAppointment = {
+    id: 12,
+    status: "delivered",
+    driverId: 4,
+    truckId: 8,
+    createdAt: "2026-10-13T16:28:04.000Z",
+    pickupStart: "2026-10-12T08:00:00",
+    pickupEnd: "2026-10-12T17:00:00",
+    deliveryStart: "2026-10-12T08:00:00",
+    deliveryEnd: "2026-10-12T17:00:00",
+  };
+  const nextPickup = {
+    id: 13,
+    status: "available",
+    driverId: 4,
+    truckId: 7,
+    createdAt: "2026-10-14T18:52:22.714Z",
+    pickupStart: "2026-10-14T18:00:00.000Z",
+    pickupEnd: "2026-10-14T18:00:00.000Z",
+    deliveryStart: "2026-10-16T00:00:00.000Z",
+    deliveryEnd: "2026-10-16T00:00:00.000Z",
+  };
+  const shapedStops = new Map<number, Array<Record<string, string | number | null>>>([
+    [
+      11,
+      [
+        {
+          kind: "pickup",
+          city: "Oakley",
+          state: "KS",
+          window_start: "2026-10-09T08:00:00",
+          window_end: "2026-10-09T17:00:00",
+          arrived_at: "2026-10-13T20:30:05Z",
+          departed_at: "2026-10-13T20:39:28Z",
+        },
+        {
+          kind: "delivery",
+          city: "Plainview",
+          state: "NE",
+          window_start: "2026-10-11T08:00:00",
+          window_end: "2026-10-11T17:00:00",
+          arrived_at: "",
+          departed_at: "2026-08-28T21:01:03.393Z",
+        },
+      ],
+    ],
+    [
+      12,
+      [
+        {
+          kind: "delivery",
+          city: "Oakley",
+          state: "KS",
+          schedule_source: "its",
+          window_start: "2026-10-12T08:00:00",
+          window_end: "2026-10-12T17:00:00",
+          arrived_at: "",
+          departed_at: "",
+        },
+      ],
+    ],
+    [
+      13,
+      [
+        {
+          kind: "pickup",
+          city: "Grandview",
+          state: "NE",
+          window_start: "2026-10-14T18:00:00.000Z",
+          window_end: "2026-10-14T18:00:00.000Z",
+          arrived_at: "",
+          departed_at: "",
+        },
+      ],
+    ],
+  ]);
+  const shapedGps = new Map([
+    [
+      8,
+      [
+        { address: "100 Main Street, Plainview, NE", recordedAt: "2026-10-11T01:37:14Z", latitude: 40.5, longitude: -98.4 },
+        { address: "Highway 6, Plainview, NE", recordedAt: "2026-10-14T15:49:15Z", latitude: 40.56, longitude: -98.39 },
+        { address: "10 Dock Street, Plainview, NE", recordedAt: "2026-10-14T16:19:15Z", latitude: 40.62, longitude: -98.37 },
+        { address: "10 Dock Street, Plainview, NE", recordedAt: "2026-10-14T17:08:37Z", latitude: 40.62, longitude: -98.37 },
+      ],
+    ],
+  ]);
+  const shaped = choosePrior({
+    load: nextPickup,
+    driverLoads: [openDelivery, laterAppointment],
+    truckLoads: [],
+    stops: shapedStops,
+    gpsByTruck: shapedGps,
+    mode: "current",
+  });
+  assert.equal(shaped.load?.id, 11);
+  assert.equal(shaped.place, "Plainview, NE");
+  assert.equal(shaped.at, "2026-10-14T16:19:15Z");
+
+  const sameDayDelivery = {
+    id: 21,
+    status: "delivered",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-13T16:28:04.000Z",
+    pickupStart: "2026-10-13T08:00:00",
+    pickupEnd: "2026-10-13T17:00:00",
+    deliveryStart: "2026-10-13T08:00:00",
+    deliveryEnd: "2026-10-13T17:00:00",
+  };
+  const sameDayHere = {
+    id: 22,
+    status: "in_transit",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-10T23:35:24.000Z",
+    pickupStart: "2026-10-13T08:00:00",
+    pickupEnd: "2026-10-13T17:00:00",
+    deliveryStart: "2026-10-15T08:00:00",
+    deliveryEnd: "2026-10-15T17:00:00",
+  };
+  const olderCity = {
+    id: 20,
+    status: "completed",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-08T13:47:15.000Z",
+    pickupStart: "2026-10-02T08:00:00",
+    pickupEnd: "2026-10-02T17:00:00",
+    deliveryStart: "2026-10-05T08:00:00",
+    deliveryEnd: "2026-10-05T17:00:00",
+  };
+  const sameDayStops = new Map<number, Array<Record<string, string | null>>>([
+    [22, [{ kind: "pickup", city: "Riverdale", state: "NY", window_start: "2026-10-13T08:00:00", window_end: "2026-10-13T17:00:00", arrived_at: "", departed_at: "" }]],
+    [21, [{ kind: "delivery", city: "Riverdale", state: "NY", window_start: "2026-10-13T08:00:00", window_end: "2026-10-13T17:00:00", arrived_at: "", departed_at: "" }]],
+    [20, [{ kind: "delivery", city: "Oldport", state: "NY", window_start: "2026-10-05T08:00:00", window_end: "2026-10-05T17:00:00", arrived_at: "", departed_at: "" }]],
+  ]);
+  const sameDay = choosePrior({
+    load: sameDayHere,
+    driverLoads: [sameDayDelivery, olderCity],
+    truckLoads: [],
+    stops: sameDayStops,
+    mode: "current",
+  });
+  assert.equal(sameDay.load?.id, 21);
+  assert.equal(sameDay.place, "Riverdale, NY");
+
+  const truckDelivery = {
+    id: 31,
+    status: "completed",
+    driverId: 9,
+    truckId: 8,
+    createdAt: "2026-10-08T13:47:15.000Z",
+    pickupStart: "2026-10-06T08:00:00",
+    pickupEnd: "2026-10-06T17:00:00",
+    deliveryStart: "2026-10-08T08:00:00",
+    deliveryEnd: "2026-10-08T17:00:00",
+  };
+  const junkHold = {
+    id: 30,
+    status: "hold",
+    driverId: null,
+    truckId: 8,
+    createdAt: "2026-10-08T13:48:11.000Z",
+    pickupStart: "2020-08-03T08:00:00",
+    pickupEnd: "2020-08-03T17:00:00",
+    deliveryStart: "2020-08-04T08:00:00",
+    deliveryEnd: "2020-08-04T17:00:00",
+  };
+  const junkStops = new Map<number, Array<Record<string, string | null>>>([
+    [30, [{ kind: "pickup", city: "Dakota", state: "NE", window_start: "2020-08-03T08:00:00", window_end: "2020-08-03T17:00:00", arrived_at: "", departed_at: "" }]],
+    [31, [{ kind: "delivery", city: "Plainview", state: "NE", window_start: "2026-10-08T08:00:00", window_end: "2026-10-08T17:00:00", arrived_at: "", departed_at: "" }]],
+  ]);
+  const truckFallback = choosePrior({
+    load: junkHold,
+    driverLoads: [],
+    truckLoads: [truckDelivery],
+    stops: junkStops,
+    mode: "current",
+  });
+  assert.equal(truckFallback.load?.id, 31);
+  assert.equal(truckFallback.place, "Plainview, NE");
+
   closeDb();
   console.log("deadhead confirm ok");
 }
