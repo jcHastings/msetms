@@ -2,7 +2,10 @@
 
 export const DEADHEAD_GAP_MS = 3 * 24 * 60 * 60 * 1000;
 export const DEADHEAD_DISTANCE_MI = 600;
-/** Prior deliveries older than this are not where the truck started. */
+/**
+ * The old empty-mile start ignored deliveries older than this.
+ * Live suggestions do not. The read-only audit still uses it for the old column.
+ */
 export const DEADHEAD_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 /** Last GPS a few hours before pickup, not the ping sitting on the shipper. */
 export const DEADHEAD_GPS_LEAD_MS = 4 * 60 * 60 * 1000;
