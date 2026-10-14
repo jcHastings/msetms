@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse } from "dotenv";
 import { MAIL_FROM_DEFAULT } from "./mail-shared";
+import { qboInvoiceSendEnabledFrom } from "./qbo-send-lock";
 import { GROSS_TRUCKING_INCOME, normalizeMatchName } from "./qbo-production-map";
 import { samsaraAddressTagIds } from "./samsara-address-shared";
 
@@ -399,6 +400,14 @@ export function getQuickbooksWebhookVerifier(): string | undefined {
 export function qboPaymentArEmailEnabled(): boolean {
   const value = (readSecret("QBO_PAYMENT_AR_EMAIL") ?? "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+/**
+ * Invoice and bill sends to QuickBooks. Off unless QBO_INVOICE_SEND_ENABLED is 1, true, yes, or on.
+ * Payment sync stays a read either way. Billing still runs from the old TMS while this is off.
+ */
+export function qboInvoiceSendEnabled(): boolean {
+  return qboInvoiceSendEnabledFrom(readSecret("QBO_INVOICE_SEND_ENABLED"));
 }
 
 export function isQuickbooksOAuthReady(): boolean {

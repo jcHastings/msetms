@@ -36,6 +36,7 @@ function arg(name: string): string | undefined {
 }
 const LIVE = process.argv.includes("--live");
 const FRESH = process.argv.includes("--fresh") && !LIVE;
+if (FRESH) process.env.QBO_INVOICE_SEND_ENABLED = "true";
 const CLEANUP = process.argv.includes("--cleanup");
 const sourceDb = arg("db");
 const outPath = arg("out");
@@ -319,6 +320,12 @@ async function runCase(id: string, title: string, fn: (c: CaseResult) => Promise
 }
 
 async function main() {
+  const { qboInvoiceSendEnabled } = await import("../lib/env");
+  const { QBO_INVOICE_SEND_DISABLED_MESSAGE } = await import("../lib/qbo-send-lock");
+  if (!qboInvoiceSendEnabled()) {
+    console.error(QBO_INVOICE_SEND_DISABLED_MESSAGE);
+    process.exit(1);
+  }
   const queries = await import("../lib/queries");
   const { getDb } = await import("../lib/db");
   const { addPayItem } = await import("../lib/pay-items");

@@ -16,7 +16,10 @@ import {
   unarchiveAccountingLoadFormAction,
 } from "@/lib/dispatcher-actions";
 import { ClosePayPeriodButton } from "@/components/close-pay-period-button";
+import { QboSendHold } from "@/components/qbo-send-hold";
 import { invoiceIssuerProblems, invoiceIssuerWarning } from "@/lib/carrier-identity";
+import { qboInvoiceSendEnabled } from "@/lib/env";
+import { QBO_INVOICE_SEND_DISABLED_MESSAGE } from "@/lib/qbo-send-lock";
 import { ReimbursementQueue } from "@/components/reimbursement-queue";
 import { SettlementWeekList } from "@/components/settlement-week-list";
 import { canWrite } from "@/lib/settings-shared";
@@ -255,14 +258,30 @@ function toInvoiceAcctRow(
   };
 }
 
+function QboSendOffNotice() {
+  if (qboInvoiceSendEnabled()) return null;
+  return (
+    <p
+      id="qbo-send-hold-reason"
+      role="status"
+      data-qbo-send-locked=""
+      className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
+    >
+      {QBO_INVOICE_SEND_DISABLED_MESSAGE}
+    </p>
+  );
+}
+
 function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
   const qboConnected = hasQuickbooksSession();
+  const sendEnabled = qboInvoiceSendEnabled();
   const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
   const rows = listReceivables()
     .filter((row) => matchesQuery(row, q) && matchesBranch(row, branch))
     .map((row) => toInvoiceAcctRow(row, qboConnected));
   return (
     <div className="space-y-3">
+      <QboSendOffNotice />
       {issuerWarning ? (
         <p
           role="alert"
@@ -273,13 +292,14 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
         </p>
       ) : null}
       <HubTableCard toolbar={<SearchBox q={q} tab="invoices" branch={branch} branches={branches} />}>
-        <InvoicesAcctTable rows={rows} />
+        <InvoicesAcctTable rows={rows} qboSendEnabled={sendEnabled} />
       </HubTableCard>
     </div>
   );
 }
 
 function BillsTab({ q, branch, branches }: { q: string; branch: string; branches: string[] }) {
+  const sendEnabled = qboInvoiceSendEnabled();
   const bills = listBills();
   const accountingLoads = listLoadsOnAccountingDesk("accounting");
   const loadById = new Map(accountingLoads.map((load) => [load.id, load]));
@@ -293,6 +313,7 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
   });
   return (
     <div className="space-y-4">
+      <QboSendOffNotice />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SearchBox q={q} tab="bills" branch={branch} branches={branches} />
         <form action={payAllOpenBillsFormAction}>
@@ -390,13 +411,15 @@ function BillsTab({ q, branch, branches }: { q: string; branch: string; branches
                       )}
                     </td>
                     <HubActions>
-                      {bill.qbo_bill_id ? null : (
+                      {bill.qbo_bill_id ? null : sendEnabled ? (
                         <form action={sendBillToQuickbooksFormAction}>
                           <input type="hidden" name="bill_id" value={bill.id} />
                           <button className="acct-link" type="submit">
                             Send to QuickBooks
                           </button>
                         </form>
+                      ) : (
+                        <QboSendHold label="Send to QuickBooks" variant="link" />
                       )}
                       {bill.status === "open" ? (
                         <form action={payBillAction}>

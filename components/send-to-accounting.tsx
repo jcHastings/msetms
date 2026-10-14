@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { QboSendHold } from "@/components/qbo-send-hold";
 import { useDismissable } from "@/components/use-dismissable";
 import { sendToQuickbooksAction } from "@/lib/actions";
 import {
@@ -34,6 +35,7 @@ export function SendToAccountingControls({
   canReturn,
   variant = "button",
   checklist = null,
+  qboSendEnabled = false,
 }: {
   loadId: number;
   loadNumber: string;
@@ -43,6 +45,7 @@ export function SendToAccountingControls({
   canReturn: boolean;
   variant?: "button" | "menu" | "header";
   checklist?: InvoiceReadyChecklistModel | null;
+  qboSendEnabled?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -116,15 +119,19 @@ export function SendToAccountingControls({
     if (variant === "menu") {
       return (
         <>
-          <button
-            type="button"
-            className="menu-item w-full text-left"
-            data-qbo-menu-send=""
-            disabled={pending}
-            onClick={() => void sendQuickbooks()}
-          >
-            {pending ? "Sending…" : "Send to QuickBooks"}
-          </button>
+          {qboSendEnabled ? (
+            <button
+              type="button"
+              className="menu-item w-full text-left"
+              data-qbo-menu-send=""
+              disabled={pending}
+              onClick={() => void sendQuickbooks()}
+            >
+              {pending ? "Sending…" : "Send to QuickBooks"}
+            </button>
+          ) : (
+            <QboSendHold label="Send to QuickBooks" variant="menu" />
+          )}
           {canReturn ? (
             <button
               type="button"

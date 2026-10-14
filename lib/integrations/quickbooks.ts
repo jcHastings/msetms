@@ -12,8 +12,11 @@ import {
   getQuickbooksRefreshToken,
   isQuickbooksOAuthReady,
   qboClassAutoCreateEnabled,
+  qboInvoiceSendEnabled,
 } from "../env";
 import { getDbPath } from "../db";
+import { claimQboLoadSend, releaseQboLoadSend } from "../qbo-send-claim";
+import { QBO_INVOICE_SEND_DISABLED_MESSAGE, QBO_SEND_IN_PROGRESS_MESSAGE } from "../qbo-send-lock";
 import {
   getCustomer,
   getLoad,
@@ -293,23 +296,34 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function assertQboInvoiceSendEnabled(): void {
+  if (!qboInvoiceSendEnabled()) throw new Error(QBO_INVOICE_SEND_DISABLED_MESSAGE);
+}
+
 export async function sendBillToQuickbooks(billId: number): Promise<{ billId: string; source: "demo" | "quickbooks" }> {
+  assertQboInvoiceSendEnabled();
   const { getBill, markQboBill } = await import("../accounting");
   const { listQboVendorMaps } = await import("../accounting-desk");
   const bill = getBill(billId);
   if (!bill) throw new Error("Bill not found.");
   if (bill.qbo_bill_id) throw new Error("This bill was already sent to QuickBooks.");
-  if (!hasQuickbooksSession()) {
-    const demoId = `demo-bill-${bill.id}-${uniqueDemoInvoiceStamp()}`;
-    markQboBill(bill.id, demoId);
-    return { billId: demoId, source: "demo" };
+  const claim = bill.load_id ? claimQboLoadSend(bill.load_id) : null;
+  if (bill.load_id && !claim) throw new Error(QBO_SEND_IN_PROGRESS_MESSAGE);
+  try {
+    if (!hasQuickbooksSession()) {
+      const demoId = `demo-bill-${bill.id}-${uniqueDemoInvoiceStamp()}`;
+      markQboBill(bill.id, demoId);
+      return { billId: demoId, source: "demo" };
+    }
+    const payload = await buildBillPayload(bill, listQboVendorMaps());
+    const created = await qboPost<{ Bill?: { Id?: string } }>("/bill", payload, "bill create");
+    const id = created.Bill?.Id;
+    if (!id) throw new Error("QuickBooks did not return a bill id.");
+    markQboBill(bill.id, id);
+    return { billId: id, source: "quickbooks" };
+  } finally {
+    if (claim && bill.load_id) releaseQboLoadSend(bill.load_id, claim.claimedAt);
   }
-  const payload = await buildBillPayload(bill, listQboVendorMaps());
-  const created = await qboPost<{ Bill?: { Id?: string } }>("/bill", payload, "bill create");
-  const id = created.Bill?.Id;
-  if (!id) throw new Error("QuickBooks did not return a bill id.");
-  markQboBill(bill.id, id);
-  return { billId: id, source: "quickbooks" };
 }
 
 type BillForPayload = {
@@ -436,50 +450,58 @@ export async function sendLoadToQuickbooks(
   loadId: number,
   options: { confirmResend?: boolean } = {},
 ): Promise<QboSendResult> {
-  const load = getLoad(loadId);
-  if (!load) throw new Error("Load not found.");
-  const cancelled = load.status === "cancelled";
-  if (!isBillableStatus(load.status) && !cancelled) {
-    throw new Error("Mark the load Delivered before sending an invoice.");
-  }
-  if (load.qbo_invoice_id && !options.confirmResend) {
-    throw new Error("This load was already sent to QuickBooks. Confirm to update that invoice.");
-  }
-  const preview = previewQuickbooksInvoice(load);
-  if (cancelled && !preview.lines.length) {
-    throw new Error(QBO_CANCELLED_MESSAGE);
-  }
-  assertCustomerInvoiceReady(preview);
-  const sentAt = new Date().toISOString();
+  assertQboInvoiceSendEnabled();
+  if (!getLoad(loadId)) throw new Error("Load not found.");
+  const claim = claimQboLoadSend(loadId);
+  if (!claim) throw new Error(QBO_SEND_IN_PROGRESS_MESSAGE);
+  try {
+    const load = getLoad(loadId);
+    if (!load) throw new Error("Load not found.");
+    const cancelled = load.status === "cancelled";
+    if (!isBillableStatus(load.status) && !cancelled) {
+      throw new Error("Mark the load Delivered before sending an invoice.");
+    }
+    if (load.qbo_invoice_id && !options.confirmResend) {
+      throw new Error("This load was already sent to QuickBooks. Confirm to update that invoice.");
+    }
+    const preview = previewQuickbooksInvoice(load);
+    if (cancelled && !preview.lines.length) {
+      throw new Error(QBO_CANCELLED_MESSAGE);
+    }
+    assertCustomerInvoiceReady(preview);
+    const sentAt = new Date().toISOString();
 
-  if (!hasQuickbooksSession()) {
+    if (!hasQuickbooksSession()) {
+      const result: QboSendResult = {
+        invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
+        invoiceNumber: "",
+        sentAt,
+        source: "demo",
+        totalAmt: roundMoney(preview.amount),
+      };
+      markQboInvoice(loadId, result);
+      return result;
+    }
+
+    const { getCompanySettings } = await import("../settings");
+    const { invoiceIssuerProblems, invoiceIssuerWarning } = await import("../carrier-identity");
+    const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
+    if (issuerWarning) {
+      throw new Error(issuerWarning.replace("Invoices cannot be emailed", "Invoices cannot be sent to QuickBooks"));
+    }
+    const live = await createOrUpdateLiveInvoice(load, preview);
     const result: QboSendResult = {
-      invoiceId: `demo-${load.load_number}-${uniqueDemoInvoiceStamp()}`,
-      invoiceNumber: "",
+      invoiceId: live.invoiceId,
+      invoiceNumber: live.invoiceNumber,
       sentAt,
-      source: "demo",
-      totalAmt: roundMoney(preview.amount),
+      source: "quickbooks",
+      totalAmt: live.totalAmt,
     };
     markQboInvoice(loadId, result);
     return result;
+  } finally {
+    releaseQboLoadSend(loadId, claim.claimedAt);
   }
-
-  const { getCompanySettings } = await import("../settings");
-  const { invoiceIssuerProblems, invoiceIssuerWarning } = await import("../carrier-identity");
-  const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
-  if (issuerWarning) {
-    throw new Error(issuerWarning.replace("Invoices cannot be emailed", "Invoices cannot be sent to QuickBooks"));
-  }
-  const live = await createOrUpdateLiveInvoice(load, preview);
-  const result: QboSendResult = {
-    invoiceId: live.invoiceId,
-    invoiceNumber: live.invoiceNumber,
-    sentAt,
-    source: "quickbooks",
-    totalAmt: live.totalAmt,
-  };
-  markQboInvoice(loadId, result);
-  return result;
 }
 
 export async function getQuickbooksStatus(): Promise<QboStatus> {

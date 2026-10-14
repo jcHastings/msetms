@@ -271,6 +271,10 @@ export function formatItsImportText(summary: ItsImportSummary): string {
   lines.push(`rate filled on TMS-newer loads: ${summary.rate_filled}`);
   if (summary.rate_filled_loads.length === 0) lines.push("  (none)");
   for (const loadNumber of summary.rate_filled_loads) lines.push(`  ${loadNumber}`);
+  lines.push("billed fields left unchanged:");
+  const billedHolds = summary.exception_items.filter((item) => item.issue === "billing_locked");
+  if (billedHolds.length === 0) lines.push("  (none)");
+  for (const item of billedHolds) lines.push(`  ${item.load_number}: ${item.detail}`);
   lines.push("reassignments:");
   if (summary.reassignments.length === 0) lines.push("  (none)");
   for (const row of summary.reassignments) {
@@ -402,7 +406,11 @@ export function importItsValues(
     const existing = existingId ? getLoad(existingId) : null;
     if (existing && exportIsStale(existing.updated_at, snapshot)) {
       const rate = rateFill(existing, row, options);
-      if (rate) {
+      if (rate && loadBillingLocked(existing)) {
+        const detail = billingLockDetail([`rate from "${shown(rate.from)}" to "${shown(rate.to)}"`]);
+        noteException(summary, row.load_number, "billing_locked", detail, year);
+        if (options.apply) writeException(itsImportExceptionKey(row.load_number, "billing_locked"), "open", detail);
+      } else if (rate) {
         if (options.apply) {
           patchLoad(existing.id, [rate]);
           recordLoadChanges(existing.id, "update", [{ field: rate.field, oldValue: rate.from, newValue: rate.to }]);
@@ -490,6 +498,9 @@ export function importItsValues(
     const plan = planUpdate(existing, row, customers, truck, trailer, driver, options, summary);
     if (plan.held.length) {
       issues.push({ issue: "its_update_held", detail: formatItsHeld(plan.held) });
+    }
+    if (plan.billingHeld.length) {
+      issues.push({ issue: "billing_locked", detail: billingLockDetail(plan.billingHeld) });
     }
     const stopWork = plan.stopFills.length + plan.stopAdds.length + plan.stopWindows.length;
     if (plan.changes.length === 0 && stopWork === 0) {
@@ -803,12 +814,29 @@ function planUpdate(
   driver: UnitMatch,
   options: ItsImportOptions,
   summary: ItsImportSummary,
-): { changes: Change[]; stopFills: StopFill[]; stopAdds: PlannedStop[]; stopWindows: StopWindowUpdate[]; held: HeldChange[] } {
+): {
+  changes: Change[];
+  stopFills: StopFill[];
+  stopAdds: PlannedStop[];
+  stopWindows: StopWindowUpdate[];
+  held: HeldChange[];
+  billingHeld: string[];
+} {
   const changes: Change[] = [];
   const held: HeldChange[] = [];
-  const customerId = row.customer_name.trim() ? ensureCustomer(row.customer_name, customers) : current.customer_id;
-  if (customerId !== current.customer_id) {
-    changes.push(change("customer_id", "customer", current.customer_id, customerId));
+  const billingHeld: string[] = [];
+  const billed = loadBillingLocked(current);
+  if (billed) {
+    const wanted = row.customer_name.trim();
+    const currentName = (current.customer_name ?? "").trim();
+    if (wanted && wanted.toLowerCase() !== currentName.toLowerCase()) {
+      billingHeld.push(`customer from "${shown(currentName)}" to "${wanted}"`);
+    }
+  } else {
+    const customerId = row.customer_name.trim() ? ensureCustomer(row.customer_name, customers) : current.customer_id;
+    if (customerId !== current.customer_id) {
+      changes.push(change("customer_id", "customer", current.customer_id, customerId));
+    }
   }
   const locked = itsScheduleLocked(current);
   const handEdited = structureHandEdited(current.id);
@@ -816,6 +844,13 @@ function planUpdate(
   const planned = plannedStops(row);
   const structural = !row.stops_unpairable;
   const stopFills = structural ? blankStopFills(existingStops, planned, handEdited, held) : [];
+  const keptFills = billed ? [] : stopFills;
+  if (billed) {
+    for (const fill of stopFills) {
+      const bits = STOP_FILL_FIELDS.filter((field) => fill[field] != null).map((field) => `${field} "${fill[field]}"`);
+      if (bits.length) billingHeld.push(`stop fill ${bits.join(", ")}`);
+    }
+  }
   const stopAdds = structural ? missingStops(existingStops, planned, locked, handEdited, held) : [];
   const stopWindows = structural ? changedStopWindows(existingStops, planned, locked, handEdited, held) : [];
   if (structural) considerPickupOrder(existingStops, planned, handEdited, held);
@@ -864,14 +899,37 @@ function planUpdate(
   }
   const nextStatus = nextImportStatus(current.status, row);
   if (nextStatus && nextStatus !== current.status) {
-    changes.push(change("status", "status", current.status, nextStatus));
+    if (billed) billingHeld.push(`status from "${current.status}" to "${nextStatus}"`);
+    else changes.push(change("status", "status", current.status, nextStatus));
   }
   noteSlot(summary, current, row, "truck", current.truck_id, current.truck_unit || "", truck, changes);
   noteSlot(summary, current, row, "trailer", current.trailer_id, current.trailer_unit || current.trailer_number || "", trailer, changes);
-  noteSlot(summary, current, row, "driver", current.driver_id, current.driver_name || "", driver, changes);
+  if (billed) {
+    const decision = decideSlot(current.driver_id, driver);
+    if (decision.id !== current.driver_id) {
+      billingHeld.push(`driver from "${shown(current.driver_name || "")}" to "${shown(driver.tmsUnit)}"`);
+    }
+  } else {
+    noteSlot(summary, current, row, "driver", current.driver_id, current.driver_name || "", driver, changes);
+  }
   const rate = rateFill(current, row, options);
-  if (rate) changes.push(rate);
-  return { changes, stopFills, stopAdds, stopWindows, held };
+  if (rate) {
+    if (billed) billingHeld.push(`rate from "${shown(rate.from)}" to "${shown(rate.to)}"`);
+    else changes.push(rate);
+  }
+  return { changes, stopFills: keptFills, stopAdds, stopWindows, held, billingHeld };
+}
+
+function loadBillingLocked(load: { qbo_invoice_id?: string | null; tms_invoice_number?: string | null }): boolean {
+  return text(load.qbo_invoice_id) !== "" || text(load.tms_invoice_number) !== "";
+}
+
+function shown(value: string): string {
+  return value.trim() ? value : "(blank)";
+}
+
+function billingLockDetail(changes: string[]): string {
+  return `ITS would change ${changes.join("; ")}. Left unchanged because this load has a QuickBooks invoice or a TMS invoice.`;
 }
 
 function noteSlot(

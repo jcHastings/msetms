@@ -844,13 +844,19 @@ async function main(): Promise<void> {
     state: string;
     arrived_at: string;
   };
-  assert.equal(filledStop.city, "Newark");
+  assert.equal(filledStop.city, "", "a billed load does not take a stop fill");
   assert.equal(filledStop.state, "NJ");
   assert.equal(filledStop.name, "Avenel DC");
   assert.equal(filledStop.arrived_at, "2026-09-22T15:04:00.000Z");
   assert.equal(loadField("1008101", "destination"), "Avenel, NJ");
   assert.equal(scalar("SELECT COUNT(*) AS n FROM load_stops WHERE load_id = ?", blankCityId), stopCountBefore);
-  assert.equal(filled.updated >= 1, true);
+  assert.equal(filled.updated, 0);
+  assert.ok(filled.exception_items.some((item) => item.load_number === "1008101" && item.issue === "billing_locked" && /stop fill/.test(item.detail)));
+  assert.ok(
+    listExceptionInbox().items.some(
+      (item) => item.kind === "its_import" && item.loadNumber === "1008101" && /stop fill/.test(item.detail),
+    ),
+  );
   const keepState = its.importItsRecords(
     sheet([
       loadRow({
@@ -865,7 +871,7 @@ async function main(): Promise<void> {
     { apply: true, snapshot: FRESH },
   );
   const keptStop = db.prepare("SELECT city, state FROM load_stops WHERE id = ?").get(filledStop.id) as { city: string; state: string };
-  assert.equal(keptStop.city, "Newark");
+  assert.equal(keptStop.city, "");
   assert.equal(keptStop.state, "NJ");
   assert.equal(keepState.reassignments.length, 0);
 
@@ -1623,6 +1629,196 @@ async function main(): Promise<void> {
   );
   assert.equal(loadField("1006270", "pickup_start"), "2026-10-16T08:00:00");
   assert.equal(afterRoute.exception_items.some((item) => item.load_number === "1006270" && item.issue === "its_update_held"), false);
+
+  const otherBroker = queries.createCustomer({ name: "Other Broker LLC", billing_notes: "", contacts: [] });
+  const customersBefore = queries.listCustomers().length;
+  const qboLocked = officeLoad({
+    loadNumber: "1010101",
+    status: "dispatched",
+    driverId: eller,
+    rate: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  db.prepare("UPDATE loads SET qbo_invoice_id = 'qbo-lock-1' WHERE id = ?").run(qboLocked);
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_start, window_end)
+     VALUES (?, 1, 'pickup', '', '', '', '', '')`,
+  ).run(qboLocked);
+  const tmsLocked = officeLoad({
+    loadNumber: "1010102",
+    status: "dispatched",
+    driverId: eller,
+    rate: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  db.prepare("UPDATE loads SET tms_invoice_number = 'TMS-88' WHERE id = ?").run(tmsLocked);
+  const openLoad = officeLoad({
+    loadNumber: "1010103",
+    status: "dispatched",
+    driverId: eller,
+    rate: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_start, window_end)
+     VALUES (?, 1, 'pickup', '', '', '', '', '')`,
+  ).run(openLoad);
+  const lockRow = {
+    Status: "Invoiced",
+    Customer: "Brand New Broker",
+    "Carrier/Driver": "Chris Ceferino",
+    "Total Billing Rate": "1800",
+    "WSF PO": "PO-STILL-OK",
+    Shipper: "Westside Foods",
+    "Shipper City": "Kansas City",
+    "Shipper St.": "MO",
+  };
+  const lockedRun = its.importItsRecords(
+    sheet([
+      loadRow({ "Load #": "1010101", ...lockRow }),
+      loadRow({ "Load #": "1010102", ...lockRow, Customer: "Other Broker LLC" }),
+    ]),
+    { apply: true, snapshot: FRESH, importRate: true },
+  );
+  assert.equal(loadField("1010101", "customer_id"), customerId);
+  assert.equal(loadField("1010101", "status"), "dispatched");
+  assert.equal(loadField("1010101", "driver_id"), eller);
+  assert.equal(loadField("1010101", "rate"), null);
+  assert.equal(loadField("1010101", "po_number"), "PO-STILL-OK");
+  assert.equal(
+    (db.prepare("SELECT city FROM load_stops WHERE load_id = ? AND kind = 'pickup'").get(qboLocked) as { city: string }).city,
+    "",
+  );
+  assert.equal(queries.listCustomers().some((customer) => customer.name === "Brand New Broker"), false);
+  assert.equal(queries.listCustomers().length, customersBefore);
+  assert.equal(loadField("1010102", "customer_id"), customerId);
+  assert.equal(loadField("1010102", "status"), "dispatched");
+  assert.equal(loadField("1010102", "driver_id"), eller);
+  assert.equal(loadField("1010102", "rate"), null);
+  assert.equal(lockedRun.reassignments.some((row) => row.load_number === "1010101" || row.load_number === "1010102"), false);
+  for (const loadNumber of ["1010101", "1010102"]) {
+    const item = lockedRun.exception_items.find((row) => row.load_number === loadNumber && row.issue === "billing_locked");
+    assert.ok(item, loadNumber);
+    assert.match(item.detail, /customer/);
+    assert.match(item.detail, /status/);
+    assert.match(item.detail, /driver/);
+    assert.match(item.detail, /rate/);
+    assert.match(item.detail, /QuickBooks invoice or a TMS invoice/);
+  }
+  assert.match(
+    lockedRun.exception_items.find((row) => row.load_number === "1010101" && row.issue === "billing_locked")?.detail ?? "",
+    /stop fill/,
+  );
+  assert.match(its.formatItsImportText(lockedRun), /billed fields left unchanged:/);
+  assert.match(its.formatItsImportText(lockedRun), /1010101: ITS would change/);
+  assert.ok(
+    listExceptionInbox().items.some(
+      (item) => item.kind === "its_import" && item.loadNumber === "1010102" && /rate/.test(item.detail),
+    ),
+  );
+  const dryLocked = its.importItsRecords(sheet([loadRow({ "Load #": "1010101", ...lockRow })]), {
+    apply: false,
+    snapshot: FRESH,
+    importRate: true,
+  });
+  assert.ok(dryLocked.exception_items.some((item) => item.load_number === "1010101" && item.issue === "billing_locked"));
+  assert.equal(loadField("1010101", "status"), "dispatched");
+
+  const openRun = its.importItsRecords(sheet([loadRow({ "Load #": "1010103", ...lockRow, Customer: "Other Broker LLC" })]), {
+    apply: true,
+    snapshot: FRESH,
+    importRate: true,
+  });
+  assert.equal(loadField("1010103", "customer_id"), otherBroker);
+  assert.equal(loadStatus("1010103"), "completed");
+  assert.equal(loadField("1010103", "driver_id"), ceferino);
+  assert.equal(loadField("1010103", "rate"), 1800);
+  assert.equal(
+    (db.prepare("SELECT city FROM load_stops WHERE load_id = ? AND kind = 'pickup'").get(openLoad) as { city: string }).city,
+    "Kansas City",
+  );
+  assert.equal(openRun.exception_items.some((item) => item.load_number === "1010103" && item.issue === "billing_locked"), false);
+
+  const staleBilled = officeLoad({
+    loadNumber: "1010104",
+    status: "completed",
+    rate: null,
+    updatedAt: "2026-10-08T00:00:00.000Z",
+  });
+  db.prepare("UPDATE loads SET tms_invoice_number = 'TMS-89' WHERE id = ?").run(staleBilled);
+  const staleRun = its.importItsRecords(
+    sheet([loadRow({ "Load #": "1010104", Status: "Invoiced", "Total Billing Rate": "2400" })]),
+    { apply: true, snapshot: FRESH, importRate: true },
+  );
+  assert.equal(loadField("1010104", "rate"), null);
+  assert.equal(staleRun.rate_filled_loads.includes("1010104"), false);
+  assert.ok(staleRun.exception_items.some((item) => item.load_number === "1010104" && item.issue === "billing_locked" && /rate/.test(item.detail)));
+
+  const bothId = officeLoad({
+    loadNumber: "1010105",
+    status: "dispatched",
+    driverId: eller,
+    rate: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  db.prepare("UPDATE loads SET qbo_invoice_id = 'qbo-lock-both' WHERE id = ?").run(bothId);
+  db.prepare(
+    `INSERT INTO load_stops (load_id, sequence, kind, name, city, state, window_start, window_end)
+     VALUES (?, 1, 'pickup', '', '', '', '', '')`,
+  ).run(bothId);
+  db.prepare(
+    `INSERT INTO load_audit (load_id, load_number, actor, actor_kind, action, field, old_value, new_value, created_at)
+     VALUES (?, '1010105', 'JC', 'dispatcher', 'update', 'stops', '', 'JC-approved data fix, hand-edited', ?)`,
+  ).run(bothId, new Date().toISOString());
+  const bothRun = its.importItsRecords(
+    sheet([
+      loadRow({
+        "Load #": "1010105",
+        Status: "Invoiced",
+        Customer: "Brand New Broker",
+        "Carrier/Driver": "Chris Ceferino",
+        "Total Billing Rate": "1800",
+        "WSF PO": "PO-BOTH-OK",
+        "Ship Date": "10/13/2026",
+        Shipper: "Westside Foods",
+        "Shipper City": "Kansas City",
+        "Shipper St.": "MO",
+      }),
+    ]),
+    { apply: true, snapshot: FRESH, importRate: true },
+  );
+  assert.equal(loadField("1010105", "pickup_start"), "2026-09-20T08:00:00");
+  assert.equal(loadField("1010105", "pickup_end"), "2026-09-20T17:00:00");
+  assert.equal(loadField("1010105", "customer_id"), customerId);
+  assert.equal(loadField("1010105", "status"), "dispatched");
+  assert.equal(loadField("1010105", "driver_id"), eller);
+  assert.equal(loadField("1010105", "rate"), null);
+  assert.equal(loadField("1010105", "po_number"), "PO-BOTH-OK");
+  assert.equal(
+    (db.prepare("SELECT city FROM load_stops WHERE load_id = ? AND kind = 'pickup'").get(bothId) as { city: string }).city,
+    "",
+  );
+  assert.equal(queries.listCustomers().some((customer) => customer.name === "Brand New Broker"), false);
+  assert.equal(bothRun.reassignments.some((row) => row.load_number === "1010105"), false);
+  const handItem = bothRun.exception_items.find((item) => item.load_number === "1010105" && item.issue === "its_update_held");
+  assert.ok(handItem);
+  assert.match(handItem.detail, /edited by hand/);
+  assert.match(handItem.detail, /pickup_start/);
+  const billItem = bothRun.exception_items.find((item) => item.load_number === "1010105" && item.issue === "billing_locked");
+  assert.ok(billItem);
+  assert.match(billItem.detail, /customer/);
+  assert.match(billItem.detail, /status/);
+  assert.match(billItem.detail, /driver/);
+  assert.match(billItem.detail, /rate/);
+  assert.match(billItem.detail, /QuickBooks invoice or a TMS invoice/);
+  const handInbox = db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1010105:its_update_held'").get() as {
+    reason: string;
+  };
+  assert.match(handInbox.reason, /edited by hand/);
+  const billInbox = db.prepare("SELECT reason FROM exception_states WHERE exception_key = 'its-import:1010105:billing_locked'").get() as {
+    reason: string;
+  };
+  assert.match(billInbox.reason, /rate/);
 
   assert.equal(calls.qbo, 0);
   assert.equal(calls.mail, 0);
