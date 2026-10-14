@@ -1,5 +1,5 @@
 /**
- * Print the old and new empty-mile start for the latest active loads.
+ * Print the old and new empty-mile start for the latest working loads.
  * Opens the database read-only and writes nothing.
  *
  * Usage: tsx scripts/empty-mile-start-audit.ts <db-path> <N>
@@ -10,6 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import {
   choosePrior,
+  DELIVERY_GPS_HISTORY_MS,
   legacySuggestedPlace,
   stopPoint,
   type GpsSample,
@@ -17,6 +18,8 @@ import {
   type MileStop,
 } from "../lib/empty-mile-start";
 import { ACTIVE_LOAD_STATUSES } from "../lib/types";
+import { instantMs } from "../lib/wall-time";
+import { archiveCutoffIso, DEFAULT_WORKING_WINDOW_DAYS } from "../lib/working-loads-shared";
 
 type LoadRow = {
   id: number;
@@ -77,6 +80,15 @@ function gpsSince(pickupMs: number): string {
   return new Date(pickupMs - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/** Delivery, then pickup. Empty windows sort as ancient so they stay out of the working set. */
+const ACTIVITY_SQL = `COALESCE(NULLIF(loads.delivery_end, ''), NULLIF(loads.delivery_start, ''), NULLIF(loads.pickup_end, ''), NULLIF(loads.pickup_start, ''), '1970-01-01T00:00:00.000Z')`;
+
+function pickupBoundMs(load: LoadRow): number {
+  const marks = [load.pickup_start, load.pickup_end].map((value) => instantMs(value) ?? 0);
+  const bound = Math.max(...marks);
+  return bound > 0 ? bound + 36 * 60 * 60 * 1000 : Date.now();
+}
+
 export function auditEmptyMileStarts(dbPath: string, limit: number): string {
   if (!Number.isInteger(limit) || limit < 1) throw new Error("N must be a positive integer.");
   const resolved = path.resolve(dbPath);
@@ -85,14 +97,20 @@ export function auditEmptyMileStarts(dbPath: string, limit: number): string {
   try {
     db.exec("PRAGMA query_only = ON");
     const statusSlots = ACTIVE_LOAD_STATUSES.map(() => "?").join(", ");
+    const cutoff = archiveCutoffIso(new Date(), DEFAULT_WORKING_WINDOW_DAYS);
     const active = db
       .prepare(
         `SELECT ${LOAD_COLUMNS} ${LOAD_FROM}
-         WHERE loads.status IN (${statusSlots})
+         WHERE loads.status != 'cancelled'
+           AND (
+             loads.status IN (${statusSlots})
+             OR loads.status = 'accounting'
+             OR (loads.status IN ('delivered', 'completed') AND ${ACTIVITY_SQL} >= ?)
+           )
          ORDER BY CASE WHEN loads.pickup_start = '' THEN 1 ELSE 0 END, loads.pickup_start DESC, loads.id DESC
          LIMIT ?`,
       )
-      .all(...ACTIVE_LOAD_STATUSES, limit) as LoadRow[];
+      .all(...ACTIVE_LOAD_STATUSES, cutoff, limit) as LoadRow[];
     const lines = ["load_number\tdriver\tunit\told_start\tnew_start"];
     const history = db.prepare(
       `SELECT ${LOAD_COLUMNS} ${LOAD_FROM}
@@ -107,7 +125,7 @@ export function auditEmptyMileStarts(dbPath: string, limit: number): string {
       for (const group of chunk([...new Set(ids)], 400)) {
         const rows = db
           .prepare(
-            `SELECT s.load_id, s.kind, s.city, s.state, s.street, s.zip, s.name,
+            `SELECT s.load_id, s.kind, s.city, s.state, s.street, s.zip, s.name, s.schedule_source,
                     s.window_start, s.window_end, s.arrived_at, s.departed_at,
                     l.latitude AS latitude, l.longitude AS longitude
              FROM load_stops s
@@ -132,11 +150,13 @@ export function auditEmptyMileStarts(dbPath: string, limit: number): string {
         stops,
         mode: "legacy",
       });
+      const historyTruckIds = [load, ...related].flatMap((row) => (row.truck_id == null ? [] : [row.truck_id]));
       const current = choosePrior({
         load: mileLoad,
         driverLoads: mileDrivers,
         truckLoads: mileTrucks,
         stops,
+        gpsByTruck: gpsByTruck(db, historyTruckIds, pickupBoundMs(load)),
         mode: "current",
       });
       const hereStops = stops.get(load.id) ?? [];
@@ -156,6 +176,74 @@ export function auditEmptyMileStarts(dbPath: string, limit: number): string {
   } finally {
     db.close();
   }
+}
+
+function gpsByTruck(db: DatabaseSync, truckIds: number[], beforeMs: number): Map<number, GpsSample[]> {
+  const out = new Map<number, GpsSample[]>();
+  const ids = [...new Set(truckIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length || !Number.isFinite(beforeMs)) return out;
+  const since = new Date(beforeMs - DELIVERY_GPS_HISTORY_MS).toISOString().slice(0, 10);
+  for (const group of chunk(ids, 200)) {
+    const slots = group.map(() => "?").join(", ");
+    const readings = db
+      .prepare(
+        `SELECT truck_id, address, recorded_at, latitude, longitude FROM truck_gps_readings
+         WHERE truck_id IN (${slots}) AND recorded_at != '' AND recorded_at >= ?
+           AND (source = 'samsara' OR source = '')
+         ORDER BY truck_id, recorded_at ASC, id ASC`,
+      )
+      .all(...group, since) as Array<{
+      truck_id: number;
+      address: string;
+      recorded_at: string;
+      latitude: number | null;
+      longitude: number | null;
+    }>;
+    for (const row of readings) {
+      const list = out.get(row.truck_id) ?? [];
+      list.push({
+        address: row.address,
+        recordedAt: row.recorded_at,
+        latitude: row.latitude,
+        longitude: row.longitude,
+      });
+      out.set(row.truck_id, list);
+    }
+    const trucks = db
+      .prepare(
+        `SELECT id, gps_address, gps_recorded_at, gps_latitude, gps_longitude, gps_source
+         FROM trucks WHERE id IN (${slots})`,
+      )
+      .all(...group) as Array<{
+      id: number;
+      gps_address: string;
+      gps_recorded_at: string;
+      gps_latitude: number | null;
+      gps_longitude: number | null;
+      gps_source: string;
+    }>;
+    for (const truck of trucks) {
+      const source = String(truck.gps_source ?? "").trim();
+      if (source && source !== "samsara") continue;
+      if (!truck.gps_recorded_at || truck.gps_recorded_at < since) continue;
+      const list = out.get(truck.id) ?? [];
+      const already = list.some(
+        (ping) =>
+          ping.recordedAt === truck.gps_recorded_at &&
+          ping.latitude === truck.gps_latitude &&
+          ping.longitude === truck.gps_longitude,
+      );
+      if (already) continue;
+      list.push({
+        address: truck.gps_address || "",
+        recordedAt: truck.gps_recorded_at,
+        latitude: truck.gps_latitude,
+        longitude: truck.gps_longitude,
+      });
+      out.set(truck.id, list);
+    }
+  }
+  return out;
 }
 
 function gpsForTruck(db: DatabaseSync, truckId: number | null, pickupMs: number | null): GpsSample[] {

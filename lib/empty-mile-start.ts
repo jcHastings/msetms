@@ -5,8 +5,11 @@
  */
 
 import { DEADHEAD_GPS_ENTRY_CAP_MS, DEADHEAD_GPS_FAR_MI, DEADHEAD_GPS_LEAD_MS, DEADHEAD_LOOKBACK_MS, PICKUP_ACTUAL_SLACK_MS } from "./empty-miles-shared";
-import { GEOFENCE_MILES, milesBetween } from "./geofence";
+import { GEOFENCE_MILES, GEOFENCE_WINDOW_LEAD_MS, milesBetween } from "./geofence";
 import { gpsInstantMs, instantMs, timeZoneForStop } from "./wall-time";
+
+/** How far back to read pings when timing a delivery. The geofence floor drops the stale ones. */
+export const DELIVERY_GPS_HISTORY_MS = 120 * 24 * 60 * 60 * 1000;
 
 export type StartMode = "legacy" | "current";
 
@@ -33,9 +36,13 @@ export type MileStop = {
   window_end?: string | null;
   arrived_at?: string | null;
   departed_at?: string | null;
+  schedule_source?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 };
+
+/** Where a delivery instant came from. Earlier sources outrank later ones. */
+export type DeliverySource = "stamp" | "gps" | "its" | "window";
 
 export type PriorChoice = {
   load: MileLoad | null;
@@ -54,6 +61,19 @@ function trim(value: string | null | undefined): string {
 
 export function isFinishedForEmptyMiles(status: string): boolean {
   return status === "delivered" || status === "completed";
+}
+
+const AT_CONSIGNEE_STATUSES = new Set(["at_delivery", "unloading"]);
+
+/**
+ * A prior delivery is delivered, completed, at the consignee, or any non-cancelled
+ * load whose final stop has a real arrival (a usable stamp or a GPS geofence hit).
+ * An appointment alone does not make an in-transit or accounting load a start.
+ */
+export function isDeliveryCandidate(status: string, source: DeliverySource): boolean {
+  if (status === "cancelled") return false;
+  if (source === "stamp" || source === "gps") return true;
+  return isFinishedForEmptyMiles(status) || AT_CONSIGNEE_STATUSES.has(status);
 }
 
 function deliveryStopOf(stops: readonly MileStop[]): MileStop | undefined {
@@ -99,6 +119,83 @@ export function deliveryKey(load: MileLoad, stops: readonly MileStop[], mode: St
   return fallback;
 }
 
+function usableStamp(load: MileLoad, stop: MileStop | undefined, zone: string): string {
+  const departed = trim(stop?.departed_at);
+  const arrived = trim(stop?.arrived_at);
+  const windowEnd = trim(stop?.window_end) || trim(load.deliveryEnd);
+  const windowStart = trim(stop?.window_start) || trim(load.deliveryStart);
+  const scheduledStart = windowStart || windowEnd;
+  const scheduledEnd = windowEnd || windowStart;
+  if (departed && stopStampUsable(departed, scheduledStart, scheduledEnd, load.createdAt, zone)) return departed;
+  if (arrived && stopStampUsable(arrived, scheduledStart, scheduledEnd, load.createdAt, zone)) return arrived;
+  return "";
+}
+
+/** First ping inside the delivery fence after the load existed and the appointment opened. */
+function gpsArrival(
+  load: MileLoad,
+  stop: MileStop | undefined,
+  gps: readonly GpsSample[],
+): { at: string; atMs: number } | null {
+  const dest = stopPoint(stop);
+  if (!dest || !gps.length) return null;
+  const zone = timeZoneForStop(stop?.state, stop?.city);
+  const windowRaw = trim(stop?.window_start) || trim(stop?.window_end) || trim(load.deliveryStart) || trim(load.deliveryEnd);
+  const windowMs = instantMs(windowRaw, zone);
+  const createdMs = instantMs(load.createdAt);
+  const marks: number[] = [];
+  if (createdMs != null) marks.push(createdMs);
+  if (windowMs != null) marks.push(windowMs - GEOFENCE_WINDOW_LEAD_MS);
+  const floor = marks.length ? Math.max(...marks) : null;
+  const hits = gps
+    .map((ping) => {
+      const atMs = gpsInstantMs(ping.recordedAt);
+      if (atMs == null) return null;
+      if (floor != null && atMs <= floor) return null;
+      if (ping.latitude == null || ping.longitude == null) return null;
+      if (!Number.isFinite(ping.latitude) || !Number.isFinite(ping.longitude)) return null;
+      if (milesBetween({ latitude: ping.latitude, longitude: ping.longitude }, dest) > GEOFENCE_MILES) return null;
+      return { at: ping.recordedAt, atMs };
+    })
+    .filter((row): row is { at: string; atMs: number } => row != null)
+    .sort((left, right) => left.atMs - right.atMs);
+  return hits[0] ?? null;
+}
+
+/**
+ * Actual delivery time. Usable stamps, then the truck's geofence arrival, then an ITS
+ * appointment, then the scheduled window. Legacy still trusts the raw stamp.
+ */
+export function deliveryMoment(
+  load: MileLoad,
+  stops: readonly MileStop[],
+  mode: StartMode,
+  gps: readonly GpsSample[] = [],
+): { at: string; atMs: number; source: DeliverySource } | null {
+  const stop = deliveryStopOf(stops);
+  const zone = timeZoneForStop(stop?.state, stop?.city);
+  if (mode === "legacy") {
+    const at = deliveryKey(load, stops, "legacy");
+    if (!at) return null;
+    const atMs = instantMs(at, zone);
+    if (atMs == null) return null;
+    return { at, atMs, source: "stamp" };
+  }
+  const stamp = usableStamp(load, stop, zone);
+  if (stamp) {
+    const atMs = instantMs(stamp, zone);
+    if (atMs != null) return { at: stamp, atMs, source: "stamp" };
+  }
+  const arrivedByGps = gpsArrival(load, stop, gps);
+  if (arrivedByGps) return { ...arrivedByGps, source: "gps" };
+  const scheduled = trim(stop?.window_end) || trim(stop?.window_start) || trim(load.deliveryEnd) || trim(load.deliveryStart);
+  if (!scheduled) return null;
+  const atMs = instantMs(scheduled, zone);
+  if (atMs == null) return null;
+  const source: DeliverySource = trim(stop?.schedule_source).toLowerCase() === "its" ? "its" : "window";
+  return { at: scheduled, atMs, source };
+}
+
 export function pickupKey(load: MileLoad, stops: readonly MileStop[]): string {
   const stop = pickupStopOf(stops);
   const zone = timeZoneForStop(stop?.state, stop?.city);
@@ -134,21 +231,24 @@ export function stopPoint(stop: MileStop | undefined): { latitude: number; longi
 
 type TimedLoad = { load: MileLoad; at: string; atMs: number };
 
+type GpsByTruck = { get(truckId: number): readonly GpsSample[] | undefined };
+
 function latestDelivery(
   loads: MileLoad[],
   hereMs: number,
   stops: StopMap,
   mode: StartMode,
   lookback: boolean,
+  gpsByTruck?: GpsByTruck,
 ): TimedLoad | null {
   const prior = loads
     .map((row) => {
       const rows = stops.get(row.id) ?? [];
-      const at = deliveryKey(row, rows, mode);
-      const zone = timeZoneForStop(deliveryStopOf(rows)?.state, deliveryStopOf(rows)?.city);
-      const atMs = instantMs(at, zone);
-      if (atMs == null) return null;
-      return { load: row, at, atMs };
+      const gps = row.truckId == null || !gpsByTruck ? [] : (gpsByTruck.get(row.truckId) ?? []);
+      const moment = deliveryMoment(row, rows, mode, gps);
+      if (!moment) return null;
+      if (mode === "current" && !isDeliveryCandidate(row.status, moment.source)) return null;
+      return { load: row, at: moment.at, atMs: moment.atMs };
     })
     .filter((row): row is TimedLoad => {
       if (!row || row.atMs > hereMs) return false;
@@ -160,9 +260,10 @@ function latestDelivery(
 }
 
 /**
- * Current: the driver's most recent delivered or completed load, by actual delivery time.
- * No 7-day cutoff. Cancelled, in-progress, and accounting loads are not a start.
- * The truck on that load is the truck the driver was on. The load's assigned unit is not mixed in.
+ * Current: the most recent real delivery before pickup, with no 7-day cutoff.
+ * A driver uses that driver's loads only. A load with no driver uses the truck's last delivery.
+ * Time is a usable stamp, then that load's truck GPS arrival, then the ITS appointment, then the window.
+ * at_delivery and a final stop with a real arrival count. Cancelled loads do not.
  * Legacy: any non-cancelled driver load and any non-cancelled load on the assigned truck, newest
  * delivery inside 7 days, trusting stop stamps even when they are stale.
  */
@@ -172,6 +273,7 @@ export function choosePrior(input: {
   truckLoads: readonly MileLoad[];
   stops: StopMap;
   mode: StartMode;
+  gpsByTruck?: GpsByTruck;
 }): PriorChoice {
   const pickupStops = input.stops.get(input.load.id) ?? [];
   const pickupAt = pickupKey(input.load, pickupStops);
@@ -182,9 +284,11 @@ export function choosePrior(input: {
     (row) => row.id !== input.load.id && row.driverId != null && row.driverId === input.load.driverId,
   );
   if (input.mode === "current") {
-    if (input.load.driverId == null) return empty;
-    const finished = driverLoads.filter((row) => isFinishedForEmptyMiles(row.status));
-    const chosen = latestDelivery(finished, pickupMs, input.stops, "current", false);
+    const pool =
+      input.load.driverId != null
+        ? driverLoads.filter((row) => row.status !== "cancelled")
+        : input.truckLoads.filter((row) => row.id !== input.load.id && row.status !== "cancelled");
+    const chosen = latestDelivery(pool, pickupMs, input.stops, "current", false, input.gpsByTruck);
     if (!chosen) return empty;
     const place = stopPlace(deliveryStopOf(input.stops.get(chosen.load.id) ?? []));
     return { load: chosen.load, place, at: chosen.at, atMs: chosen.atMs, pickupAt, pickupMs };

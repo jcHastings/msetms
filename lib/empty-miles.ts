@@ -1,10 +1,14 @@
 import { getDb } from "./db";
 import {
   choosePrior,
+  DELIVERY_GPS_HISTORY_MS,
   deliveryKey,
-  isFinishedForEmptyMiles,
+  deliveryMoment,
+  isDeliveryCandidate,
   pickupKey,
+  type GpsSample,
   type MileLoad,
+  type MileStop,
 } from "./empty-mile-start";
 import {
   DEADHEAD_DISTANCE_MI,
@@ -19,7 +23,7 @@ import {
 import { coordsForStop, GEOFENCE_MILES, milesBetween, type GpsPoint } from "./geofence";
 import { encodePolyline, fetchLaneDirections, mapsRoutingConfigured, stopRouteLabel } from "./routing";
 import { estimateStateMiles, serializeRouteStateMiles, type RouteStateMile } from "./routing-shared";
-import { getDriver, getLoad, listLoadsForDriver } from "./queries";
+import { getDriver, getLoad, listLoadsForDriver, listLoadsForTruck } from "./queries";
 import { listStops } from "./stops";
 import type { LoadStop } from "./stops-shared";
 import type { LoadView } from "./types";
@@ -105,16 +109,7 @@ function firstPickupStop(loadId: number): LoadStop | null {
   return stops.find((stop) => stop.kind === "pickup") ?? stops[0] ?? null;
 }
 
-type StopWindowRow = {
-  load_id: number;
-  kind: string;
-  city: string | null;
-  state: string | null;
-  window_start: string | null;
-  window_end: string | null;
-  arrived_at: string | null;
-  departed_at: string | null;
-};
+type StopWindowRow = MileStop & { load_id: number };
 
 /**
  * Sort keys for many loads in one query. listStops() runs a geofence pass and reads every
@@ -129,8 +124,13 @@ function stopWindowsByLoad(loadIds: number[]): Map<number, StopWindowRow[]> {
     if (!chunk.length) continue;
     const rows = getDb()
       .prepare(
-        `SELECT load_id, kind, city, state, window_start, window_end, arrived_at, departed_at FROM load_stops
-         WHERE load_id IN (${chunk.map(() => "?").join(", ")}) ORDER BY load_id, sequence, id`,
+        `SELECT s.load_id, s.kind, s.city, s.state, s.street, s.zip, s.name, s.schedule_source,
+                s.window_start, s.window_end, s.arrived_at, s.departed_at,
+                l.latitude AS latitude, l.longitude AS longitude
+         FROM load_stops s
+         LEFT JOIN locations l ON l.id = s.location_id
+         WHERE s.load_id IN (${chunk.map(() => "?").join(", ")})
+         ORDER BY s.load_id, s.sequence, s.id`,
       )
       .all(...chunk) as StopWindowRow[];
     for (const row of rows) {
@@ -205,25 +205,112 @@ type PriorBundle = {
   chosen: PriorStop | null;
   rows: LoadView[];
   windows: Map<number, StopWindowRow[]>;
+  gps: Map<number, GpsSample[]>;
 };
+
+function pickupBoundMs(load: LoadView): number {
+  const marks = [load.pickup_start, load.pickup_end, load.delivery_start].map((value) => instantMs(value) ?? 0);
+  const bound = Math.max(...marks);
+  return bound > 0 ? bound + 36 * 60 * 60 * 1000 : Date.now();
+}
+
+/** Pings for the trucks that actually ran the candidate loads. Not the assigned unit's history. */
+function gpsSamplesByTruck(truckIds: number[], beforeMs: number): Map<number, GpsSample[]> {
+  const out = new Map<number, GpsSample[]>();
+  const ids = [...new Set(truckIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length || !Number.isFinite(beforeMs)) return out;
+  const since = new Date(beforeMs - DELIVERY_GPS_HISTORY_MS).toISOString().slice(0, 10);
+  const db = getDb();
+  for (let index = 0; index < ids.length; index += 200) {
+    const chunk = ids.slice(index, index + 200);
+    const slots = chunk.map(() => "?").join(", ");
+    const readings = db
+      .prepare(
+        `SELECT truck_id, address, recorded_at, latitude, longitude FROM truck_gps_readings
+         WHERE truck_id IN (${slots}) AND recorded_at != '' AND recorded_at >= ?
+           AND (source = 'samsara' OR source = '')
+         ORDER BY truck_id, recorded_at ASC, id ASC`,
+      )
+      .all(...chunk, since) as Array<{
+      truck_id: number;
+      address: string;
+      recorded_at: string;
+      latitude: number | null;
+      longitude: number | null;
+    }>;
+    for (const row of readings) {
+      const list = out.get(row.truck_id) ?? [];
+      list.push({
+        address: row.address,
+        recordedAt: row.recorded_at,
+        latitude: row.latitude,
+        longitude: row.longitude,
+      });
+      out.set(row.truck_id, list);
+    }
+    const trucks = db
+      .prepare(
+        `SELECT id, gps_address, gps_recorded_at, gps_latitude, gps_longitude, gps_source
+         FROM trucks WHERE id IN (${slots})`,
+      )
+      .all(...chunk) as Array<{
+      id: number;
+      gps_address: string;
+      gps_recorded_at: string;
+      gps_latitude: number | null;
+      gps_longitude: number | null;
+      gps_source: string;
+    }>;
+    for (const truck of trucks) {
+      const source = truck.gps_source.trim();
+      if (source && source !== "samsara") continue;
+      if (!truck.gps_recorded_at || truck.gps_recorded_at < since) continue;
+      const list = out.get(truck.id) ?? [];
+      const already = list.some(
+        (ping) =>
+          ping.recordedAt === truck.gps_recorded_at &&
+          ping.latitude === truck.gps_latitude &&
+          ping.longitude === truck.gps_longitude,
+      );
+      if (already) continue;
+      list.push({
+        address: truck.gps_address || "",
+        recordedAt: truck.gps_recorded_at,
+        latitude: truck.gps_latitude,
+        longitude: truck.gps_longitude,
+      });
+      out.set(truck.id, list);
+    }
+  }
+  return out;
+}
 
 function priorBundle(load: LoadView): PriorBundle {
   const driverRows = load.driver_id
-    ? listLoadsForDriver(load.driver_id).filter((row) => row.id !== load.id && row.driver_id === load.driver_id)
+    ? listLoadsForDriver(load.driver_id).filter(
+        (row) => row.id !== load.id && row.driver_id === load.driver_id && row.status !== "cancelled",
+      )
     : [];
-  const finished = driverRows.filter((row) => isFinishedForEmptyMiles(row.status));
-  const windows = stopWindowsByLoad([load.id, ...finished.map((row) => row.id)]);
+  const truckRows =
+    load.driver_id || !load.truck_id
+      ? []
+      : listLoadsForTruck(load.truck_id).filter((row) => row.id !== load.id && row.status !== "cancelled");
+  const pool = load.driver_id ? driverRows : truckRows;
+  const windows = stopWindowsByLoad([load.id, ...pool.map((row) => row.id)]);
+  const truckIds = pool.flatMap((row) => (row.truck_id == null ? [] : [row.truck_id]));
+  const gps = gpsSamplesByTruck(truckIds, pickupBoundMs(load));
   const choice = choosePrior({
     load: asMileLoad(load),
-    driverLoads: finished.map(asMileLoad),
-    truckLoads: [],
+    driverLoads: driverRows.map(asMileLoad),
+    truckLoads: truckRows.map(asMileLoad),
     stops: windows,
+    gpsByTruck: gps,
     mode: "current",
   });
-  const chosenRow = choice.load ? finished.find((row) => row.id === choice.load?.id) ?? null : null;
+  const chosenRow = choice.load ? (pool.find((row) => row.id === choice.load?.id) ?? null) : null;
   const chosen: PriorStop | null =
     chosenRow && choice.atMs != null ? { load: chosenRow, at: choice.at, atMs: choice.atMs } : null;
-  return { here: choice.pickupAt, hereMs: choice.pickupMs, chosen, rows: finished, windows };
+  return { here: choice.pickupAt, hereMs: choice.pickupMs, chosen, rows: pool, windows, gps };
 }
 
 function suggestedPrior(load: LoadView): PriorStop | null {
@@ -332,12 +419,12 @@ function placesDisagree(suggested: string, gps: string): boolean {
 function anotherLoadBetween(bundle: PriorBundle, chosen: PriorStop | null): boolean {
   if (!chosen || bundle.hereMs == null) return false;
   return bundle.rows.some((row) => {
-    if (row.id === chosen.load.id) return false;
-    const rows = bundle.windows.get(row.id);
-    const delivery = timedKey(deliveryKeyFrom(row, rows), stopZone(deliveryStop(rows)));
-    const pickup = timedKey(pickupKeyFrom(row, rows), stopZone(pickupStop(rows)));
-    const atMs = delivery?.atMs ?? pickup?.atMs;
-    return atMs != null && atMs > chosen.atMs && atMs < bundle.hereMs!;
+    if (row.id === chosen.load.id || row.status === "cancelled") return false;
+    const rows = bundle.windows.get(row.id) ?? [];
+    const gps = row.truck_id == null ? [] : (bundle.gps.get(row.truck_id) ?? []);
+    const moment = deliveryMoment(asMileLoad(row), rows, "current", gps);
+    if (!moment || !isDeliveryCandidate(row.status, moment.source)) return false;
+    return moment.atMs > chosen.atMs && moment.atMs < bundle.hereMs!;
   });
 }
 
