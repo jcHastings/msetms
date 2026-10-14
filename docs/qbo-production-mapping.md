@@ -19,17 +19,17 @@ Before a successful sync, the TMS PDF invoice number is the TMS invoice number, 
 | Decision | TMS pay item | QuickBooks item | QuickBooks account | Behavior | Test |
 |---|---|---|---|---|---|
 | 9 | Flat Rate / load rate | Line Haul | Gross Trucking Income | Name match or Map Pay Items override. Account must match or the send stops. | C24, C01 |
-| 10 | Detention | Line Haul, or Detention when configured | Gross Trucking Income, or the configured income account | Unset, blank, or `Gross Trucking Income` posts on the Line Haul item. The line description keeps "Detention". `QBO_DETENTION_INCOME_ACCOUNT` (an account id or fully qualified name) switches back to the Detention item once that account is income. A missing account or a non-income account blocks the send. Detention never posts to a non-income account. | C04, C37 |
+| 10 | Detention | Detention | Income. Production account name is Detention. Sandbox account name is Detention Income. | The line posts to the Detention item. The account name is not compared. A missing Detention item, or an item that is not on an income account, blocks the send. Detention is not routed to Line Haul. | C04, C37 |
 | 10 | Extra Stop | Picks and Drops | Gross Trucking Income | Item name is Picks and Drops, not the TMS label. | C06 |
 | 10 | Layover | Line Haul | Gross Trucking Income | Own line. Description says "Layover". No Layover item. | C25, C05 |
 | 10 | TONU | Line Haul | Gross Trucking Income | Own line. Description says "TONU". Cancelled loads bill TONU only. | C25, C08 |
-| 10 | Washout | Trailer Washout | Gross Trucking Income | The real item is on Cost of Goods Sold. A cost account blocks the whole send and posts nothing. After the bookkeeper points the item at Gross Trucking Income, the same invoice can be sent. | C25, C07 |
+| 10 | Washout | Trailer Washout | Gross Trucking Income | Posts to the Trailer Washout item. A missing item or an item that is not on Gross Trucking Income blocks the send. | C25, C07 |
 | 10 | — | Return | Gross Trucking Income | Already in QuickBooks. No TMS pay category sends it. | — |
 | 11 | Fuel Surcharge | Line Haul | Gross Trucking Income | Own line. Description says "Fuel surcharge". No Fuel Surcharge item. No miles × rate calculation. | C26, C09 |
-| 12 | Lumper | Lumper | Lumper (Cost of Goods Sold) | Pass-through. The real item is on Gross Trucking Income until it is repointed. The message tells the bookkeeper to repoint it to the Lumper COGS account. | C27, C03 |
+| 12 | Lumper | Lumper | Income | Billed lumper posts to the Lumper item. The account must be income. The account name is not compared. A cost account, including the old Lumper COGS account, blocks the send. A missing Lumper item blocks the send. Nothing is created. | C27, C03 |
 | 13 | Misc. | Adjustment | Gross Trucking Income | Unchanged. Negative amounts are allowed. The production company has no Adjustment item, so a Misc. line still needs that item before it can post. | C28, C11 |
 | 14 | Trailer Rental, Fuel Advance Fee, Claim for Damages | — | — | Not billed. The send stops and names the line. | C29, C17 |
-| 1 | Lumper | Lumper | Lumper | One customer amount. A pay line and a driver receipt that disagree block the PDF and the send. | C03 |
+| 1 | Lumper | Lumper | Income | One customer amount. A pay line and a driver receipt that disagree block the PDF and the send. | C03 |
 | 2 | Fuel Surcharge | Fuel Surcharge | Gross Trucking Income | No miles × rate calculation. The amount stays on the Fuel Surcharge line. | C09 |
 | 3 | — | — | — | DocNumber is the TMS load number. Longer than 21 characters is refused. An existing DocNumber is updated. | C19, C21 |
 | 4 | Customer 317 MS Express | — | — | Never mapped and never invoiced, even if an id is stored. | C22 |
@@ -58,10 +58,10 @@ A bill whose lines total zero or less is refused before any QuickBooks call. The
 
 Do these in the QuickBooks company before a production send. The TMS will not create them.
 
-1. Repoint the **Lumper** item from Gross Trucking Income to the COGS account **Lumper**, so a billed-back lumper offsets that cost.
-2. Repoint **Trailer Washout** from Cost of Goods Sold to **Gross Trucking Income**. Until that happens, any invoice with a washout line is refused and nothing is posted.
-3. Create an **Adjustment** item on Gross Trucking Income for Misc. lines. Fuel surcharge, layover, and TONU do not need their own items: each stays its own line on **Line Haul**.
-4. Detention posts on **Line Haul** / **Gross Trucking Income** while `QBO_DETENTION_INCOME_ACCOUNT` is unset or set to Gross Trucking Income. After the Detention account is income, set that variable to the account name or id to use the Detention item. A non-income Detention account is never posted to.
+1. The **Lumper** item posts billed lumper. Its account is income. The 10/13 COGS account is not used. A missing item is not created.
+2. **Trailer Washout** posts to the Trailer Washout item on **Gross Trucking Income**.
+3. Create an **Adjustment** item on Gross Trucking Income for Misc. lines. Until that item exists, a Misc. line blocks the send. Fuel surcharge, layover, and TONU do not need their own items: each stays its own line on **Line Haul**.
+4. Detention posts to the **Detention** item. The account is income. Production names that account Detention. The sandbox names it Detention Income. The send matches the item, not the account name. A missing Detention item blocks the send and is not created.
 5. Confirm payment-term names match the TMS customer terms exactly (the harness uses Net 30).
 6. Leave customer 317 (MS Express) and customer 294 (M&S Management Group) unmapped until the office picks 294 by hand. Do not map 317. Other customers match one QuickBooks DisplayName after trim, collapsed spaces, and case folding. No match blocks that invoice. Customers are never created.
 7. Confirm the bill accounts exist with these fully qualified names: Owner Operators:Owner Operators COL, Owner Operators:Fuel, Driver Expenses:Toll, Insurance:OCC, Office and Admin Expense:Software, and Loan - {vendor} for each owner-operator who has a loan repayment.
@@ -71,8 +71,8 @@ Do these in the QuickBooks company before a production send. The TMS will not cr
 
 A live campaign resolves the same production names and does not create "MSETMS Test" customers, vendors, accounts, or items. These names have to already be in realm 9341458445928351:
 
-Items: Line Haul, Picks and Drops, Trailer Washout, Lumper, Adjustment, Return. Detention, Layover, TONU, and Fuel Surcharge are not required items. A configured detention income account still expects a Detention item on that account.
+Items: Line Haul, Detention, Picks and Drops, Trailer Washout, Lumper, Adjustment, Return. Layover, TONU, and Fuel Surcharge are not required items.
 
-Accounts: Gross Trucking Income, Lumper, Owner Operators:Owner Operators COL, Owner Operators:Fuel, Driver Expenses:Toll, Insurance:OCC, Office and Admin Expense:Software, Loan - Lumig Transports LLC, Billable Expense Income, Trailer Rentals, Factoring Fee, Sales, Service/Fee Income, Uncategorized Income, Carrier Expense, Owner Operators, Owner Operators:Advances, Owner Operators:Insurance COL, Drivers Paid by RC. Detention Income is not required. Uncategorized Income is looked up so a send can refuse it; it is never a post target.
+Accounts: Gross Trucking Income, Owner Operators:Owner Operators COL, Owner Operators:Fuel, Driver Expenses:Toll, Insurance:OCC, Office and Admin Expense:Software, Loan - Lumig Transports LLC, Billable Expense Income, Trailer Rentals, Factoring Fee, Sales, Service/Fee Income, Uncategorized Income, Carrier Expense, Owner Operators, Owner Operators:Advances, Owner Operators:Insurance COL, Drivers Paid by RC. Detention and Detention Income are not required names. The Detention item's income account is read from the item. Uncategorized Income is looked up so a send can refuse it; it is never a post target.
 
 Wrong-chart blocks (C22–C27, C29–C32, C34–C35) run only in the offline harness. A fixed sandbox would not fail those blocks.
