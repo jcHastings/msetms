@@ -242,7 +242,6 @@ export async function saveLoadManagementAction(
   try {
     await requireSettingsEditor();
     updateLoadManagementSettings({
-      load_number_prefix: requiredString(formData.get("load_number_prefix"), "Prefix"),
       load_number_next: parseOptionalInt(formData.get("load_number_next")) ?? 1,
       show_sample_data: String(formData.get("show_sample_data") ?? "") === "1",
     });

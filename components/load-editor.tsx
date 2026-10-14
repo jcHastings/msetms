@@ -257,6 +257,7 @@ export async function LoadEditor({
             loadId={load.id}
             driverName={deadhead?.driverName || load.driver_name || "the driver"}
             place={deadheadPlace}
+            alternativePlace={deadhead?.alternativePlace ?? ""}
             notes={deadhead?.notes ?? []}
             readOnly={readOnly}
             locations={locations}

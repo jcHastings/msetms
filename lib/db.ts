@@ -9,6 +9,7 @@ import {
 import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database, SQLITE_BUSY_TIMEOUT_MS } from "./sqlite";
 import { appleDevDriverFixtureEnabled, ensureAppleDevDriverLogin } from "./driver-login-fixture";
+import { raiseLoadNumberWatermark } from "./load-numbers";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -1653,19 +1654,7 @@ function backfillSampleLoads(db: Database): void {
 }
 
 function backfillLoadNumbering(db: Database): void {
-  const row = db
-    .prepare("SELECT load_number_prefix, load_number_next FROM company_profile WHERE id = 1")
-    .get() as { load_number_prefix: string; load_number_next: number } | undefined;
-  if (!row) return;
-  const loads = db.prepare("SELECT load_number FROM loads").all() as Array<{ load_number: string }>;
-  let max = 0;
-  for (const load of loads) {
-    const match = load.load_number.match(/(\d+)$/);
-    if (match) max = Math.max(max, Number.parseInt(match[1], 10));
-  }
-  if (row.load_number_next === 1001 && max >= 1001) {
-    db.prepare("UPDATE company_profile SET load_number_next = ? WHERE id = 1").run(max + 1);
-  }
+  raiseLoadNumberWatermark(db);
 }
 
 function backfillDropdownLists(db: Database): void {

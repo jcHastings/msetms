@@ -48,6 +48,7 @@ export const ITS_IMPORT_ISSUES = {
   its_update_held: "ITS import — update not applied",
   "duplicate-conflict": "ITS import — duplicate conflict",
   billing_locked: "ITS import — billed load left unchanged",
+  number_collision: "ITS import — load number already used",
 } as const;
 
 export type ItsImportIssue = keyof typeof ITS_IMPORT_ISSUES;

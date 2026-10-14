@@ -86,9 +86,10 @@ export class Database {
     return this.#db.prepare(sql).all();
   }
 
-  transaction<T>(fn: () => T): () => T {
+  transaction<T>(fn: () => T, mode: "deferred" | "immediate" = "deferred"): () => T {
+    const begin = mode === "immediate" ? "BEGIN IMMEDIATE" : "BEGIN";
     return () => {
-      this.exec("BEGIN");
+      this.exec(begin);
       try {
         const result = fn();
         this.exec("COMMIT");
