@@ -9,6 +9,7 @@ import {
 import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database, SQLITE_BUSY_TIMEOUT_MS } from "./sqlite";
 import { appleDevDriverFixtureEnabled, ensureAppleDevDriverLogin } from "./driver-login-fixture";
+import { raiseLoadNumberWatermark } from "./load-numbers";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -324,6 +325,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "lumper_actual", "REAL");
   ensureColumn(db, "loads", "detention_started_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "detention_ended_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "detention_leg", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "appointment_confirmation", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "unload_type", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "watched", "INTEGER NOT NULL DEFAULT 0");
@@ -552,6 +554,31 @@ export function migrate(db: Database): void {
   ensureColumn(db, "load_relays", "relay_lng", "REAL");
   ensureColumn(db, "load_relays", "relay_address", "TEXT");
   db.exec(`CREATE INDEX IF NOT EXISTS idx_load_relays_from_driver ON load_relays(from_driver_id);`);
+  ensureColumn(db, "load_relays", "swap_id", "INTEGER");
+  ensureColumn(db, "load_relays", "miles_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_relays", "miles_locked", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "load_relays", "from_leg_state_miles", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_relays", "to_leg_state_miles", "TEXT NOT NULL DEFAULT ''");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS load_swaps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_a_id INTEGER NOT NULL,
+      load_b_id INTEGER NOT NULL,
+      location_id INTEGER,
+      place_id TEXT,
+      lat REAL,
+      lng REAL,
+      address TEXT NOT NULL DEFAULT '',
+      swap_at TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_load_swaps_a ON load_swaps(load_a_id);
+    CREATE INDEX IF NOT EXISTS idx_load_swaps_b ON load_swaps(load_b_id);
+    CREATE INDEX IF NOT EXISTS idx_load_relays_swap ON load_relays(swap_id);
+  `);
   db.exec(`
 
     CREATE TABLE IF NOT EXISTS load_templates (
@@ -916,6 +943,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "route_miles", "REAL");
   ensureColumn(db, "locations", "call_before", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "load_pay_items", "paid_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_pay_items", "leg", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_templates", "reefer_mode", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "load_templates", "public_notes", "TEXT NOT NULL DEFAULT ''");
   db.exec(`
@@ -1265,6 +1293,7 @@ export function migrate(db: Database): void {
         .join("; ")}`,
     );
   }
+  migrateRateConRedactions(db);
 
   backfillDispatchers(db);
   backfillSettingsUsers(db);
@@ -1338,6 +1367,7 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_reimburse_status ON driver_reimbursements(status, id);
     CREATE INDEX IF NOT EXISTS idx_reimburse_week ON driver_reimbursements(driver_id, settlement_week_start);
   `);
+  ensureColumn(db, "settlement_statements", "snapshot_json", "TEXT NOT NULL DEFAULT ''");
   seedExampleDeductionTemplates(db);
 
   db.exec(`
@@ -1653,19 +1683,7 @@ function backfillSampleLoads(db: Database): void {
 }
 
 function backfillLoadNumbering(db: Database): void {
-  const row = db
-    .prepare("SELECT load_number_prefix, load_number_next FROM company_profile WHERE id = 1")
-    .get() as { load_number_prefix: string; load_number_next: number } | undefined;
-  if (!row) return;
-  const loads = db.prepare("SELECT load_number FROM loads").all() as Array<{ load_number: string }>;
-  let max = 0;
-  for (const load of loads) {
-    const match = load.load_number.match(/(\d+)$/);
-    if (match) max = Math.max(max, Number.parseInt(match[1], 10));
-  }
-  if (row.load_number_next === 1001 && max >= 1001) {
-    db.prepare("UPDATE company_profile SET load_number_next = ? WHERE id = 1").run(max + 1);
-  }
+  raiseLoadNumberWatermark(db);
 }
 
 function backfillDropdownLists(db: Database): void {
@@ -1950,6 +1968,33 @@ function backfillDemoLocations(db: Database): void {
  * Driver-facing facility fields on locations (Assist reads these, never `notes`),
  * plus versioned MS Express company documents (IFTA license, insurance cards).
  */
+/** Additive. One driver copy per broker rate confirmation attachment. */
+function migrateRateConRedactions(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rate_con_redactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      source_attachment_id INTEGER NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      stored_name TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+      page_count INTEGER NOT NULL DEFAULT 0,
+      amounts_found INTEGER NOT NULL DEFAULT 0,
+      text_chars INTEGER NOT NULL DEFAULT 0,
+      verification TEXT NOT NULL DEFAULT '',
+      released_at TEXT NOT NULL DEFAULT '',
+      released_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rate_con_redactions_source
+      ON rate_con_redactions(source_attachment_id);
+    CREATE INDEX IF NOT EXISTS idx_rate_con_redactions_load
+      ON rate_con_redactions(load_id, status);
+  `);
+}
+
 function migrateFacilityAndCompanyDocs(db: Database): void {
   ensureColumn(db, "locations", "receiving_hours", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "locations", "shipping_hours", "TEXT NOT NULL DEFAULT ''");

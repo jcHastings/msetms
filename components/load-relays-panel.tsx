@@ -86,9 +86,14 @@ export function LoadRelaysPanel({
                 </div>
               </div>
               <div className="flex gap-2">
+                {relay.swap_id ? (
+                  <span className="text-xs text-slate-500">Linked swap</span>
+                ) : (
                 <button type="button" className="btn btn-ghost" onClick={() => setEditing(relay)}>
                   Edit
                 </button>
+                )}
+                {relay.swap_id ? null : (
                 <form
                   action={async (formData) => {
                     await deleteRelayAction(formData);
@@ -99,6 +104,7 @@ export function LoadRelaysPanel({
                     Remove
                   </button>
                 </form>
+                )}
               </div>
             </li>
           ))}

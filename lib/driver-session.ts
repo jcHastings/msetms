@@ -1,17 +1,17 @@
 import { cookies } from "next/headers";
-import { getDriver } from "./queries";
+import { getDriver, isDriverLoginEligible } from "./queries";
 import { createSignedSessionToken, readSignedSessionToken } from "./session-token";
 import type { DriverWithTruck } from "./types";
 
-const COOKIE = "tms_driver_id";
-const DRIVER_SESSION_TYP = "driver_web";
+export const DRIVER_SESSION_COOKIE = "tms_driver_id";
+export const DRIVER_SESSION_TYP = "driver_web";
 const DRIVER_SESSION_MS = 60 * 60 * 24 * 30 * 1000;
 type DriverSessionPayload = { id: number; issuedAt: number; typ: string };
 
 async function clearDriverSessionBestEffort(): Promise<void> {
   try {
     const jar = await cookies();
-    jar.delete(COOKIE);
+    jar.delete(DRIVER_SESSION_COOKIE);
   } catch {
     // Server Components can read cookies but not mutate them.
   }
@@ -22,14 +22,16 @@ function scriptDriver(): DriverWithTruck | null {
   if (!raw) return null;
   const id = Number.parseInt(raw, 10);
   if (!id) return null;
-  return getDriver(id);
+  const driver = getDriver(id);
+  if (!driver || !isDriverLoginEligible(driver)) return null;
+  return driver;
 }
 
 export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
   let raw: string | undefined;
   try {
     const jar = await cookies();
-    raw = jar.get(COOKIE)?.value;
+    raw = jar.get(DRIVER_SESSION_COOKIE)?.value;
   } catch {
     return scriptDriver();
   }
@@ -50,7 +52,7 @@ export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
     return null;
   }
   const driver = getDriver(id);
-  if (!driver) {
+  if (!driver || !isDriverLoginEligible(driver)) {
     await clearDriverSessionBestEffort();
     return null;
   }
@@ -60,7 +62,7 @@ export async function getSignedInDriver(): Promise<DriverWithTruck | null> {
 export async function setDriverSession(driverId: number): Promise<void> {
   const jar = await cookies();
   jar.set(
-    COOKIE,
+    DRIVER_SESSION_COOKIE,
     createSignedSessionToken({
       id: driverId,
       issuedAt: Date.now(),
@@ -78,7 +80,7 @@ export async function setDriverSession(driverId: number): Promise<void> {
 
 export async function clearDriverSession(): Promise<void> {
   const jar = await cookies();
-  jar.delete(COOKIE);
+  jar.delete(DRIVER_SESSION_COOKIE);
 }
 
 export async function requireDriver(): Promise<DriverWithTruck> {

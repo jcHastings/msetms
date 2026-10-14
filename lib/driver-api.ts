@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { runWithAuditActor } from "./audit";
 import { getDb } from "./db";
+import { driverMaySeeAttachment } from "./driver-docs";
 import { driverAssignedTrailerLocation } from "./driver-trailer";
 import {
   DriverOpsError,
@@ -24,9 +25,11 @@ import { getFuelTransaction, listFuelTransactions } from "./fuel-store";
 import type { FuelTransactionView } from "./fuel";
 import { fromOfficeDateTime, isAppointmentSchedule, isFcfsSchedule } from "./format";
 import { isCustomerRateDocument } from "./load-documents-shared";
+import { listDriverRateConRedactions } from "./rate-con-redact-store";
 import { publicLoginFailureDetail, recordLoginAttempt } from "./login-audit";
 import { DRIVER_PASSWORD_NOT_RECOGNIZED, findDriverIdByLoginEmail } from "./driver-password";
 import { authenticateDriverByEmail, getDriver, isDriverLoginEligible, listLoadsForDriver } from "./queries";
+import { driverSwapLegView } from "./driver-leg";
 import { relayForDriver } from "./relay-store";
 import { formatRelayLane } from "./relays";
 import { ensureDefaultStops, type LoadStop } from "./stops";
@@ -81,6 +84,8 @@ export type DriverApiRelayLeg = {
   pickup: string;
   delivery: string;
   lane: string;
+  swap_at?: string;
+  trailer?: string;
 };
 
 export type DriverApiLoadSummary = {
@@ -171,9 +176,16 @@ export type DriverApiAttachment = {
   created_at: string;
 };
 
+export type DriverApiRateConfirmation = {
+  id: number;
+  name: string;
+  href: string;
+};
+
 export type DriverApiLoadDetail = DriverApiLoadSummary & {
   stops: DriverApiStop[];
   attachments: DriverApiAttachment[];
+  rate_confirmations: DriverApiRateConfirmation[];
 };
 
 export class DriverApiHttpError extends Error {
@@ -314,13 +326,21 @@ export function canCheckStops(status: string): boolean {
 
 function toLoadSummary(load: LoadView, driverId: number): DriverApiLoadSummary {
   const relay = relayForDriver(load.id, driverId);
+  const swapLeg = driverSwapLegView({
+    driverId,
+    origin: load.origin,
+    destination: load.destination,
+    trailerNumber: load.trailer_number || load.trailer_unit || "",
+    truckUnit: load.truck_unit || "",
+    relay,
+  });
   return {
     id: load.id,
     load_number: load.load_number,
     status: load.status,
     driver_progress: isDriverProgress(load.driver_progress) ? load.driver_progress : "",
-    origin: load.origin,
-    destination: load.destination,
+    origin: swapLeg?.role === "delivery" ? swapLeg.swapPoint : load.origin,
+    destination: swapLeg?.role === "pickup" ? swapLeg.swapPoint : load.destination,
     pickup_start: toDriverApiDateTime(load.pickup_start),
     pickup_end: toDriverApiDateTime(load.pickup_end),
     delivery_start: toDriverApiDateTime(load.delivery_start),
@@ -328,15 +348,23 @@ function toLoadSummary(load: LoadView, driverId: number): DriverApiLoadSummary {
     customer_name: load.customer_name,
     commodity: load.commodity,
     weight: load.weight,
-    trailer_number: load.trailer_number || load.trailer_unit || "",
-    truck_unit: load.truck_unit,
+    trailer_number: swapLeg?.trailer || load.trailer_number || load.trailer_unit || "",
+    truck_unit: swapLeg?.truck || load.truck_unit,
     docs_requested: Boolean(load.docs_requested),
     special_instructions: load.special_instructions,
     appointment_notes: load.appointment_notes,
     public_notes: load.public_notes,
-    relay_leg: relay
-      ? { pickup: relay.pickup, delivery: relay.delivery, lane: formatRelayLane(relay.pickup, relay.delivery) }
-      : null,
+    relay_leg: swapLeg
+      ? {
+          pickup: swapLeg.role === "pickup" ? load.origin : swapLeg.swapPoint,
+          delivery: swapLeg.role === "pickup" ? swapLeg.swapPoint : load.destination,
+          lane: swapLeg.lane,
+          swap_at: swapLeg.swapAt,
+          trailer: swapLeg.trailer,
+        }
+      : relay
+        ? { pickup: relay.pickup, delivery: relay.delivery, lane: formatRelayLane(relay.pickup, relay.delivery) }
+        : null,
     next_actions: {
       allowed_progress: allowedDriverProgress(load.driver_progress, load.status),
       can_check_stops: canCheckStops(load.status),
@@ -380,14 +408,33 @@ function toAttachmentDto(file: Attachment): DriverApiAttachment {
 }
 
 function toLoadDetail(load: LoadView, driverId: number): DriverApiLoadDetail {
+  const driver = getDriver(driverId);
   const attachments = listAttachments(load.id)
-    .filter((file) => !isCustomerRateDocument(file))
-    .filter((file) => file.kind !== "rate_con" && file.kind !== "invoice")
+    .filter((file) => driver != null && driverMaySeeAttachment(file, driver))
     .map(toAttachmentDto);
+  const rate_confirmations = listDriverRateConRedactions(load.id).map((row) => ({
+    id: row.id,
+    name: "Rate confirmation",
+    href: `/api/driver/v1/loads/${load.id}/rate-confirmation/${row.id}`,
+  }));
   return {
     ...toLoadSummary(load, driverId),
-    stops: ensureDefaultStops(load.id).map(toStopDto),
+    stops: ensureDefaultStops(load.id)
+      .filter((stop) => {
+        const swapLeg = driverSwapLegView({
+          driverId,
+          origin: load.origin,
+          destination: load.destination,
+          trailerNumber: load.trailer_number || load.trailer_unit || "",
+          truckUnit: load.truck_unit || "",
+          relay: relayForDriver(load.id, driverId),
+        });
+        if (!swapLeg) return true;
+        return swapLeg.role === "pickup" ? stop.kind === "pickup" : stop.kind === "delivery";
+      })
+      .map(toStopDto),
     attachments,
+    rate_confirmations,
   };
 }
 
@@ -474,6 +521,14 @@ export function driverFromApiToken(token: string): DriverWithTruck | null {
   const driver = getDriver(row.driver_id);
   if (!driver || !isDriverLoginEligible(driver)) return null;
   return driver;
+}
+
+/** Portal cookie, or the driver-app bearer token when one is sent. A bad token does not fall through to the cookie. */
+export async function driverFromCookieOrBearer(request: Request): Promise<DriverWithTruck | null> {
+  const token = bearerToken(request);
+  if (token) return driverFromApiToken(token);
+  const { getSignedInDriver } = await import("./driver-session");
+  return getSignedInDriver();
 }
 
 export function requireDriverApiAuth(request: Request): DriverWithTruck {

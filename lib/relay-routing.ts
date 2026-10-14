@@ -80,6 +80,9 @@ export async function refreshRelayLegMiles(loadId: number): Promise<void> {
   const relays = listRelays(loadId);
   const { getDb } = await import("./db");
   for (const [index, relay] of relays.entries()) {
+    if (relay.miles_locked || relay.miles_source === "polyline" || relay.miles_source === "manual" || relay.swap_id) {
+      continue;
+    }
     const next = relays[index + 1];
     const fromMiles = await fetchPairMiles(relay.pickup || load.origin, relay.delivery);
     const toMiles = next ? null : await fetchPairMiles(relay.delivery, load.destination);

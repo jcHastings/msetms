@@ -12,21 +12,19 @@ export default async function LoadManagementPage() {
   const dispatcher = await getSignedInDispatcher();
   const settings = getCompanySettings();
   const canEdit = dispatcher ? canEditSettings(dispatcher.role) : false;
+  const nextNumber = peekNextLoadNumber();
   return (
     <SettingsAdminGate>
       <SettingsBack />
-      <PageHeader
-        title="Load numbers"
-      />
+      <PageHeader title="Load numbers" />
       <section className="card p-6">
         <p className="mb-4 text-sm text-slate-600">
-          Next number will be <span className="font-mono font-semibold">{peekNextLoadNumber()}</span>
+          New loads, including ones created from a rate confirmation, get the next ITS number: one higher than the
+          largest all-numeric load number. The next number will be{" "}
+          <span className="font-mono font-semibold">{nextNumber}</span>. Raising it reserves every number below it, and
+          it will not move below a number already on a load. Existing MSE- numbers stay as they are.
         </p>
         <SettingsForm action={saveLoadManagementAction} submitLabel="Save load settings" canEdit={canEdit}>
-          <div className="field">
-            <label htmlFor="load_number_prefix">Prefix</label>
-            <input id="load_number_prefix" name="load_number_prefix" defaultValue={settings.load_number_prefix} />
-          </div>
           <div className="field">
             <label htmlFor="load_number_next">Next number</label>
             <input

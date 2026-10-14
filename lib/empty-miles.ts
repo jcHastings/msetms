@@ -2,16 +2,23 @@ import { getDb } from "./db";
 import {
   DEADHEAD_DISTANCE_MI,
   DEADHEAD_GAP_MS,
+  DEADHEAD_GPS_ENTRY_CAP_MS,
+  DEADHEAD_GPS_FAR_MI,
+  DEADHEAD_GPS_LEAD_MS,
+  DEADHEAD_LOOKBACK_MS,
+  PICKUP_ACTUAL_SLACK_MS,
   type DeadheadSuggestion,
   type DeadheadWarningCode,
   parseDeadheadSuggestion,
 } from "./empty-miles-shared";
+import { coordsForStop, GEOFENCE_MILES, milesBetween, type GpsPoint } from "./geofence";
 import { encodePolyline, fetchLaneDirections, mapsRoutingConfigured, stopRouteLabel } from "./routing";
 import { estimateStateMiles, serializeRouteStateMiles, type RouteStateMile } from "./routing-shared";
 import { getDriver, getLoad, listLoadsForDriver, listLoadsForTruck } from "./queries";
 import { listStops } from "./stops";
 import type { LoadStop } from "./stops-shared";
 import type { LoadView } from "./types";
+import { gpsInstantMs, instantMs, timeZoneForStop } from "./wall-time";
 
 export type EmptyMilesGuide = {
   miles: number | null;
@@ -96,6 +103,8 @@ function firstPickupStop(loadId: number): LoadStop | null {
 type StopWindowRow = {
   load_id: number;
   kind: string;
+  city: string | null;
+  state: string | null;
   window_start: string | null;
   window_end: string | null;
   arrived_at: string | null;
@@ -115,7 +124,7 @@ function stopWindowsByLoad(loadIds: number[]): Map<number, StopWindowRow[]> {
     if (!chunk.length) continue;
     const rows = getDb()
       .prepare(
-        `SELECT load_id, kind, window_start, window_end, arrived_at, departed_at FROM load_stops
+        `SELECT load_id, kind, city, state, window_start, window_end, arrived_at, departed_at FROM load_stops
          WHERE load_id IN (${chunk.map(() => "?").join(", ")}) ORDER BY load_id, sequence, id`,
       )
       .all(...chunk) as StopWindowRow[];
@@ -128,33 +137,74 @@ function stopWindowsByLoad(loadIds: number[]): Map<number, StopWindowRow[]> {
   return out;
 }
 
-function actualOrWindow(actual: string | null | undefined, fallback: string | null | undefined): string {
-  return String(actual ?? "").trim() || String(fallback ?? "").trim();
+function trimTime(value: string | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
+function stopZone(stop: StopWindowRow | undefined): string {
+  return timeZoneForStop(stop?.state, stop?.city);
+}
+
+function deliveryStop(rows: StopWindowRow[] | undefined): StopWindowRow | undefined {
+  const list = rows ?? [];
+  return [...list].reverse().find((row) => row.kind === "delivery") ?? list[list.length - 1];
+}
+
+function pickupStop(rows: StopWindowRow[] | undefined): StopWindowRow | undefined {
+  const list = rows ?? [];
+  return list.find((row) => row.kind === "pickup") ?? list[0];
 }
 
 function deliveryKeyFrom(load: LoadView, rows: StopWindowRow[] | undefined): string {
-  const list = rows ?? [];
-  const stop = [...list].reverse().find((row) => row.kind === "delivery") ?? list[list.length - 1];
+  const stop = deliveryStop(rows);
   return (
-    actualOrWindow(stop?.departed_at, "") ||
-    actualOrWindow(stop?.arrived_at, "") ||
-    actualOrWindow(stop?.window_end, stop?.window_start) ||
+    trimTime(stop?.departed_at) ||
+    trimTime(stop?.arrived_at) ||
+    trimTime(stop?.window_end) ||
+    trimTime(stop?.window_start) ||
     load.delivery_end ||
     load.delivery_start ||
     ""
   );
 }
 
+/**
+ * A stamped arrival months off the window, or from before this load existed, is not the pickup.
+ * Use the appointment window instead.
+ */
+function pickupArrivalUsable(arrived: string, windowStart: string, windowEnd: string, createdAt: string, zone: string): boolean {
+  const arrivedMs = instantMs(arrived, zone);
+  if (arrivedMs == null) return false;
+  const createdMs = instantMs(createdAt);
+  if (createdMs != null && arrivedMs < createdMs) return false;
+  const startMs = instantMs(windowStart, zone);
+  const endMs = instantMs(windowEnd, zone) ?? startMs;
+  if (startMs == null) return true;
+  const end = endMs ?? startMs;
+  return arrivedMs >= startMs - PICKUP_ACTUAL_SLACK_MS && arrivedMs <= end + PICKUP_ACTUAL_SLACK_MS;
+}
+
 function pickupKeyFrom(load: LoadView, rows: StopWindowRow[] | undefined): string {
-  const list = rows ?? [];
-  const stop = list.find((row) => row.kind === "pickup") ?? list[0];
-  return (
-    actualOrWindow(stop?.arrived_at, "") ||
-    actualOrWindow(stop?.departed_at, "") ||
-    actualOrWindow(stop?.window_start, "") ||
-    load.pickup_start ||
-    ""
-  );
+  const stop = pickupStop(rows);
+  const zone = stopZone(stop);
+  const arrived = trimTime(stop?.arrived_at);
+  const departed = trimTime(stop?.departed_at);
+  const windowStart = trimTime(stop?.window_start) || trimTime(load.pickup_start);
+  const windowEnd = trimTime(stop?.window_end) || trimTime(load.pickup_end);
+  if (arrived) {
+    if (pickupArrivalUsable(arrived, windowStart, windowEnd, load.created_at, zone)) return arrived;
+    if (windowStart) return windowStart;
+  }
+  return departed || windowStart || "";
+}
+
+type TimedKey = { at: string; atMs: number };
+
+function timedKey(at: string, zone: string): TimedKey | null {
+  if (!at) return null;
+  const atMs = instantMs(at, zone);
+  if (atMs == null) return null;
+  return { at, atMs };
 }
 
 function usablePlace(stop: LoadStop | null): string {
@@ -163,21 +213,17 @@ function usablePlace(stop: LoadStop | null): string {
   return stopRouteLabel(stop);
 }
 
-function deliverySortKey(load: LoadView): string {
-  return deliveryKeyFrom(load, stopWindowsByLoad([load.id]).get(load.id));
-}
+type PriorStop = { load: LoadView; at: string; atMs: number };
 
-function pickupSortKey(load: LoadView): string {
-  return pickupKeyFrom(load, stopWindowsByLoad([load.id]).get(load.id));
-}
-
-type PriorStop = { load: LoadView; at: string };
-
-function latestPrior(candidates: LoadView[], here: string, windows: Map<number, StopWindowRow[]>): PriorStop | null {
+function latestPrior(candidates: LoadView[], hereMs: number, windows: Map<number, StopWindowRow[]>): PriorStop | null {
   const prior = candidates
-    .map((row) => ({ load: row, at: deliveryKeyFrom(row, windows.get(row.id)) }))
-    .filter((row) => row.at && row.at <= here)
-    .sort((left, right) => right.at.localeCompare(left.at) || right.load.id - left.load.id);
+    .map((row) => {
+      const rows = windows.get(row.id);
+      const timed = timedKey(deliveryKeyFrom(row, rows), stopZone(deliveryStop(rows)));
+      return timed ? { load: row, ...timed } : null;
+    })
+    .filter((row): row is PriorStop => row != null && row.atMs <= hereMs && hereMs - row.atMs <= DEADHEAD_LOOKBACK_MS)
+    .sort((left, right) => right.atMs - left.atMs || right.load.id - left.load.id);
   return prior[0] ?? null;
 }
 
@@ -187,6 +233,7 @@ export function previousLoadForEmptyMiles(load: LoadView): LoadView | null {
 
 type PriorBundle = {
   here: string;
+  hereMs: number | null;
   chosen: PriorStop | null;
   driverPrior: PriorStop | null;
   truckPrior: PriorStop | null;
@@ -194,8 +241,15 @@ type PriorBundle = {
   windows: Map<number, StopWindowRow[]>;
 };
 
+function pickupTimed(load: LoadView): TimedKey | null {
+  const rows = stopWindowsByLoad([load.id]).get(load.id);
+  return timedKey(pickupKeyFrom(load, rows), stopZone(pickupStop(rows)));
+}
+
 function priorBundle(load: LoadView): PriorBundle {
-  const here = pickupSortKey(load);
+  const pickup = pickupTimed(load);
+  const here = pickup?.at ?? "";
+  const hereMs = pickup?.atMs ?? null;
   const driverRows = load.driver_id
     ? listLoadsForDriver(load.driver_id).filter(
         (row) => row.id !== load.id && row.status !== "cancelled" && row.driver_id === load.driver_id,
@@ -205,12 +259,16 @@ function priorBundle(load: LoadView): PriorBundle {
     ? listLoadsForTruck(load.truck_id).filter((row) => row.id !== load.id && row.status !== "cancelled")
     : [];
   const rows = [...new Map([...driverRows, ...truckRows].map((row) => [row.id, row])).values()];
-  const windows = here ? stopWindowsByLoad(rows.map((row) => row.id)) : new Map<number, StopWindowRow[]>();
-  const driverPrior = here ? latestPrior(driverRows, here, windows) : null;
-  const truckPrior = here ? latestPrior(truckRows, here, windows) : null;
+  const windows = hereMs != null ? stopWindowsByLoad(rows.map((row) => row.id)) : new Map<number, StopWindowRow[]>();
+  const driverPrior = hereMs != null ? latestPrior(driverRows, hereMs, windows) : null;
+  const truckPrior = hereMs != null ? latestPrior(truckRows, hereMs, windows) : null;
   const chosen =
-    driverPrior && truckPrior ? (driverPrior.at >= truckPrior.at ? driverPrior : truckPrior) : (driverPrior ?? truckPrior);
-  return { here, chosen, driverPrior, truckPrior, rows, windows };
+    driverPrior && truckPrior
+      ? driverPrior.atMs >= truckPrior.atMs
+        ? driverPrior
+        : truckPrior
+      : (driverPrior ?? truckPrior);
+  return { here, hereMs, chosen, driverPrior, truckPrior, rows, windows };
 }
 
 function suggestedPrior(load: LoadView): PriorStop | null {
@@ -219,16 +277,21 @@ function suggestedPrior(load: LoadView): PriorStop | null {
 
 export function nextLoadForEmptyMiles(load: LoadView, driverId = load.driver_id): LoadView | null {
   if (!driverId) return null;
-  const here = deliverySortKey(load);
+  const hereRows = stopWindowsByLoad([load.id]).get(load.id);
+  const here = timedKey(deliveryKeyFrom(load, hereRows), stopZone(deliveryStop(hereRows)));
   if (!here) return null;
   const rows = listLoadsForDriver(driverId).filter(
     (row) => row.id !== load.id && row.status !== "cancelled" && row.driver_id === driverId,
   );
   const windows = stopWindowsByLoad(rows.map((row) => row.id));
   const later = rows
-    .map((row) => ({ load: row, at: pickupKeyFrom(row, windows.get(row.id)) }))
-    .filter((row) => row.at && row.at >= here)
-    .sort((left, right) => left.at.localeCompare(right.at) || left.load.id - right.load.id);
+    .map((row) => {
+      const stopRows = windows.get(row.id);
+      const timed = timedKey(pickupKeyFrom(row, stopRows), stopZone(pickupStop(stopRows)));
+      return timed ? { load: row, ...timed } : null;
+    })
+    .filter((row): row is { load: LoadView; at: string; atMs: number } => row != null && row.atMs >= here.atMs)
+    .sort((left, right) => left.atMs - right.atMs || left.load.id - right.load.id);
   return later[0]?.load ?? null;
 }
 
@@ -241,33 +304,68 @@ export function emptyLaneForLoad(load: LoadView): { from: string; to: string } |
   return { from, to };
 }
 
-type GpsPing = { address: string; recorded_at: string; latitude: number | null; longitude: number | null };
+type GpsPing = { address: string; recorded_at: string; latitude: number | null; longitude: number | null; atMs: number };
 
-function gpsBeforePickup(truckId: number | null, pickupAt: string): GpsPing | null {
-  if (!truckId || !pickupAt) return null;
-  const reading = getDb()
+function gpsPoint(ping: GpsPing): GpsPoint | null {
+  if (ping.latitude == null || ping.longitude == null) return null;
+  if (!Number.isFinite(ping.latitude) || !Number.isFinite(ping.longitude)) return null;
+  return { latitude: ping.latitude, longitude: ping.longitude };
+}
+
+function pingInside(ping: GpsPing, dest: GpsPoint | null): boolean {
+  const point = gpsPoint(ping);
+  if (!point || !dest) return false;
+  return milesBetween(point, dest) <= GEOFENCE_MILES;
+}
+
+function gpsPlace(ping: GpsPing): string {
+  const address = ping.address.trim();
+  if (address) return address;
+  const point = gpsPoint(ping);
+  if (!point) return "";
+  return `${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}`;
+}
+
+function gpsBeforePickup(truckId: number | null, pickupMs: number | null): GpsPing[] {
+  if (!truckId || pickupMs == null) return [];
+  const since = new Date(pickupMs - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const readings = getDb()
     .prepare(
       `SELECT address, recorded_at, latitude, longitude FROM truck_gps_readings
-       WHERE truck_id = ? AND recorded_at != '' AND recorded_at <= ?
-       ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+       WHERE truck_id = ? AND recorded_at != '' AND recorded_at >= ?
+       ORDER BY recorded_at ASC, id ASC`,
     )
-    .get(truckId, pickupAt) as GpsPing | undefined;
+    .all(truckId, since) as Array<Omit<GpsPing, "atMs">>;
   const truck = getDb()
     .prepare("SELECT gps_address, gps_recorded_at, gps_latitude, gps_longitude FROM trucks WHERE id = ?")
     .get(truckId) as
     | { gps_address: string; gps_recorded_at: string; gps_latitude: number | null; gps_longitude: number | null }
     | undefined;
-  const truckPing =
-    truck && truck.gps_recorded_at && truck.gps_recorded_at <= pickupAt
-      ? {
-          address: truck.gps_address || "",
-          recorded_at: truck.gps_recorded_at,
-          latitude: truck.gps_latitude,
-          longitude: truck.gps_longitude,
-        }
-      : null;
-  if (reading && truckPing) return reading.recorded_at >= truckPing.recorded_at ? reading : truckPing;
-  return reading ?? truckPing;
+  const rows = [...readings];
+  if (truck?.gps_recorded_at) {
+    rows.push({
+      address: truck.gps_address || "",
+      recorded_at: truck.gps_recorded_at,
+      latitude: truck.gps_latitude,
+      longitude: truck.gps_longitude,
+    });
+  }
+  return rows
+    .map((row) => {
+      const atMs = gpsInstantMs(row.recorded_at);
+      return atMs == null ? null : { ...row, atMs };
+    })
+    .filter((row): row is GpsPing => row != null && row.atMs <= pickupMs)
+    .sort((left, right) => left.atMs - right.atMs);
+}
+
+/** Last ping a few hours before pickup, or the last one before the pickup fence. Not the ping at the shipper. */
+function approachGps(pings: GpsPing[], pickupMs: number, pickupPoint: GpsPoint | null): GpsPing | null {
+  const outside = pings.filter((ping) => !pingInside(ping, pickupPoint));
+  const recent = outside.filter((ping) => ping.atMs >= pickupMs - DEADHEAD_GPS_LEAD_MS);
+  if (recent.length) return recent[recent.length - 1] ?? null;
+  const beforeEntry = outside.filter((ping) => ping.atMs >= pickupMs - DEADHEAD_GPS_ENTRY_CAP_MS);
+  return beforeEntry[beforeEntry.length - 1] ?? null;
 }
 
 function placesDisagree(suggested: string, gps: string): boolean {
@@ -277,11 +375,14 @@ function placesDisagree(suggested: string, gps: string): boolean {
 }
 
 function anotherLoadBetween(bundle: PriorBundle, chosen: PriorStop | null): boolean {
-  if (!chosen || !bundle.here) return false;
+  if (!chosen || bundle.hereMs == null) return false;
   return bundle.rows.some((row) => {
     if (row.id === chosen.load.id) return false;
-    const at = deliveryKeyFrom(row, bundle.windows.get(row.id)) || pickupKeyFrom(row, bundle.windows.get(row.id));
-    return Boolean(at && at > chosen.at && at < bundle.here);
+    const rows = bundle.windows.get(row.id);
+    const delivery = timedKey(deliveryKeyFrom(row, rows), stopZone(deliveryStop(rows)));
+    const pickup = timedKey(pickupKeyFrom(row, rows), stopZone(pickupStop(rows)));
+    const atMs = delivery?.atMs ?? pickup?.atMs;
+    return atMs != null && atMs > chosen.atMs && atMs < bundle.hereMs!;
   });
 }
 
@@ -307,17 +408,40 @@ async function routeEmptyLane(from: string, to: string): Promise<{
 
 export async function buildDeadheadSuggestion(load: LoadView): Promise<DeadheadSuggestion | null> {
   const bundle = priorBundle(load);
-  const here = bundle.here;
+  const hereMs = bundle.hereMs;
   const prior = bundle.chosen;
-  const ping = gpsBeforePickup(load.truck_id, here);
-  const to = usablePlace(firstPickupStop(load.id)) || load.origin || "";
-  const fromDelivery = prior ? usablePlace(lastDeliveryStop(prior.load.id)) : "";
-  const from = fromDelivery || ping?.address || "";
+  const pings = gpsBeforePickup(load.truck_id, hereMs);
+  const pickupStopRow = firstPickupStop(load.id);
+  const to = usablePlace(pickupStopRow) || load.origin || "";
+  const deliveryStop = prior ? lastDeliveryStop(prior.load.id) : null;
+  const fromDelivery = usablePlace(deliveryStop);
+  const pickupPoint = pickupStopRow ? coordsForStop(pickupStopRow) : null;
+  const approach = hereMs == null ? null : approachGps(pings, hereMs, pickupPoint);
+  const fallbackPing = pings[pings.length - 1] ?? null;
+  let from = fromDelivery;
+  let basis: DeadheadSuggestion["basis"] = fromDelivery ? "previous_delivery" : "gps";
+  let alternativePlace = "";
+  let farMiles: number | null = null;
+  const deliveryPoint = deliveryStop ? coordsForStop(deliveryStop) : null;
+  const approachPoint = approach ? gpsPoint(approach) : null;
+  if (fromDelivery && approach && approachPoint && deliveryPoint) {
+    const miles = milesBetween(approachPoint, deliveryPoint);
+    if (miles > DEADHEAD_GPS_FAR_MI) {
+      const gpsFrom = gpsPlace(approach);
+      if (gpsFrom) {
+        alternativePlace = fromDelivery;
+        from = gpsFrom;
+        basis = "gps";
+        farMiles = miles;
+      }
+    }
+  }
+  if (!from && fallbackPing) from = gpsPlace(fallbackPing);
   if (!from || !to) return null;
   const warnings: DeadheadWarningCode[] = [];
   const notes: string[] = [];
-  if (prior) {
-    const gap = Date.parse(here) - Date.parse(prior.at);
+  if (prior && hereMs != null) {
+    const gap = hereMs - prior.atMs;
     if (Number.isFinite(gap) && gap > DEADHEAD_GAP_MS) {
       warnings.push("gap");
       notes.push("The gap since that delivery is more than 3 days.");
@@ -330,9 +454,12 @@ export async function buildDeadheadSuggestion(load: LoadView): Promise<DeadheadS
     warnings.push("between");
     notes.push("Another load falls between this start and the pickup.");
   }
-  if (ping?.address && fromDelivery && placesDisagree(fromDelivery, ping.address)) {
+  if (alternativePlace && approach) {
+    const milesText = farMiles == null ? "" : ` (${Math.round(farMiles).toLocaleString("en-US")} mi away)`;
+    notes.push(`GPS before pickup is ${from}${milesText}. ${alternativePlace} is the other start.`);
+  } else if (basis === "previous_delivery" && fallbackPing?.address && fromDelivery && placesDisagree(fromDelivery, fallbackPing.address)) {
     warnings.push("gps");
-    notes.push(`GPS before pickup is ${ping.address}, not this place.`);
+    notes.push(`GPS before pickup is ${fallbackPing.address}, not this place.`);
   }
   const routed = await routeEmptyLane(from, to);
   if (routed.miles != null && routed.miles > DEADHEAD_DISTANCE_MI) {
@@ -348,7 +475,8 @@ export async function buildDeadheadSuggestion(load: LoadView): Promise<DeadheadS
     states: routed.states,
     polyline: routed.polyline,
     source: routed.source,
-    basis: fromDelivery ? "previous_delivery" : "gps",
+    basis,
+    alternativePlace,
     warnings,
     notes,
   };
@@ -391,6 +519,7 @@ export async function confirmLoadDeadhead(loadId: number, overridePlace?: string
     ...(stored ?? {
       driverName: load.driver_name?.trim() || "the driver",
       basis: "previous_delivery",
+      alternativePlace: "",
       warnings: [],
       notes: [],
     }),

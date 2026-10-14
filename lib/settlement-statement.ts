@@ -2,7 +2,9 @@ import { writeAudit } from "./desk";
 import { getDb } from "./db";
 import { labelForPayCategory } from "./load-page-shared";
 import { inPayWeek, normalizePayWeek, shiftPayWeek } from "./pay-week";
-import { driverPayItems, type LoadPayItem } from "./pay-items";
+import { driverPayItems, listPayItems, normalizePayLeg, type LoadPayItem } from "./pay-items";
+import { listSwapLegsForDriver, loadHasSwap, swapDriverIdsInRange, type SwapLegForPay } from "./load-swap";
+import { detentionLegPay, fuelSurchargeLegPay, linehaulLegPay, lumperPassThrough } from "./relay-pay";
 import { getDriver, listDrivers, listLoads } from "./queries";
 import {
   labelForReimbursementCategory,
@@ -59,6 +61,8 @@ export type SettlementLoadLine = {
   linehaul: number | null;
   ooPercent: number | null;
   basis: string;
+  leg: string;
+  legLabel: string;
 };
 
 export type SettlementExtraLine = {
@@ -238,11 +242,66 @@ export function listOneOffs(driverId: number, weekStart: string): SettlementOneO
     .all(driverId, weekStart) as SettlementOneOff[];
 }
 
-function paidAtFor(driverId: number, weekStart: string): string {
+type StatementPaySnapshot = {
+  loads: SettlementLoadLine[];
+  extras: SettlementExtraLine[];
+  reimbursements: SettlementReimbursementLine[];
+  deductions: SettlementDeductionLine[];
+  gross: number;
+  reimbursementTotal: number;
+  deductionTotal: number;
+  net: number;
+};
+
+function paidRowFor(
+  driverId: number,
+  weekStart: string,
+): { paid_at: string; snapshot_json: string } | null {
   const row = getDb()
-    .prepare("SELECT paid_at FROM settlement_statements WHERE driver_id = ? AND week_start = ?")
-    .get(driverId, weekStart) as { paid_at?: string } | undefined;
-  return String(row?.paid_at ?? "");
+    .prepare("SELECT paid_at, snapshot_json FROM settlement_statements WHERE driver_id = ? AND week_start = ?")
+    .get(driverId, weekStart) as { paid_at?: string; snapshot_json?: string } | undefined;
+  if (!row) return null;
+  return { paid_at: String(row.paid_at ?? ""), snapshot_json: String(row.snapshot_json ?? "") };
+}
+
+function paidAtFor(driverId: number, weekStart: string): string {
+  return paidRowFor(driverId, weekStart)?.paid_at ?? "";
+}
+
+function parsePaySnapshot(raw: string): StatementPaySnapshot | null {
+  const text = raw.trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as StatementPaySnapshot;
+    if (!parsed || !Array.isArray(parsed.loads)) return null;
+    return {
+      ...parsed,
+      loads: parsed.loads.map((line) => ({
+        ...line,
+        leg: line.leg ?? "",
+        legLabel: line.legLabel ?? "",
+        emptyLabel: line.emptyLabel ?? "",
+      })),
+      extras: parsed.extras ?? [],
+      reimbursements: parsed.reimbursements ?? [],
+      deductions: parsed.deductions ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function paySnapshot(statement: SettlementStatement): StatementPaySnapshot {
+  return {
+    loads: statement.loads,
+    extras: statement.extras,
+    reimbursements: statement.reimbursements,
+    deductions: statement.deductions,
+    gross: statement.gross,
+    reimbursementTotal: statement.reimbursementTotal,
+    deductionTotal: statement.deductionTotal,
+    net: statement.net,
+  };
 }
 
 function carrierHeader(): Pick<
@@ -286,15 +345,151 @@ function reimbursementLines(rows: DriverReimbursement[]): SettlementReimbursemen
     }));
 }
 
-export function buildSettlement(driverId: number, weekInput?: string | null, now = new Date()): SettlementStatement | null {
-  const driver = getDriver(driverId);
-  if (!driver) return null;
-  const week = normalizePayWeek(weekInput, now);
-  const loads = loadsInWeek(week.from, week.to).filter((load) => load.driver_id === driver.id);
+function fuelSurchargePool(loadId: number): number {
+  const items = listPayItems(loadId);
+  const customer = items.filter((item) => item.bill_to === "customer" && item.category === "fuel_surcharge");
+  const customerTotal = roundMoney(customer.reduce((sum, item) => sum + (item.total ?? 0), 0));
+  if (customerTotal > 0) return customerTotal;
+  const driver = items.filter((item) => item.bill_to === "driver" && item.category === "fuel_surcharge");
+  return roundMoney(driver.reduce((sum, item) => sum + (item.total ?? 0), 0));
+}
+
+function detentionStop(load: LoadView, item: LoadPayItem): "" | "pickup" | "delivery" {
+  return normalizePayLeg(item.leg) || normalizePayLeg((load as { detention_leg?: string }).detention_leg);
+}
+
+function legMatches(role: "from" | "to", stop: "" | "pickup" | "delivery"): boolean {
+  if (stop === "pickup") return role === "from";
+  if (stop === "delivery") return role === "to";
+  return false;
+}
+
+function lumperForDriver(item: LoadPayItem, leg: SwapLegForPay, load: LoadView): boolean {
+  const stop = detentionStop(load, item);
+  if (stop) return legMatches(leg.role, stop);
+  const payee = item.payee.trim().toLowerCase();
+  if (!payee) return false;
+  return payee === String(load.driver_name ?? "").trim().toLowerCase() && load.driver_id === leg.driverId;
+}
+
+function appendSwapLeg(
+  leg: SwapLegForPay,
+  load: LoadView,
+  loadLines: SettlementLoadLine[],
+  extras: SettlementExtraLine[],
+): void {
+  const ownerOperator = isOwnerOperator(leg.driverType);
+  const linehaul = linehaulLegPay({
+    rate: load.rate,
+    totalMiles: leg.totalMiles,
+    legMiles: leg.miles,
+    driverType: leg.driverType,
+    storedPercent: leg.storedPercent,
+  });
+  const swapPoint = loadHasSwap(load.id) ? swapPointLabel(load.id) : "";
+  const lane =
+    leg.role === "from"
+      ? `${load.origin} → ${swapPoint || "Swap"}`
+      : `${swapPoint || "Swap"} → ${load.destination}`;
+  loadLines.push({
+    loadId: load.id,
+    loadNumber: load.load_number,
+    lane,
+    pickup: (load.pickup_start || "").slice(0, 10),
+    delivery: (load.delivery_end || load.delivery_start || "").slice(0, 10),
+    miles: leg.miles != null && leg.miles > 0 ? leg.miles : null,
+    emptyLabel: leg.role === "from" && emptyMilesPending(load) ? "Empty Pending" : "",
+    linehaul: linehaul.pay,
+    ooPercent: ownerOperator ? leg.storedPercent : null,
+    basis: !ownerOperator
+      ? "Flat payroll"
+      : leg.storedPercent == null
+        ? "Driver percent is not on file"
+        : leg.miles == null
+          ? "Leg miles missing"
+          : "Leg miles",
+    leg: leg.leg,
+    legLabel: leg.leg === "1" ? "Leg 1" : "Leg 2",
+  });
+  const fsc = fuelSurchargeLegPay({
+    fscAmount: fuelSurchargePool(load.id),
+    totalMiles: leg.totalMiles,
+    legMiles: leg.miles,
+    driverType: leg.driverType,
+    storedPercent: leg.storedPercent,
+  });
+  if (fsc != null && fsc !== 0) {
+    extras.push({
+      id: -load.id,
+      loadNumber: load.load_number,
+      label: `Fuel surcharge ${leg.leg === "1" ? "Leg 1" : "Leg 2"}`,
+      amount: fsc,
+    });
+  }
+  for (const item of driverPayItems(load.id)) {
+    if (item.category === "flat_rate" || item.category === "fuel_surcharge") continue;
+    const amount = roundMoney(item.total ?? 0);
+    if (item.category === "detention") {
+      const pay = detentionLegPay({
+        amount,
+        driverType: leg.driverType,
+        happenedOnLeg: legMatches(leg.role, detentionStop(load, item)),
+      });
+      if (pay == null) continue;
+      extras.push({ id: item.id, loadNumber: load.load_number, label: "Detention", amount: pay });
+      continue;
+    }
+    if (item.category === "lumper") {
+      const pay = lumperPassThrough({ amount, assignedToDriver: lumperForDriver(item, leg, load) });
+      if (pay == null) continue;
+      extras.push({ id: item.id, loadNumber: load.load_number, label: "Lumper", amount: pay });
+      continue;
+    }
+    const stop = detentionStop(load, item);
+    if (stop) {
+      if (!legMatches(leg.role, stop)) continue;
+    } else if (load.driver_id !== leg.driverId) {
+      continue;
+    }
+    const label = labelForPayCategory(item.category);
+    const notes = item.notes.trim();
+    extras.push({
+      id: item.id,
+      loadNumber: load.load_number,
+      label: notes ? `${label} — ${notes}` : label,
+      amount,
+    });
+  }
+}
+
+function swapPointLabel(loadId: number): string {
+  const row = getDb()
+    .prepare("SELECT relay_address, delivery FROM load_relays WHERE load_id = ? AND swap_id IS NOT NULL LIMIT 1")
+    .get(loadId) as { relay_address?: string | null; delivery?: string } | undefined;
+  return String(row?.relay_address || row?.delivery || "").trim();
+}
+
+function composeSettlement(
+  driver: NonNullable<ReturnType<typeof getDriver>>,
+  week: { from: string; to: string },
+  paidAt: string,
+  legacy: boolean,
+): SettlementStatement {
   const ownerOperator = isOwnerOperator(driver.driver_type);
   const loadLines: SettlementLoadLine[] = [];
   const extras: SettlementExtraLine[] = [];
+  const swapped = new Set<number>();
+  if (!legacy) {
+    for (const leg of listSwapLegsForDriver(driver.id)) {
+      const load = loadsInWeek(week.from, week.to).find((row) => row.id === leg.loadId);
+      if (!load || !loadIncludedOnStatement(load)) continue;
+      swapped.add(load.id);
+      appendSwapLeg(leg, load, loadLines, extras);
+    }
+  }
+  const loads = loadsInWeek(week.from, week.to).filter((load) => load.driver_id === driver.id);
   for (const load of loads) {
+    if (!legacy && (swapped.has(load.id) || loadHasSwap(load.id))) continue;
     const items = driverPayItems(load.id);
     const linehaul = linehaulForLoad({
       ownerOperator,
@@ -314,6 +509,8 @@ export function buildSettlement(driverId: number, weekInput?: string | null, now
       linehaul: linehaul.amount,
       ooPercent: linehaul.ooPercent,
       basis: linehaul.basis,
+      leg: "",
+      legLabel: "",
     });
     for (const item of extraPayItems(items)) {
       const label = labelForPayCategory(item.category);
@@ -327,7 +524,8 @@ export function buildSettlement(driverId: number, weekInput?: string | null, now
     }
   }
   const reimbursements = reimbursementLines(listStatementReimbursements(driver.id, week.from));
-  const deductions = deductionLines(driver, loadLines.length, week.from);
+  const deductionLoadCount = new Set(loadLines.map((line) => line.loadId)).size;
+  const deductions = deductionLines(driver, deductionLoadCount, week.from);
   const gross = roundMoney(
     loadLines.reduce((sum, line) => sum + (line.linehaul ?? 0), 0) + extras.reduce((sum, line) => sum + line.amount, 0),
   );
@@ -343,7 +541,7 @@ export function buildSettlement(driverId: number, weekInput?: string | null, now
     ownerOperatorCompany: ownerOperator ? driver.company_name.trim() : "",
     weekStart: week.from,
     weekEnd: week.to,
-    paidAt: paidAtFor(driver.id, week.from),
+    paidAt,
     ...carrierHeader(),
     loads: loadLines,
     extras,
@@ -354,6 +552,34 @@ export function buildSettlement(driverId: number, weekInput?: string | null, now
     deductionTotal,
     net: roundMoney(gross + reimbursementTotal - deductionTotal),
   };
+}
+
+export function buildSettlement(driverId: number, weekInput?: string | null, now = new Date()): SettlementStatement | null {
+  const driver = getDriver(driverId);
+  if (!driver) return null;
+  const week = normalizePayWeek(weekInput, now);
+  const stored = paidRowFor(driver.id, week.from);
+  const paidAt = String(stored?.paid_at ?? "").trim();
+  if (paidAt) {
+    const snapshot = parsePaySnapshot(stored?.snapshot_json ?? "");
+    if (snapshot) {
+      const shell = composeSettlement(driver, week, paidAt, true);
+      return {
+        ...shell,
+        paidAt,
+        loads: snapshot.loads,
+        extras: snapshot.extras,
+        reimbursements: snapshot.reimbursements,
+        deductions: snapshot.deductions,
+        gross: snapshot.gross,
+        reimbursementTotal: snapshot.reimbursementTotal,
+        deductionTotal: snapshot.deductionTotal,
+        net: snapshot.net,
+      };
+    }
+    return composeSettlement(driver, week, paidAt, true);
+  }
+  return composeSettlement(driver, week, "", false);
 }
 
 function deductionLines(driver: DriverWithTruck, loadCount: number, weekStart: string): SettlementDeductionLine[] {
@@ -401,9 +627,11 @@ export function listSettlementWeek(weekInput?: string | null, now = new Date()):
 } {
   const week = normalizePayWeek(weekInput, now);
   const ids = new Set<number>();
-  for (const load of loadsInWeek(week.from, week.to)) {
+  const weekLoads = loadsInWeek(week.from, week.to);
+  for (const load of weekLoads) {
     if (load.driver_id) ids.add(load.driver_id);
   }
+  for (const driverId of swapDriverIdsInRange(weekLoads.map((load) => load.id))) ids.add(driverId);
   const oneOffDrivers = getDb()
     .prepare("SELECT DISTINCT driver_id FROM settlement_one_offs WHERE week_start = ?")
     .all(week.from) as Array<{ driver_id: number }>;
@@ -435,8 +663,9 @@ export function listSettlementWeek(weekInput?: string | null, now = new Date()):
 
 export function listDriverStatementWeeks(driverId: number, now = new Date()): Array<{ from: string; to: string }> {
   const keys = new Set<string>([defaultWeek(now).from]);
+  const swapLoadIds = new Set(listSwapLegsForDriver(driverId).map((leg) => leg.loadId));
   for (const load of listLoads({ status: "all" })) {
-    if (load.driver_id !== driverId || !loadIncludedOnStatement(load)) continue;
+    if ((load.driver_id !== driverId && !swapLoadIds.has(load.id)) || !loadIncludedOnStatement(load)) continue;
     const day = periodIso(load).slice(0, 10);
     if (day) keys.add(normalizePayWeek(day, now).from);
   }
@@ -580,13 +809,18 @@ export function markSettlementRecordPaid(driverId: number, weekInput: string, no
     return { paidAt: already, reimbursements: 0 };
   }
   const paidAt = now.toISOString();
+  const draft = composeSettlement(driver, week, paidAt, false);
+  const reimbursements = markWeekReimbursementsPaid(driverId, week.from, paidAt);
+  const snapshot = paySnapshot({
+    ...draft,
+    reimbursements: draft.reimbursements.map((line) => ({ ...line, status: "paid" as const })),
+  });
   getDb()
     .prepare(
-      `INSERT INTO settlement_statements (driver_id, week_start, week_end, paid_at, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO settlement_statements (driver_id, week_start, week_end, paid_at, created_at, snapshot_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(driverId, week.from, week.to, paidAt, paidAt);
-  const reimbursements = markWeekReimbursementsPaid(driverId, week.from, paidAt);
+    .run(driverId, week.from, week.to, paidAt, paidAt, JSON.stringify(snapshot));
   writeAudit("settlement_paid", "settlement_statement", driverId, `${week.from} record only`);
   return { paidAt, reimbursements };
 }

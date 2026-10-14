@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { getSignedInDispatcher, unauthorizedResponse } from "@/lib/dispatcher-session";
-import { getSignedInDriver } from "@/lib/driver-session";
+import { driverFromCookieOrBearer } from "@/lib/driver-api";
+import { driverMaySeeAttachment } from "@/lib/driver-docs";
 import { getAttachment, getAttachmentPath, sanitizeName } from "@/lib/files";
 import { isCustomerRateDocument } from "@/lib/load-documents-shared";
 import { getLoad } from "@/lib/queries";
@@ -24,28 +25,32 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const dispatcher = await getSignedInDispatcher();
-  const driver = dispatcher ? null : await getSignedInDriver();
-  if (!dispatcher && !driver) {
-    return unauthorizedResponse();
-  }
+  const driver = dispatcher ? null : await driverFromCookieOrBearer(request);
   const attachment = getAttachment(Number.parseInt((await params).id, 10));
   if (!attachment) {
     return new Response("Not found", { status: 404 });
   }
+  if (!dispatcher && isCustomerRateDocument(attachment)) {
+    return new Response("Not found", { status: 404 });
+  }
+  if (!dispatcher && !driver) {
+    return unauthorizedResponse();
+  }
   if (driver) {
+    const load = getLoad(attachment.load_id);
+    if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
+      return new Response("Not found", { status: 404 });
+    }
     const receiptOwner = reimbursementDriverForAttachment(attachment.id);
     if (receiptOwner != null && receiptOwner !== driver.id) {
       return new Response("Forbidden", { status: 403 });
     }
-    if (receiptOwner == null) {
-      const load = getLoad(attachment.load_id);
-      if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) {
-        return new Response("Forbidden", { status: 403 });
-      }
+    if (driver && isCustomerRateDocument(attachment)) {
+      return new Response("Not found", { status: 404 });
     }
-  }
-  if (driver && isCustomerRateDocument(attachment)) {
-    return new Response("Not found", { status: 404 });
+    if (!driverMaySeeAttachment(attachment, driver)) {
+      return new Response("Not found", { status: 404 });
+    }
   }
   const download = new URL(request.url).searchParams.get("download") === "1";
   try {

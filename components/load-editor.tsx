@@ -13,6 +13,7 @@ import { LoadConfirmationLink } from "@/components/load-confirmation-link";
 import { LoadForm } from "@/components/load-form";
 import { LoadPayItems } from "@/components/load-pay-items";
 import { LoadRelaysPanel } from "@/components/load-relays-panel";
+import { LoadSwapPanel } from "@/components/load-swap-panel";
 import { LoadRoutingGuide } from "@/components/load-routing-guide";
 import { LoadStopsMap } from "@/components/load-stops-map";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
@@ -29,6 +30,7 @@ import { MasterLoadPanel } from "@/components/master-load-panel";
 import { MakeBolPanel } from "@/components/make-bol-button";
 import { bolPrefillForLoad } from "@/lib/bol";
 import { listDefaultedDocuments } from "@/lib/load-documents";
+import { RateConRedactionPanel } from "@/components/rate-con-redaction-panel";
 import { RateConApply } from "@/components/rate-con-apply";
 import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
 import { laneAverageSnapshot } from "@/lib/lane-average";
@@ -38,6 +40,7 @@ import { archiveCutoff } from "@/lib/working-loads";
 import { isArchivedLoad } from "@/lib/working-loads-shared";
 import { updateLoadAction } from "@/lib/actions";
 import { listAttachments } from "@/lib/files";
+import { listRateConRedactions } from "@/lib/rate-con-redact-store";
 import { ensureDemoIfta, getIftaPanel } from "@/lib/integrations/ifta";
 import { getLatestReeferForLoad, getTrailerLocationForLoad } from "@/lib/integrations/orbcomm";
 import { previewQuickbooksInvoice } from "@/lib/integrations/quickbooks";
@@ -52,7 +55,7 @@ import { latestLoadShareLink, loadSharePath } from "@/lib/load-share";
 import { parseLoadTab } from "@/lib/load-tabs";
 import { SendToAccountingControls } from "@/components/send-to-accounting";
 import { loadIsOnAccountingDesk } from "@/lib/accounting-desk-shared";
-import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials } from "@/lib/settings-shared";
+import { canAccessAccounting, canDeleteDocuments, canEditLoads, canViewIfta, canViewLoadFinancials, isAdminRole } from "@/lib/settings-shared";
 import { isTwilioConfigured, isWhatsAppConfigured, loadRuntimeEnv } from "@/lib/env";
 import { listExceptionInbox, loadCriticalReasons, loadNeedsCriticalTag } from "@/lib/exceptions";
 import { emptyMilesPending, parseDeadheadSuggestion } from "@/lib/empty-miles-shared";
@@ -79,6 +82,7 @@ import { listPayItems } from "@/lib/pay-items";
 import { listMasterFamily } from "@/lib/master-load";
 import { mapsBrowserKey } from "@/lib/load-map";
 import { getLoad, listCustomers, listDrivers, listTrailers, listTrucks, locationsForIds } from "@/lib/queries";
+import { getLoadSwap } from "@/lib/load-swap";
 import { listRelays } from "@/lib/relay-store";
 import { invoiceIssuerProblems, invoiceIssuerWarning } from "@/lib/carrier-identity";
 import { equipmentOptions, getCompanySettings, listDispatcherUsers, loadFormSettings } from "@/lib/settings";
@@ -159,9 +163,28 @@ export async function LoadEditor({
   })();
   const company = getCompanySettings();
   const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(company));
+  const rateConCopies = listRateConRedactions(load.id);
+  const rateConReview = rateConCopies.filter((copy) => copy.status === "needs_review");
 
   return (
     <div className={variant === "overlay" ? "load-overlay-editor" : undefined}>
+      {rateConReview.length ? (
+        <div
+          role="status"
+          data-rate-con-review-flag=""
+          className="card mx-3 mt-3 border border-amber-400 bg-amber-50 p-3 text-amber-950"
+        >
+          <p className="text-sm font-semibold">Rate confirmation needs office review</p>
+          <p className="mt-1 text-sm">
+            {rateConReview.length === 1
+              ? "One driver copy is waiting. The driver cannot see it until you release it."
+              : `${rateConReview.length} driver copies are waiting. The driver cannot see them until you release them.`}
+          </p>
+          <a className="btn btn-secondary mt-2 min-h-11" href={`/loads/${load.id}?tab=docs#rate-con-driver-copy`}>
+            Review rate confirmation
+          </a>
+        </div>
+      ) : null}
       <LoadWorkspace
         header={
           <PageHeader
@@ -257,6 +280,7 @@ export async function LoadEditor({
             loadId={load.id}
             driverName={deadhead?.driverName || load.driver_name || "the driver"}
             place={deadheadPlace}
+            alternativePlace={deadhead?.alternativePlace ?? ""}
             notes={deadhead?.notes ?? []}
             readOnly={readOnly}
             locations={locations}
@@ -312,6 +336,15 @@ export async function LoadEditor({
         </LoadTabPanel>
 
         <LoadTabPanel when="assets">
+          <LoadSwapPanel
+            loadId={load.id}
+            loadNumber={load.load_number}
+            swap={getLoadSwap(load.id)}
+            canOverrideMiles={isAdminRole(role)}
+            locations={locations}
+            mapsApiKey={mapsBrowserKey()}
+            readOnly={readOnly}
+          />
           <LoadRelaysPanel
             loadId={load.id}
             relays={relays}
@@ -492,6 +525,7 @@ export async function LoadEditor({
             stopTimes={samsaraStill.stopTimes}
             nowValue={toOfficeDateTime(new Date().toISOString())}
           />
+          <RateConRedactionPanel loadId={load.id} attachments={attachments} canRelease={!readOnly} />
           <AttachmentsPanel loadId={load.id} attachments={attachments} canDelete={canDeleteDocuments(role)} />
           </div>
         </LoadTabPanel>

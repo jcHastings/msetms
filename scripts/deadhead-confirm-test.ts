@@ -225,7 +225,7 @@ async function main() {
     driver: driverId,
     truck: truckId,
   });
-  stop(oldId, 1, "delivery", "KC Dock", "Kansas City", "MO", "2026-07-01T12:00:00", "", "2026-07-01T12:00:00");
+  stop(oldId, 1, "delivery", "KC Dock", "Kansas City", "MO", "2026-08-07T12:00:00", "", "2026-08-07T12:00:00");
   const midId = load({
     number: "DH-MID",
     origin: "Dallas, TX",
@@ -235,7 +235,7 @@ async function main() {
     driver: otherDriverId,
     truck: truckId,
   });
-  stop(midId, 1, "delivery", "Omaha Dock", "Omaha", "NE", "2026-08-01T12:00:00", "", "2026-08-01T12:00:00");
+  stop(midId, 1, "delivery", "Omaha Dock", "Omaha", "NE", "2026-08-08T12:00:00", "", "2026-08-08T12:00:00");
   const warnId = load({
     number: "DH-WARN",
     origin: "Hastings, NE",
@@ -301,6 +301,362 @@ async function main() {
     .filter((row) => row.load_number.startsWith("DH-ORDER"))
     .map((row) => row.load_number);
   assert.deepEqual(ordered, ["DH-ORDER-B", "DH-ORDER-C", "DH-ORDER-A"]);
+
+  const { instantMs, timeZoneForStop } = await import("../lib/wall-time");
+  assert.equal(
+    instantMs("2026-10-14T18:00:00", timeZoneForStop("NY", "Albany")),
+    Date.parse("2026-10-14T22:00:00.000Z"),
+    "naive ITS clock in New York is Eastern, not UTC and not text order",
+  );
+  assert.equal(
+    instantMs("2026-10-14T18:00:00"),
+    Date.parse("2026-10-14T23:00:00.000Z"),
+    "naive ITS clock with no stop zone is US Central",
+  );
+  assert.ok("2026-10-14T18:00:00" < "2026-10-14T20:00:00.000Z");
+
+  const staleTruckId = queries.createTruck({
+    unit_number: "DH-STALE",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const staleDriverId = queries.createDriver({
+    name: "Stale History",
+    phone: "555-0190",
+    license: "TX-STALE",
+    pin: "1900",
+    truck_id: staleTruckId,
+    status: "available",
+  });
+  const elPasoId = queries.createLocation({
+    name: "El Paso Dock",
+    street: "100 Border Hwy",
+    city: "El Paso",
+    state: "TX",
+    zip: "79901",
+    phone: "",
+    notes: "",
+    role: "receiver",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 31.7619,
+    longitude: -106.485,
+  });
+  const dallasId = queries.createLocation({
+    name: "Dallas Dock",
+    street: "200 Commerce St",
+    city: "Dallas",
+    state: "TX",
+    zip: "75201",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 32.7767,
+    longitude: -96.797,
+  });
+  const tonight = "2026-10-14T23:00:00.000Z";
+  const oldElPaso = load({
+    number: "DH-ELPASO",
+    origin: "Phoenix, AZ",
+    destination: "El Paso, TX",
+    pickup: "2026-08-26T18:00:00.000Z",
+    delivery: "2026-08-27T18:00:00.000Z",
+    driver: staleDriverId,
+    truck: staleTruckId,
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', ?, 'El Paso Dock', 'El Paso', 'TX', '2026-08-27T18:00:00.000Z', '2026-08-27T18:00:00.000Z', '', '2026-08-27T18:00:00.000Z')`,
+  ).run(oldElPaso, elPasoId);
+  const recentDallas = load({
+    number: "DH-DALLAS",
+    origin: "Austin, TX",
+    destination: "Dallas, TX",
+    pickup: "2026-10-12T18:00:00.000Z",
+    delivery: "2026-10-13T18:00:00.000Z",
+    driver: staleDriverId,
+    truck: staleTruckId,
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', ?, 'Dallas Dock', 'Dallas', 'TX', '2026-10-13T18:00:00.000Z', '2026-10-13T18:00:00.000Z', '', '2026-10-13T18:00:00.000Z')`,
+  ).run(recentDallas, dallasId);
+  const tonightId = load({
+    number: "DH-TONIGHT",
+    origin: "Dallas, TX",
+    destination: "Houston, TX",
+    pickup: tonight,
+    delivery: "2026-10-15T18:00:00.000Z",
+    driver: staleDriverId,
+    truck: staleTruckId,
+    status: "assigned",
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 1, 'pickup', ?, 'Dallas Dock', 'Dallas', 'TX', ?, ?, '2026-08-28T15:00:00.000Z', '')`,
+  ).run(tonightId, dallasId, tonight, tonight);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-08-28T15:00:00.000Z', 31.7619, -106.485, 'El Paso, TX', 'samsara')`,
+  ).run(staleTruckId);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T20:00:00.000Z', 32.92, -96.797, 'Dallas, TX', 'samsara')`,
+  ).run(staleTruckId);
+  const tonightSuggestion = await buildDeadheadSuggestion(queries.getLoad(tonightId)!);
+  assert.ok(tonightSuggestion);
+  assert.match(tonightSuggestion.place, /Dallas/i);
+  assert.doesNotMatch(tonightSuggestion.place, /El Paso/i);
+  assert.equal(tonightSuggestion.basis, "previous_delivery");
+  const tonightSaved = await refreshLoadEmptyMiles(tonightId);
+  assert.equal(tonightSaved.pending, true);
+  assert.equal(queries.getLoad(tonightId)?.empty_confirmed, 0);
+  assert.equal(queries.getLoad(tonightId)?.empty_miles ?? null, null);
+
+  const oldOnlyId = load({
+    number: "DH-OLD-ONLY",
+    origin: "Dallas, TX",
+    destination: "Houston, TX",
+    pickup: tonight,
+    delivery: "2026-10-15T18:00:00.000Z",
+    driver: staleDriverId,
+    truck: staleTruckId,
+    status: "assigned",
+  });
+  db.prepare("UPDATE loads SET driver_id = NULL, truck_id = NULL WHERE id = ?").run(recentDallas);
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 1, 'pickup', ?, 'Dallas Dock', 'Dallas', 'TX', ?, ?, '', '')`,
+  ).run(oldOnlyId, dallasId, tonight, tonight);
+  const oldOnly = await buildDeadheadSuggestion(queries.getLoad(oldOnlyId)!);
+  assert.ok(oldOnly);
+  assert.equal(oldOnly.basis, "gps");
+  assert.match(oldOnly.place, /Dallas/i);
+  assert.doesNotMatch(oldOnly.place, /El Paso/i);
+  assert.equal(oldOnly.alternativePlace, "");
+  assert.equal(queries.getLoad(oldOnlyId)?.empty_confirmed ?? 0, 0);
+
+  const farTruckId = queries.createTruck({
+    unit_number: "DH-FAR",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const farDriverId = queries.createDriver({
+    name: "Far Gps",
+    phone: "555-0193",
+    license: "TX-FAR",
+    pin: "1930",
+    truck_id: farTruckId,
+    status: "available",
+  });
+  const farDeliveryId = load({
+    number: "DH-FAR-DEL",
+    origin: "Phoenix, AZ",
+    destination: "El Paso, TX",
+    pickup: "2026-10-08T18:00:00.000Z",
+    delivery: "2026-10-09T18:00:00.000Z",
+    driver: farDriverId,
+    truck: farTruckId,
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', ?, 'El Paso Dock', 'El Paso', 'TX', '2026-10-09T18:00:00.000Z', '2026-10-09T18:00:00.000Z', '', '2026-10-09T18:00:00.000Z')`,
+  ).run(farDeliveryId, elPasoId);
+  const farPickupId = load({
+    number: "DH-FAR-NOW",
+    origin: "Dallas, TX",
+    destination: "Houston, TX",
+    pickup: tonight,
+    delivery: "2026-10-15T18:00:00.000Z",
+    driver: farDriverId,
+    truck: farTruckId,
+    status: "assigned",
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 1, 'pickup', ?, 'Dallas Dock', 'Dallas', 'TX', ?, ?, '', '')`,
+  ).run(farPickupId, dallasId, tonight, tonight);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T20:00:00.000Z', 32.92, -96.797, 'Dallas, TX', 'samsara')`,
+  ).run(farTruckId);
+  const farSuggestion = await buildDeadheadSuggestion(queries.getLoad(farPickupId)!);
+  assert.ok(farSuggestion);
+  assert.equal(farSuggestion.basis, "gps");
+  assert.match(farSuggestion.place, /Dallas/i);
+  assert.match(farSuggestion.alternativePlace, /El Paso/i);
+  const farSaved = await refreshLoadEmptyMiles(farPickupId);
+  assert.equal(farSaved.pending, true);
+  assert.equal(queries.getLoad(farPickupId)?.empty_confirmed, 0);
+
+  const zoneTruckId = queries.createTruck({
+    unit_number: "DH-ZONE",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const zoneDriverId = queries.createDriver({
+    name: "Zone Order",
+    phone: "555-0191",
+    license: "NY-ZONE",
+    pin: "1910",
+    truck_id: zoneTruckId,
+    status: "available",
+  });
+  const naiveLater = load({
+    number: "DH-NAIVE",
+    origin: "Buffalo, NY",
+    destination: "Albany, NY",
+    pickup: "2026-10-14T12:00:00.000Z",
+    delivery: "2026-10-14T18:00:00",
+    driver: zoneDriverId,
+    truck: zoneTruckId,
+  });
+  stop(naiveLater, 1, "delivery", "Albany Dock", "Albany", "NY", "2026-10-14T18:00:00", "", "2026-10-14T18:00:00");
+  const realPrior = load({
+    number: "DH-ZULU",
+    origin: "Chicago, IL",
+    destination: "Chicago, IL",
+    pickup: "2026-10-13T08:00:00.000Z",
+    delivery: "2026-10-13T16:00:00.000Z",
+    driver: zoneDriverId,
+    truck: zoneTruckId,
+  });
+  stop(realPrior, 1, "delivery", "Chicago Dock", "Chicago", "IL", "2026-10-13T16:00:00.000Z", "", "2026-10-13T16:00:00.000Z");
+  const zonePickupId = load({
+    number: "DH-ZONE-NOW",
+    origin: "Newark, NJ",
+    destination: "Boston, MA",
+    pickup: "2026-10-14T20:00:00.000Z",
+    delivery: "2026-10-15T12:00:00.000Z",
+    driver: zoneDriverId,
+    truck: zoneTruckId,
+    status: "assigned",
+  });
+  stop(zonePickupId, 1, "pickup", "Newark Dock", "Newark", "NJ", "2026-10-14T20:00:00.000Z");
+  const zoneSuggestion = await buildDeadheadSuggestion(queries.getLoad(zonePickupId)!);
+  assert.ok(zoneSuggestion);
+  assert.match(zoneSuggestion.place, /Chicago/i);
+  assert.doesNotMatch(zoneSuggestion.place, /Albany/i);
+
+  const { applyGeofenceArrivals } = await import("../lib/geofence");
+  const fenceTruckId = queries.createTruck({
+    unit_number: "DH-FENCE",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const fenceDriverId = queries.createDriver({
+    name: "Fence Window",
+    phone: "555-0192",
+    license: "NE-FENCE-W",
+    pin: "1920",
+    truck_id: fenceTruckId,
+    status: "available",
+  });
+  const hastingsDock = queries.createLocation({
+    name: "Hastings Cold",
+    street: "600 E 39th St",
+    city: "Hastings",
+    state: "NE",
+    zip: "68901",
+    phone: "",
+    notes: "",
+    role: "shipper",
+    scheduling_type: "appointment",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 40.586,
+    longitude: -98.39,
+  });
+  const freshFenceId = load({
+    number: "DH-FENCE-FRESH",
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    pickup: tonight,
+    delivery: "2026-10-16T18:00:00.000Z",
+    driver: fenceDriverId,
+    truck: fenceTruckId,
+    status: "dispatched",
+  });
+  const freshPickup = db
+    .prepare(
+      `INSERT INTO load_stops (
+         load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+       ) VALUES (?, 1, 'pickup', ?, 'Hastings Cold', 'Hastings', 'NE', ?, ?, '', '')`,
+    )
+    .run(freshFenceId, hastingsDock, tonight, tonight).lastInsertRowid;
+  db.prepare("UPDATE loads SET created_at = '2026-10-14T12:00:00.000Z' WHERE id = ?").run(freshFenceId);
+  db.prepare("UPDATE load_audit SET created_at = '2026-10-14T12:00:00.000Z' WHERE load_id = ?").run(freshFenceId);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-08-28T15:00:00.000Z', 40.586, -98.39, 'Hastings, NE', 'samsara')`,
+  ).run(fenceTruckId);
+  assert.equal(applyGeofenceArrivals(freshFenceId), 0);
+  assert.equal(
+    db.prepare("SELECT arrived_at FROM load_stops WHERE id = ?").get(freshPickup) &&
+      (db.prepare("SELECT arrived_at AS at FROM load_stops WHERE id = ?").get(freshPickup) as { at: string }).at,
+    "",
+  );
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T22:00:00.000Z', 40.586, -98.39, 'Hastings, NE', 'samsara')`,
+  ).run(fenceTruckId);
+  applyGeofenceArrivals(freshFenceId);
+  assert.equal(
+    (db.prepare("SELECT arrived_at AS at FROM load_stops WHERE id = ?").get(freshPickup) as { at: string }).at,
+    "2026-10-14T22:00:00.000Z",
+  );
+
+  const orderFenceId = load({
+    number: "DH-FENCE-ORDER",
+    origin: "Hastings, NE",
+    destination: "El Paso, TX",
+    pickup: "2026-10-14T12:00:00.000Z",
+    delivery: "2026-10-15T12:00:00.000Z",
+    driver: fenceDriverId,
+    truck: fenceTruckId,
+    status: "dispatched",
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 1, 'pickup', ?, 'Hastings Cold', 'Hastings', 'NE', '2026-10-14T12:00:00.000Z', '2026-10-14T12:00:00.000Z', '2026-10-14T12:00:00.000Z', '2026-10-14T18:00:00.000Z')`,
+  ).run(orderFenceId, hastingsDock);
+  const orderDelivery = db
+    .prepare(
+      `INSERT INTO load_stops (
+         load_id, sequence, kind, location_id, name, city, state, window_start, window_end, arrived_at, departed_at
+       ) VALUES (?, 2, 'delivery', ?, 'El Paso Dock', 'El Paso', 'TX', '2026-10-15T12:00:00.000Z', '2026-10-15T12:00:00.000Z', '', '')`,
+    )
+    .run(orderFenceId, elPasoId).lastInsertRowid;
+  db.prepare("UPDATE loads SET created_at = '2026-10-13T12:00:00.000Z' WHERE id = ?").run(orderFenceId);
+  db.prepare("UPDATE load_audit SET created_at = '2026-10-13T12:00:00.000Z' WHERE load_id = ?").run(orderFenceId);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T10:00:00.000Z', 31.7619, -106.485, 'El Paso, TX', 'samsara')`,
+  ).run(fenceTruckId);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T20:00:00.000Z', 31.7619, -106.485, 'El Paso, TX', 'samsara')`,
+  ).run(fenceTruckId);
+  applyGeofenceArrivals(orderFenceId);
+  assert.equal(
+    (db.prepare("SELECT arrived_at AS at FROM load_stops WHERE id = ?").get(orderDelivery) as { at: string }).at,
+    "2026-10-14T20:00:00.000Z",
+  );
 
   closeDb();
   console.log("deadhead confirm ok");
