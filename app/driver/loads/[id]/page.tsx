@@ -16,6 +16,7 @@ import { driverLoadHasAssignedTrailer } from "@/lib/driver-trailer";
 import { listLoadChatMessages } from "@/lib/load-chat";
 import { getLoad, locationsForLoad } from "@/lib/queries";
 import { ensureDefaultStops } from "@/lib/stops";
+import { driverSwapLegView } from "@/lib/driver-leg";
 import { driverAssignedToLoad, relayForDriver } from "@/lib/relay-store";
 import { formatRelayLane } from "@/lib/relays";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -38,6 +39,14 @@ export default async function DriverLoadPage({
   const load = getLoad(Number.parseInt((await params).id, 10));
   if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) notFound();
   const yourLeg = relayForDriver(load.id, driver.id);
+  const swapLeg = driverSwapLegView({
+    driverId: driver.id,
+    origin: load.origin,
+    destination: load.destination,
+    trailerNumber: load.trailer_number || load.trailer_unit || "",
+    truckUnit: load.truck_unit || "",
+    relay: yourLeg,
+  });
   const reefers = readStoredReeferSnapshots();
   const reeferSnap = reefers.readings.find((row) => row.loadId === load.id);
   const reefer = reeferSnap ? snapshotToReading(reeferSnap) : getDemoReeferForLoad(load.id);
@@ -45,7 +54,10 @@ export default async function DriverLoadPage({
   const attachments = listAttachments(load.id).filter((file) => !isCustomerRateDocument(file));
   const stopLocations = locationsForLoad(load);
   const reeferSpec = resolveReeferSpec(load);
-  const stops = ensureDefaultStops(load.id);
+  const stops = ensureDefaultStops(load.id).filter((stop) => {
+    if (!swapLeg) return true;
+    return swapLeg.role === "pickup" ? stop.kind === "pickup" : stop.kind === "delivery";
+  });
   const pickupStop = stops.find((stop) => stop.kind === "pickup") ?? null;
   const deliveryStop = stops.find((stop) => stop.kind === "delivery") ?? null;
   const lane = driverLaneEnds(load.origin, load.destination, pickupStop, deliveryStop);
@@ -73,7 +85,7 @@ export default async function DriverLoadPage({
         </div>
         <DriverAssistSheet className="min-h-10 px-3 text-sm" />
       </div>
-      {lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
+      {swapLeg ? <p className="mt-1 text-lg font-medium text-white">{swapLeg.lane}</p> : lane ? <p className="mt-1 text-lg font-medium text-white">{lane}</p> : null}
       {(() => {
         const ack = load.driver_id === driver.id ? presentDispatchAck(load) : null;
         if (!ack || ack.state === "none") return null;
@@ -84,7 +96,13 @@ export default async function DriverLoadPage({
           />
         );
       })()}
-      {yourLeg ? (
+      {swapLeg ? (
+        <p className="driver-sheet mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium">
+          Swap {swapLeg.swapPoint}
+          {swapLeg.swapAt ? ` · ${formatDateTime(swapLeg.swapAt)}` : ""}
+          {swapLeg.trailer ? ` · Trailer ${swapLeg.trailer}` : ""}
+        </p>
+      ) : yourLeg ? (
         <p className="driver-sheet mt-1 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium">
           Your leg: {formatRelayLane(yourLeg.pickup, yourLeg.delivery)}
         </p>
@@ -129,11 +147,14 @@ export default async function DriverLoadPage({
       </section>
 
       <section className="driver-sheet mt-5 rounded-2xl bg-white p-4 shadow-sm">
-        <Row label="Pickup" value={pickupWhen} />
-        <Row label="Delivery" value={deliveryWhen} />
+        {swapLeg?.role === "delivery" ? null : <Row label="Pickup" value={pickupWhen} />}
+        {swapLeg ? (
+          <Row label="Swap" value={swapLeg.swapAt ? `${swapLeg.swapPoint} · ${formatDateTime(swapLeg.swapAt)}` : swapLeg.swapPoint || "—"} />
+        ) : null}
+        {swapLeg?.role === "pickup" ? null : <Row label="Delivery" value={deliveryWhen} />}
         <Row label="Commodity" value={load.commodity || "—"} />
         <Row label="Weight" value={formatWeight(load.weight)} />
-        {driverFacingPay(load) != null ? (
+        {!swapLeg && driverFacingPay(load) != null ? (
           <Row label="Your pay" value={formatMoney(driverFacingPay(load))} />
         ) : null}
         <div className="border-b border-slate-100 py-2 last:border-0">
@@ -145,7 +166,7 @@ export default async function DriverLoadPage({
           label="Ref / PO"
           value={stops.map((stop) => driverFacingStopPo(stop, load)).filter(Boolean).join(" · ") || "—"}
         />
-        <Row label="Trailer" value={load.trailer_number || load.trailer_unit || "—"} />
+        <Row label="Trailer" value={swapLeg?.trailer || load.trailer_number || load.trailer_unit || "—"} />
         {reeferSpec.isReefer ? (
           <>
             <Row label="Setpoint" value={formatReeferSetpoint(reeferSpec.setpointF) || "—"} />
@@ -196,8 +217,12 @@ export default async function DriverLoadPage({
         </section>
       )}
 
-      <DriverSchedulingBlock title="Pickup scheduling" location={stopLocations.shipper} />
-      <DriverSchedulingBlock title="Delivery scheduling" location={stopLocations.consignee} />
+      {swapLeg?.role === "delivery" ? null : (
+        <DriverSchedulingBlock title="Pickup scheduling" location={stopLocations.shipper} />
+      )}
+      {swapLeg?.role === "pickup" ? null : (
+        <DriverSchedulingBlock title="Delivery scheduling" location={stopLocations.consignee} />
+      )}
 
       {load.appointment_notes ? (
         <section className="driver-sheet mt-3 rounded-2xl bg-amber-50 p-4">

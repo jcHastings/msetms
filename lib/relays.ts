@@ -20,6 +20,11 @@ export type LoadRelay = {
   relay_lat: number | null;
   relay_lng: number | null;
   relay_address: string | null;
+  swap_id: number | null;
+  miles_source: string;
+  miles_locked: number;
+  from_leg_state_miles: string;
+  to_leg_state_miles: string;
   created_at: string;
   updated_at: string;
 };

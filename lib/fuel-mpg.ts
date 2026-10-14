@@ -20,6 +20,7 @@ import {
   type TruckEngineHourReading,
   type TruckOdometerReading,
 } from "./queries";
+import { swapLoadedMilesForAssignment } from "./load-swap";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import type { LoadView } from "./types";
 
@@ -112,6 +113,13 @@ export function googleMilesForDriverInRange(
   let total = 0;
   let found = false;
   for (const load of loads) {
+    const swapMiles = swapLoadedMilesForAssignment(load.id, driverId, truckId);
+    if (swapMiles != null) {
+      if (!loadTouchesMpgWindow(load, startIso, endIso) || !(swapMiles > 0)) continue;
+      total += swapMiles;
+      found = true;
+      continue;
+    }
     if (load.driver_id !== driverId && (truckId == null || load.truck_id !== truckId)) continue;
     if (!loadTouchesMpgWindow(load, startIso, endIso)) continue;
     const miles = officialGoogleMilesForLoad(load);
