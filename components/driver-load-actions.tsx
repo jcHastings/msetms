@@ -43,11 +43,12 @@ export function DriverLoadActions({
   const [otherOpen, setOtherOpen] = useState(false);
   const [note, setNote] = useState("");
   const [podOnFile, setPodOnFile] = useState(hasPod);
-  const buttons = driverStopButtons(stops);
-
-  useEffect(() => {
+  const [podFromServer, setPodFromServer] = useState(hasPod);
+  if (hasPod !== podFromServer) {
+    setPodFromServer(hasPod);
     setPodOnFile(hasPod);
-  }, [hasPod]);
+  }
+  const buttons = driverStopButtons(stops);
 
   useEffect(() => {
     if (!podStop) return;
@@ -133,13 +134,13 @@ export function DriverLoadActions({
       ) : null}
 
       {podStop ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80" role="presentation">
+        <div className="fixed inset-0 z-50 bg-slate-950/80" role="presentation">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="pod-delivery-title"
             data-pod-delivery-sheet=""
-            className="mx-auto min-h-full w-full max-w-lg bg-white px-4 pb-10 pt-5 text-slate-900"
+            className="mx-auto h-full min-h-full w-full max-w-lg overflow-y-auto bg-white px-4 pb-10 pt-5 text-slate-900"
           >
             <h2 id="pod-delivery-title" className="text-2xl font-semibold">
               Proof of delivery
