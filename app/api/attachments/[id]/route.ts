@@ -26,12 +26,15 @@ export async function GET(
 ) {
   const dispatcher = await getSignedInDispatcher();
   const driver = dispatcher ? null : await driverFromCookieOrBearer(request);
-  if (!dispatcher && !driver) {
-    return unauthorizedResponse();
-  }
   const attachment = getAttachment(Number.parseInt((await params).id, 10));
   if (!attachment) {
     return new Response("Not found", { status: 404 });
+  }
+  if (!dispatcher && isCustomerRateDocument(attachment)) {
+    return new Response("Not found", { status: 404 });
+  }
+  if (!dispatcher && !driver) {
+    return unauthorizedResponse();
   }
   if (driver) {
     const load = getLoad(attachment.load_id);
@@ -41,9 +44,6 @@ export async function GET(
     const receiptOwner = reimbursementDriverForAttachment(attachment.id);
     if (receiptOwner != null && receiptOwner !== driver.id) {
       return new Response("Forbidden", { status: 403 });
-    }
-    if (driver && isCustomerRateDocument(attachment)) {
-      return new Response("Not found", { status: 404 });
     }
     if (!driverMaySeeAttachment(attachment, driver)) {
       return new Response("Not found", { status: 404 });
