@@ -13,6 +13,7 @@ import {
 import { computeOwnerOperatorPay, impliedOwnerOperatorPercent } from "./settlement";
 import { statementIdentityBlockMessage, usableArEmail } from "./carrier-identity";
 import { formatCompanyAddress, getCarrierAuthority, getCompanySettings } from "./settings";
+import { emptyMilesPending } from "./empty-miles-shared";
 import { isOwnerOperator, labelForDriverKind, normalizeDriverKind, type DriverWithTruck, type LoadView } from "./types";
 
 /**
@@ -53,6 +54,8 @@ export type SettlementLoadLine = {
   pickup: string;
   delivery: string;
   miles: number | null;
+  /** Display only. "Empty Pending" until deadhead is confirmed. Pay still uses loaded miles. */
+  emptyLabel: string;
   linehaul: number | null;
   ooPercent: number | null;
   basis: string;
@@ -307,6 +310,7 @@ export function buildSettlement(driverId: number, weekInput?: string | null, now
       pickup: (load.pickup_start || "").slice(0, 10),
       delivery: (load.delivery_end || load.delivery_start || "").slice(0, 10),
       miles: load.route_miles != null && load.route_miles > 0 ? load.route_miles : null,
+      emptyLabel: emptyMilesPending(load) ? "Empty Pending" : "",
       linehaul: linehaul.amount,
       ooPercent: linehaul.ooPercent,
       basis: linehaul.basis,

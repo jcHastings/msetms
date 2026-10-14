@@ -564,6 +564,14 @@ export type Load = {
   empty_calculated_at: string;
   empty_source: string;
   empty_polyline: string;
+  /** 1 after a dispatcher confirms the deadhead start. 0 keeps stored miles out of IFTA. */
+  empty_confirmed: number;
+  /** JSON suggestion. Deadhead is never written into empty_miles until confirmed. */
+  empty_suggestion: string;
+  /** its | manual | blank. manual means a dispatcher edited the pickup window. */
+  pickup_schedule_source: string;
+  /** its | manual | blank. manual means a dispatcher edited the delivery window. */
+  delivery_schedule_source: string;
   tms_invoice_number: string;
   tms_invoice_at: string;
   samsara_route_id: string;

@@ -121,7 +121,12 @@ function drawSettlement(doc: PDFKit.PDFDocument, statement: SettlementStatement)
       line.loadNumber,
       pdfPlain(line.lane),
       dates || "-",
-      line.miles != null ? String(Math.round(line.miles * 10) / 10) : "-",
+      [
+        line.miles != null ? String(Math.round(line.miles * 10) / 10) : "-",
+        line.emptyLabel,
+      ]
+        .filter(Boolean)
+        .join(" "),
       moneyOrBlank(line.linehaul),
     ];
     if (showPercent) cells.push(percentLabel(line.ooPercent));

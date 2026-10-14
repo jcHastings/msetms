@@ -207,12 +207,18 @@ async function main() {
       before,
       "empty-miles reads must not stamp arrival or departure on this load or any other",
     );
+    const { parseDeadheadSuggestion } = await import("../lib/empty-miles-shared");
     const savedAfterEmpty = getLoad(savedLoadId);
-    assert.match(savedAfterEmpty?.empty_from ?? "", /Kansas City/i);
-    assert.match(savedAfterEmpty?.empty_to ?? "", /Omaha/i);
+    const savedSuggestion = parseDeadheadSuggestion(savedAfterEmpty?.empty_suggestion);
+    assert.equal(savedAfterEmpty?.empty_confirmed, 0);
+    assert.equal(savedAfterEmpty?.empty_miles ?? null, null);
+    assert.match(savedSuggestion?.from ?? "", /Kansas City/i);
+    assert.match(savedSuggestion?.to ?? "", /Omaha/i);
     const nextAfterEmpty = getLoad(loadIds[SAVED_INDEX + 1]);
-    assert.match(nextAfterEmpty?.empty_from ?? "", /Kansas City/i);
-    assert.match(nextAfterEmpty?.empty_to ?? "", /Omaha/i);
+    const nextSuggestion = parseDeadheadSuggestion(nextAfterEmpty?.empty_suggestion);
+    assert.equal(nextAfterEmpty?.empty_confirmed, 0);
+    assert.match(nextSuggestion?.from ?? "", /Kansas City/i);
+    assert.match(nextSuggestion?.to ?? "", /Omaha/i);
 
     const { refreshLoadRouteQuiet } = await import("../lib/routing");
     fetchCalls = 0;

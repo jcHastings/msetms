@@ -45,6 +45,7 @@ export const ITS_IMPORT_ISSUES = {
   unmapped_status: "ITS import — unmapped status",
   unparsable_row: "ITS import — unparsable row",
   stop_parse_uncertain: "ITS import — stop parse uncertain",
+  its_update_held: "ITS import — update not applied",
   "duplicate-conflict": "ITS import — duplicate conflict",
 } as const;
 

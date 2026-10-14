@@ -23,6 +23,8 @@ export type LoadStop = {
   departed_at: string;
   delivered: number;
   schedule_type: string;
+  /** its | manual | blank. manual means a dispatcher edited this stop's window. */
+  schedule_source?: string;
 };
 
 export type StopInput = {

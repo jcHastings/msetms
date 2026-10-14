@@ -54,6 +54,7 @@ import {
   assignLoadDispatcher,
   cloneLoad,
   getLoad,
+  getLocation,
   markInvoicePaid,
   setLoadDocsRequested,
   setLoadWatched,
@@ -631,6 +632,46 @@ export async function deleteStopAction(formData: FormData): Promise<void> {
       await refreshLoadRouteQuiet(stop.load_id);
     }
     refresh();
+  });
+}
+
+export async function confirmDeadheadAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      if (!loadId) throw new Error("Load is missing.");
+      const mode = String(formData.get("mode") ?? "confirm");
+      let place = "";
+      if (mode === "edit") {
+        const address = String(formData.get("address") ?? "").trim();
+        const locationId = parseOptionalInt(formData.get("location_id"));
+        if (address) {
+          place = address;
+        } else if (locationId) {
+          const location = getLocation(locationId);
+          if (!location) throw new Error("That location is not in the directory.");
+          const { formatLocationAddress, formatLocationCityState } = await import("./locations");
+          place = formatLocationAddress(location) || formatLocationCityState(location);
+        }
+        if (!place) throw new Error("Pick a location or type an address.");
+      }
+      const { confirmLoadDeadhead } = await import("./empty-miles");
+      const guide = await confirmLoadDeadhead(loadId, place || undefined);
+      recordLoadAudit({
+        loadId,
+        action: "update",
+        field: "empty_miles",
+        newValue: guide.from || "confirmed",
+      });
+      refresh();
+      return { ok: true, id: loadId, message: "Deadhead start confirmed." };
+    } catch (error) {
+      return fail(error);
+    }
   });
 }
 

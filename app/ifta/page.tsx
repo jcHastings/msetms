@@ -75,7 +75,11 @@ export default async function IftaPage({
           <Stat label="Fuel gallons" value={estimate.fuelGallons.toLocaleString("en-US")} />
           <Stat label="Fuel dollars" value={formatMoney(estimate.fuelAmount)} />
           <Stat label="Loaded miles" value={`${estimate.loadedMiles.toLocaleString("en-US")} mi`} />
-          <Stat label="Empty miles" value={`${estimate.emptyMiles.toLocaleString("en-US")} mi`} />
+          <Stat
+            label="Empty miles"
+            value={`${estimate.emptyMiles.toLocaleString("en-US")} mi`}
+            note={estimate.emptyPendingLoads > 0 ? "Pending" : ""}
+          />
           <Stat label="Total miles" value={`${estimate.miles.toLocaleString("en-US")} mi`} />
         </div>
       </section>
@@ -147,7 +151,7 @@ export default async function IftaPage({
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="zone-left px-5 py-2 font-semibold">{row.name}</td>
                   <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
-                  <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{emptyMilesLabel(row.empty, row.emptyPending)}</td>
                   <td className="zone-right zone-right-0 px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
                 </tr>
               ))}
@@ -179,7 +183,7 @@ export default async function IftaPage({
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="zone-left px-5 py-2 font-semibold">{row.name}</td>
                   <td className="px-5 py-2 tabular-nums">{row.loaded.toLocaleString("en-US")} mi</td>
-                  <td className="px-5 py-2 tabular-nums">{row.empty.toLocaleString("en-US")} mi</td>
+                  <td className="px-5 py-2 tabular-nums">{emptyMilesLabel(row.empty, row.emptyPending)}</td>
                   <td className="zone-right zone-right-0 px-5 py-2 tabular-nums">{row.total.toLocaleString("en-US")} mi</td>
                 </tr>
               ))}
@@ -210,7 +214,7 @@ export default async function IftaPage({
                 <span className="ml-2 text-sm text-slate-600">{item.lane}</span>
                 <div className="mt-1 text-xs text-slate-500">
                   Loaded {item.loaded} mi
-                  {item.empty > 0 ? ` · Empty ${item.empty} mi` : ""}
+                  {item.emptyPending ? " · Empty Pending" : item.empty > 0 ? ` · Empty ${item.empty} mi` : ""}
                   {item.emptyLane ? ` · ${item.emptyLane}` : ""}
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
@@ -228,11 +232,18 @@ export default async function IftaPage({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function emptyMilesLabel(empty: number, pending: number): string {
+  if (pending > 0 && empty <= 0) return "Pending";
+  if (pending > 0) return `${empty.toLocaleString("en-US")} mi, Pending`;
+  return `${empty.toLocaleString("en-US")} mi`;
+}
+
+function Stat({ label, value, note = "" }: { label: string; value: string; note?: string }) {
   return (
     <div className="rounded-lg border border-slate-200 px-3 py-2">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
+      {note ? <div className="text-xs font-semibold text-amber-800">{note}</div> : null}
     </div>
   );
 }

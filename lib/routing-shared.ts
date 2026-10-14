@@ -174,8 +174,10 @@ export function emptyStateMilesFromLoad(load: {
   empty_source?: string | null;
   empty_state_miles?: string | null;
   empty_polyline?: string | null;
+  empty_confirmed?: number | boolean | null;
 }): RouteStateMile[] {
-  if (officialEmptyMiles(load.empty_miles, load.empty_source) == null) return [];
+  if (load.empty_confirmed === 0 || load.empty_confirmed === false) return [];
+  if (officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed) == null) return [];
   const encoded = String(load.empty_polyline ?? "").trim();
   if (!encoded) return [];
   return stateMilesFromPolyline(encoded, load.empty_miles);
@@ -245,7 +247,14 @@ export function isOfficialDrivingRoute(
   return "google";
 }
 
-export function officialEmptyMiles(miles: number | null | undefined, source: string | null | undefined): number | null {
+export function officialEmptyMiles(
+  miles: number | null | undefined,
+  source: string | null | undefined,
+  confirmed?: number | boolean | null,
+): number | null {
+  // Omitted means the caller has no confirmation flag (older helpers and fixtures).
+  // An explicit 0 keeps stored deadhead out of IFTA until a dispatcher confirms it.
+  if (confirmed === 0 || confirmed === false) return null;
   if (source === "google") return miles ?? null;
   if (miles == null) return null;
   if (miles === 0) return 0;

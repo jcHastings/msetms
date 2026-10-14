@@ -8,13 +8,16 @@ import {
   type ReportExportColumn,
 } from "./reports-shared";
 import { buildXlsxFromGrid } from "./xlsx-first-sheet";
+import { emptyMilesPending } from "./empty-miles-shared";
 import { officialEmptyMiles, routeGuideFromLoad } from "./routing-shared";
 import { isOwnerOperator, type LoadView } from "./types";
 
-function officialExportMiles(load: LoadView): { loaded: number | null; empty: number | null } {
+function officialExportMiles(load: LoadView): { loaded: number | null; empty: number | null; emptyPending: boolean } {
+  const emptyPending = emptyMilesPending(load);
   return {
     loaded: routeGuideFromLoad(load).totalMiles,
-    empty: officialEmptyMiles(load.empty_miles, load.empty_source),
+    empty: emptyPending ? null : officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed),
+    emptyPending,
   };
 }
 
@@ -56,6 +59,13 @@ function driverPay(load: LoadView): number {
   return 0;
 }
 
+function exportEmptyMiles(load: LoadView, include: boolean): string | number {
+  if (!include) return "";
+  const miles = officialExportMiles(load);
+  if (miles.emptyPending) return "Pending";
+  return miles.empty ?? "";
+}
+
 function baseRow(load: LoadView, allocated: number | null, driverName: string): ReportExportRow {
   return {
     load_number: load.load_number,
@@ -70,7 +80,7 @@ function baseRow(load: LoadView, allocated: number | null, driverName: string): 
     trailer: load.trailer_unit ?? "",
     dispatcher: load.dispatcher_name ?? "",
     miles: officialExportMiles(load).loaded ?? "",
-    empty_miles: officialExportMiles(load).empty ?? "",
+    empty_miles: exportEmptyMiles(load, true),
     revenue: load.rate ?? 0,
     driver_pay: driverPay(load),
     allocated_revenue: allocated ?? "",
@@ -92,7 +102,7 @@ export function listReportExportRows(filters: ReportExportFilters): ReportExport
             origin: leg.origin,
             destination: leg.destination,
             miles: leg.miles ?? "",
-            empty_miles: leg.driverId === load.driver_id ? officialExportMiles(load).empty ?? "" : "",
+            empty_miles: exportEmptyMiles(load, leg.driverId === load.driver_id),
             allocated_revenue: leg.allocatedRevenue ?? "",
           });
         }

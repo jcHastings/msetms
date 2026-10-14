@@ -947,6 +947,14 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "empty_calculated_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "empty_source", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "empty_polyline", "TEXT NOT NULL DEFAULT ''");
+  // Existing computed deadhead stays in empty_miles. empty_confirmed defaults to 0
+  // so those miles stay out of IFTA, empty-mile reports, and settlement empty miles
+  // until a dispatcher confirms the start.
+  ensureColumn(db, "loads", "empty_confirmed", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "loads", "empty_suggestion", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "pickup_schedule_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "delivery_schedule_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "schedule_source", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "tms_invoice_number", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "tms_invoice_at", "TEXT NOT NULL DEFAULT ''");
   db.prepare("UPDATE dispatchers SET name = 'MS Test' WHERE name = 'Ana G' AND pin = '4020'").run();

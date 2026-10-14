@@ -30,6 +30,7 @@ import {
   mapLoadRecord,
   recordsFromLoadSheetText,
   statusMovesBackwards,
+  type CityLocationRecord,
   type ImportedStop,
   type LoadImportValues,
 } from "./load-import-shared";
@@ -152,12 +153,27 @@ type PlannedStop = {
   phone: string;
   window_start: string;
   window_end: string;
+  state_ambiguous?: boolean;
+};
+
+type StopWindowUpdate = {
+  id: number;
+  window_start: string;
+  window_end: string;
+};
+
+type HeldChange = {
+  field: string;
+  from: string;
+  to: string;
+  reason: "closed" | "manual";
 };
 
 type StopRow = PlannedStop & {
   id: number;
   arrived_at: string;
   departed_at: string;
+  schedule_source: string;
 };
 
 type Change = {
@@ -312,10 +328,11 @@ export function importItsRecords(
 ): ItsImportSummary {
   const options = itsImportOptions(partial);
   const summary = emptyItsImportSummary(options);
+  const locations = itsLocationRecords();
   const seen = new Map<string, LoadImportValues | { bad: string }>();
   let anonymous = 0;
   for (const record of records) {
-    const value = mapLoadRecord(record);
+    const value = mapLoadRecord(record, locations);
     if (!isPlausibleLoadNumber(value.load_number)) {
       anonymous += 1;
       const key = `row-${anonymous}`;
@@ -471,7 +488,11 @@ export function importItsValues(
     }
 
     const plan = planUpdate(existing, row, customers, truck, trailer, driver, options, summary);
-    if (plan.changes.length === 0 && plan.stopFills.length === 0) {
+    if (plan.held.length) {
+      issues.push({ issue: "its_update_held", detail: formatItsHeld(plan.held) });
+    }
+    const stopWork = plan.stopFills.length + plan.stopAdds.length + plan.stopWindows.length;
+    if (plan.changes.length === 0 && stopWork === 0) {
       if (options.apply) syncExceptions(row.load_number, issues, true);
       for (const issue of issues) noteException(summary, row.load_number, issue.issue, issue.detail, year);
       summary.unchanged += 1;
@@ -482,11 +503,16 @@ export function importItsValues(
     if (options.apply) {
       if (plan.changes.length) patchLoad(existing.id, plan.changes);
       if (plan.stopFills.length) applyStopFills(plan.stopFills);
-      recordLoadChanges(
-        existing.id,
-        "update",
-        plan.changes.map((change) => ({ field: change.field, oldValue: change.from, newValue: change.to })),
-      );
+      if (plan.stopWindows.length) applyStopWindows(plan.stopWindows);
+      for (const stop of plan.stopAdds) insertStop(existing.id, stop);
+      recordLoadChanges(existing.id, "update", [
+        ...plan.changes.map((change) => ({ field: change.field, oldValue: change.from, newValue: change.to })),
+        ...plan.stopAdds.map((stop) => ({
+          field: "stop",
+          oldValue: "",
+          newValue: `${stop.kind} ${stop.name} ${[stop.city, stop.state].filter(Boolean).join(", ")}`.trim(),
+        })),
+      ]);
       syncExceptions(row.load_number, issues, true);
     }
     for (const issue of issues) noteException(summary, row.load_number, issue.issue, issue.detail, year);
@@ -499,6 +525,15 @@ export function importItsValues(
         to: change.to,
       });
     }
+    for (const stop of plan.stopAdds) {
+      if (summary.diff_sample.length >= DIFF_SAMPLE_LIMIT) break;
+      summary.diff_sample.push({
+        load_number: row.load_number,
+        field: "stop",
+        from: "",
+        to: `${stop.kind} ${stop.name} ${[stop.city, stop.state].filter(Boolean).join(", ")}`.trim(),
+      });
+    }
     summary.updated += 1;
     bump(summary, year, "updated");
   }
@@ -509,6 +544,7 @@ type TaggedRow = ImportRow & { source_file: string };
 
 export function runItsImportFiles(filePaths: string[], partial?: Partial<ItsImportOptions>): ItsImportSummary {
   const options = itsImportOptions(partial);
+  const locations = itsLocationRecords();
   const tagged: TaggedRow[] = [];
   const fileSnapshots: ItsFileSnapshot[] = [];
   for (const filePath of filePaths) {
@@ -517,7 +553,7 @@ export function runItsImportFiles(filePaths: string[], partial?: Partial<ItsImpo
     const base = path.basename(filePath);
     fileSnapshots.push({ file: base, snapshot: resolved.snapshot, source: resolved.source });
     for (const record of readItsExportFile(filePath)) {
-      const value = mapLoadRecord(record);
+      const value = mapLoadRecord(record, locations);
       tagged.push({ ...value, source_file: base, snapshot: resolved.snapshot });
     }
   }
@@ -767,15 +803,48 @@ function planUpdate(
   driver: UnitMatch,
   options: ItsImportOptions,
   summary: ItsImportSummary,
-): { changes: Change[]; stopFills: StopFill[] } {
+): { changes: Change[]; stopFills: StopFill[]; stopAdds: PlannedStop[]; stopWindows: StopWindowUpdate[]; held: HeldChange[] } {
   const changes: Change[] = [];
+  const held: HeldChange[] = [];
   const customerId = row.customer_name.trim() ? ensureCustomer(row.customer_name, customers) : current.customer_id;
   if (customerId !== current.customer_id) {
     changes.push(change("customer_id", "customer", current.customer_id, customerId));
   }
-  const stopFills = row.stops_uncertain ? [] : blankStopFills(readStops(current.id), plannedStops(row));
-  fillBlankWindow(changes, current.pickup_start, current.pickup_end, row.ship_date, "pickup_start", "pickup_end");
-  fillBlankWindow(changes, current.delivery_start, current.delivery_end, row.del_date || row.ship_date, "delivery_start", "delivery_end");
+  const locked = itsScheduleLocked(current);
+  const handEdited = structureHandEdited(current.id);
+  const existingStops = readStops(current.id);
+  const planned = plannedStops(row);
+  const structural = !row.stops_unpairable;
+  const stopFills = structural ? blankStopFills(existingStops, planned, handEdited, held) : [];
+  const stopAdds = structural ? missingStops(existingStops, planned, locked, handEdited, held) : [];
+  const stopWindows = structural ? changedStopWindows(existingStops, planned, locked, handEdited, held) : [];
+  if (structural) considerPickupOrder(existingStops, planned, handEdited, held);
+  considerSchedule(
+    changes,
+    held,
+    locked,
+    handEdited,
+    current.pickup_schedule_source,
+    current.pickup_start,
+    current.pickup_end,
+    row.ship_date,
+    "pickup_start",
+    "pickup_end",
+    "pickup_schedule_source",
+  );
+  considerSchedule(
+    changes,
+    held,
+    locked,
+    handEdited,
+    current.delivery_schedule_source,
+    current.delivery_start,
+    current.delivery_end,
+    row.del_date || row.ship_date,
+    "delivery_start",
+    "delivery_end",
+    "delivery_schedule_source",
+  );
   if (row.notes && row.notes !== (current.notes ?? "")) {
     changes.push(change("notes", "notes", current.notes ?? "", row.notes));
   }
@@ -802,7 +871,7 @@ function planUpdate(
   noteSlot(summary, current, row, "driver", current.driver_id, current.driver_name || "", driver, changes);
   const rate = rateFill(current, row, options);
   if (rate) changes.push(rate);
-  return { changes, stopFills };
+  return { changes, stopFills, stopAdds, stopWindows, held };
 }
 
 function noteSlot(
@@ -844,18 +913,144 @@ function decideSlot(currentId: number | null, match: UnitMatch): { id: number | 
   return { id: match.id, reassign: true };
 }
 
-function fillBlankWindow(
+function itsScheduleLocked(load: LoadView): boolean {
+  if (load.status === "delivered" || load.status === "completed" || load.status === "accounting") return true;
+  if (text(load.tms_invoice_number)) return true;
+  if (text(load.qbo_invoice_id)) return true;
+  return false;
+}
+
+const STRUCTURAL_IMPORT_FIELDS = new Set([
+  "load",
+  "stop",
+  "pickup_start",
+  "pickup_end",
+  "delivery_start",
+  "delivery_end",
+  "pickup_schedule_source",
+  "delivery_schedule_source",
+]);
+
+type AuditStamp = {
+  id: number;
+  actor: string;
+  actor_kind: string;
+  action: string;
+  field: string;
+  old_value: string;
+  new_value: string;
+  created_at: string;
+};
+
+function auditBlob(row: AuditStamp): string {
+  return [row.actor, row.action, row.field, row.old_value, row.new_value].join("\n");
+}
+
+function mentionsHandEdit(row: AuditStamp): boolean {
+  return /hand-edited/i.test(auditBlob(row));
+}
+
+/** System rows that actually wrote stops, dates, or the load itself. A later PO or route audit is not an import. */
+function isItsImportAudit(row: AuditStamp): boolean {
+  if (row.action === "its_import") return true;
+  if (row.actor_kind !== "system") return false;
+  if (row.action !== "create" && row.action !== "update") return false;
+  return STRUCTURAL_IMPORT_FIELDS.has(row.field);
+}
+
+function isUserEdit(row: AuditStamp): boolean {
+  if (mentionsHandEdit(row)) return true;
+  return row.actor_kind === "dispatcher" || row.actor_kind === "driver";
+}
+
+function auditAfter(row: AuditStamp, stamp: string, id: number): boolean {
+  return row.created_at > stamp || (row.created_at === stamp && row.id > id);
+}
+
+/**
+ * Stops, dates, and pickup order stay put when a person edited the load after the last ITS import.
+ * A direct database fix counts too when the audit text says "hand-edited", even with no import row.
+ */
+function structureHandEdited(loadId: number): boolean {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, actor, actor_kind, action, field, old_value, new_value, created_at
+       FROM load_audit WHERE load_id = ? ORDER BY created_at ASC, id ASC`,
+    )
+    .all(loadId) as AuditStamp[];
+  let lastImportAt = "";
+  let lastImportId = 0;
+  let foundImport = false;
+  for (const row of rows) {
+    if (!isItsImportAudit(row)) continue;
+    foundImport = true;
+    lastImportAt = row.created_at;
+    lastImportId = row.id;
+  }
+  return rows.some((row) => {
+    if (!isUserEdit(row)) return false;
+    if (!foundImport) return mentionsHandEdit(row);
+    return auditAfter(row, lastImportAt, lastImportId);
+  });
+}
+
+/** Move a stored timestamp onto an ITS day and keep the clock. A blank field becomes 08:00 or 17:00. */
+function shiftOntoDay(current: string, day: string, fallbackTime: string): string {
+  const trimmed = text(current);
+  if (!trimmed) return `${day}T${fallbackTime}`;
+  const marker = trimmed.indexOf("T");
+  const clock = marker >= 0 ? trimmed.slice(marker + 1).replace(/Z$/, "") : fallbackTime;
+  return `${day}T${clock || fallbackTime}`;
+}
+
+function considerSchedule(
   changes: Change[],
+  held: HeldChange[],
+  locked: boolean,
+  handEdited: boolean,
+  source: string | null | undefined,
   currentStart: string,
   currentEnd: string,
   day: string,
   startColumn: "pickup_start" | "delivery_start",
   endColumn: "pickup_end" | "delivery_end",
+  sourceColumn: "pickup_schedule_source" | "delivery_schedule_source",
 ): void {
   if (!day) return;
-  const [start, end] = windowForDate(day);
-  if (!text(currentStart)) changes.push(change(startColumn, startColumn, currentStart, start));
-  if (!text(currentEnd)) changes.push(change(endColumn, endColumn, currentEnd, end));
+  const nextStart = shiftOntoDay(currentStart, day, "08:00:00");
+  const nextEnd = shiftOntoDay(currentEnd, day, "17:00:00");
+  const manual = text(source) === "manual" || handEdited;
+  const reason: HeldChange["reason"] = manual ? "manual" : "closed";
+  let touched = false;
+  if (text(currentStart) !== nextStart) {
+    if (locked || manual) {
+      held.push({ field: startColumn, from: text(currentStart), to: nextStart, reason });
+    } else {
+      changes.push(change(startColumn, startColumn, currentStart, nextStart));
+      touched = true;
+    }
+  }
+  if (text(currentEnd) !== nextEnd) {
+    if (locked || manual) {
+      held.push({ field: endColumn, from: text(currentEnd), to: nextEnd, reason });
+    } else {
+      changes.push(change(endColumn, endColumn, currentEnd, nextEnd));
+      touched = true;
+    }
+  }
+  if (touched) changes.push(change(sourceColumn, sourceColumn, source ?? "", "its"));
+}
+
+function formatItsHeld(held: HeldChange[]): string {
+  const lines = held.map((row) => {
+    const why = row.reason === "manual" ? "edited by hand" : "load is delivered or invoiced";
+    return `${row.field}: ${row.from || "(blank)"} -> ${row.to || "(blank)"} (${why})`;
+  });
+  return `ITS changed this load. Not applied.\n${lines.join("\n")}`;
+}
+
+function itsLocationRecords(): CityLocationRecord[] {
+  return getDb().prepare("SELECT name, city, state FROM locations").all() as CityLocationRecord[];
 }
 
 function rateFill(current: { rate: number | null }, row: LoadImportValues, options: ItsImportOptions): Change | null {
@@ -896,8 +1091,8 @@ function insertLoad(
         pickup_start, pickup_end, delivery_start, delivery_end,
         commodity, rate, notes, status, truck_id, driver_id,
         reference_number, po_number, customer_reference, trailer_number, trailer_id, equipment,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pickup_schedule_source, delivery_schedule_source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       row.load_number,
@@ -908,6 +1103,7 @@ function insertLoad(
       pickupEnd,
       deliveryStart,
       deliveryEnd,
+      "",
       rate,
       row.notes,
       row.status_mapped ? row.status : "hold",
@@ -919,6 +1115,8 @@ function insertLoad(
       trailer.tmsUnit,
       trailerId,
       row.equipment,
+      "its",
+      "its",
       stamp,
       stamp,
     );
@@ -944,6 +1142,8 @@ const PATCH_COLUMNS = new Set([
   "driver_id",
   "equipment",
   "rate",
+  "pickup_schedule_source",
+  "delivery_schedule_source",
 ]);
 
 function patchLoad(loadId: number, changes: Change[]): void {
@@ -957,7 +1157,7 @@ function patchLoad(loadId: number, changes: Change[]): void {
 
 const STOP_FILL_FIELDS = ["name", "street", "city", "state", "zip", "phone"] as const;
 
-function blankStopFills(existing: StopRow[], planned: PlannedStop[]): StopFill[] {
+function blankStopFills(existing: StopRow[], planned: PlannedStop[], handEdited: boolean, held: HeldChange[]): StopFill[] {
   const fills: StopFill[] = [];
   for (const kind of ["pickup", "delivery"] as const) {
     const current = existing.filter((stop) => stop.kind === kind);
@@ -966,7 +1166,7 @@ function blankStopFills(existing: StopRow[], planned: PlannedStop[]): StopFill[]
     for (let index = 0; index < count; index += 1) {
       const prior = current[index];
       const stop = next[index];
-      if (!prior || !stop) continue;
+      if (!prior || !stop || stop.state_ambiguous) continue;
       const fill: StopFill = { id: prior.id };
       let any = false;
       for (const field of STOP_FILL_FIELDS) {
@@ -975,7 +1175,17 @@ function blankStopFills(existing: StopRow[], planned: PlannedStop[]): StopFill[]
           any = true;
         }
       }
-      if (any) fills.push(fill);
+      if (!any) continue;
+      if (handEdited) {
+        held.push({
+          field: `${kind} stop ${stopLabel(prior)}`,
+          from: "(blank fields)",
+          to: stopLabel(stop),
+          reason: "manual",
+        });
+        continue;
+      }
+      fills.push(fill);
     }
   }
   return fills;
@@ -994,10 +1204,124 @@ function applyStopFills(fills: StopFill[]): void {
 function readStops(loadId: number): StopRow[] {
   return getDb()
     .prepare(
-      `SELECT id, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at
+      `SELECT id, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at, schedule_source
        FROM load_stops WHERE load_id = ? ORDER BY sequence, id`,
     )
     .all(loadId) as StopRow[];
+}
+
+function normStopPart(value: string | null | undefined): string {
+  return text(value).toLowerCase().replace(/\s+/g, " ");
+}
+
+function sameImportedStop(existing: StopRow, planned: PlannedStop): boolean {
+  if (existing.kind !== planned.kind) return false;
+  const cityA = normStopPart(existing.city);
+  const cityB = normStopPart(planned.city);
+  const nameA = normStopPart(existing.name);
+  const nameB = normStopPart(planned.name);
+  if (cityA && cityB && cityA !== cityB) return false;
+  if (nameA && nameB && nameA !== nameB) return false;
+  return Boolean((cityA && cityA === cityB) || (nameA && nameA === nameB));
+}
+
+function stopLabel(stop: PlannedStop): string {
+  return `${stop.name} ${[stop.city, stop.state].filter(Boolean).join(", ")}`.trim();
+}
+
+function isPlaceholderStop(stop: PlannedStop): boolean {
+  const name = text(stop.name);
+  if ((name === "Pickup" || name === "Delivery") && !text(stop.city) && !text(stop.state)) return true;
+  return !text(stop.city) && !text(stop.name);
+}
+
+function missingStops(
+  existing: StopRow[],
+  planned: PlannedStop[],
+  locked: boolean,
+  handEdited: boolean,
+  held: HeldChange[],
+): PlannedStop[] {
+  const adds: PlannedStop[] = [];
+  for (const stop of planned) {
+    if (stop.state_ambiguous || isPlaceholderStop(stop)) continue;
+    if (existing.some((row) => sameImportedStop(row, stop))) continue;
+    if (locked || handEdited) {
+      held.push({
+        field: `stop ${stop.kind}`,
+        from: "(missing)",
+        to: stopLabel(stop),
+        reason: handEdited ? "manual" : "closed",
+      });
+      continue;
+    }
+    adds.push(stop);
+  }
+  return adds;
+}
+
+function orderKey(stop: { city: string; name: string }): string {
+  return normStopPart(stop.city) || normStopPart(stop.name);
+}
+
+/** ITS pickup order is a diff only. The stored sequence, including a GPS drive order, is left as it is. */
+function considerPickupOrder(existing: StopRow[], planned: PlannedStop[], handEdited: boolean, held: HeldChange[]): void {
+  if (!handEdited) return;
+  const stored = existing.filter((stop) => stop.kind === "pickup" && !isPlaceholderStop(stop));
+  const incoming = planned.filter((stop) => stop.kind === "pickup" && !stop.state_ambiguous && !isPlaceholderStop(stop));
+  const storedKeys = stored.map(orderKey).filter(Boolean);
+  const incomingKeys = incoming.map(orderKey).filter(Boolean);
+  const incomingSet = new Set(incomingKeys);
+  const storedSet = new Set(storedKeys);
+  const storedOverlap = storedKeys.filter((key) => incomingSet.has(key));
+  const incomingOverlap = incomingKeys.filter((key) => storedSet.has(key));
+  if (storedOverlap.length < 2 || storedOverlap.join("\n") === incomingOverlap.join("\n")) return;
+  held.push({
+    field: "pickup order",
+    from: stored.map((stop) => stopLabel(stop)).join(" | "),
+    to: incoming.map((stop) => stopLabel(stop)).join(" | "),
+    reason: "manual",
+  });
+}
+
+function changedStopWindows(
+  existing: StopRow[],
+  planned: PlannedStop[],
+  locked: boolean,
+  handEdited: boolean,
+  held: HeldChange[],
+): StopWindowUpdate[] {
+  const updates: StopWindowUpdate[] = [];
+  const used = new Set<number>();
+  for (const stop of planned) {
+    if (stop.state_ambiguous || isPlaceholderStop(stop)) continue;
+    const match = existing.find((row) => !used.has(row.id) && sameImportedStop(row, stop));
+    if (!match) continue;
+    used.add(match.id);
+    const nextStart = shiftOntoDay(match.window_start, stop.window_start.slice(0, 10), "08:00:00");
+    const nextEnd = shiftOntoDay(match.window_end, stop.window_end.slice(0, 10), "17:00:00");
+    if (text(match.window_start) === nextStart && text(match.window_end) === nextEnd) continue;
+    const manual = text(match.schedule_source) === "manual" || handEdited;
+    if (locked || manual) {
+      held.push({
+        field: `${stop.kind} window ${stopLabel(stop)}`,
+        from: `${text(match.window_start)} - ${text(match.window_end)}`,
+        to: `${nextStart} - ${nextEnd}`,
+        reason: manual ? "manual" : "closed",
+      });
+      continue;
+    }
+    updates.push({ id: match.id, window_start: nextStart, window_end: nextEnd });
+  }
+  return updates;
+}
+
+function applyStopWindows(updates: StopWindowUpdate[]): void {
+  for (const update of updates) {
+    getDb()
+      .prepare("UPDATE load_stops SET window_start = ?, window_end = ?, schedule_source = 'its' WHERE id = ?")
+      .run(update.window_start, update.window_end, update.id);
+  }
 }
 
 function plannedStops(row: LoadImportValues): PlannedStop[] {
@@ -1026,6 +1350,7 @@ function stopPlan(stop: ImportedStop, windowStart: string, windowEnd: string): P
     phone: stop.phone ?? "",
     window_start: windowStart,
     window_end: windowEnd,
+    state_ambiguous: Boolean(stop.state_ambiguous),
   };
 }
 
@@ -1040,8 +1365,8 @@ function insertStop(loadId: number, stop: PlannedStop): void {
   getDb()
     .prepare(
       `INSERT INTO load_stops (
-        load_id, sequence, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')`,
+        load_id, sequence, kind, name, street, city, state, zip, phone, window_start, window_end, arrived_at, departed_at, schedule_source
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', 'its')`,
     )
     .run(
       loadId,

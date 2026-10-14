@@ -89,7 +89,7 @@ export function officialGoogleMilesForLoad(
     | "route_polyline"
     | "empty_miles"
     | "empty_source"
-  >,
+  > & { empty_confirmed?: number | boolean | null },
 ): number | null {
   const official = routeGuideFromLoad(load).totalMiles;
   const storedGoogle =
@@ -97,7 +97,7 @@ export function officialGoogleMilesForLoad(
       ? load.route_miles
       : null;
   const loaded = official ?? storedGoogle;
-  const empty = officialEmptyMiles(load.empty_miles, load.empty_source);
+  const empty = officialEmptyMiles(load.empty_miles, load.empty_source, load.empty_confirmed);
   if (loaded == null && empty == null) return null;
   return Math.round(((loaded ?? 0) + (empty ?? 0)) * 10) / 10;
 }
