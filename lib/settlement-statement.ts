@@ -280,6 +280,7 @@ function parsePaySnapshot(raw: string): StatementPaySnapshot | null {
         ...line,
         leg: line.leg ?? "",
         legLabel: line.legLabel ?? "",
+        emptyLabel: line.emptyLabel ?? "",
       })),
       extras: parsed.extras ?? [],
       reimbursements: parsed.reimbursements ?? [],
@@ -397,6 +398,7 @@ function appendSwapLeg(
     pickup: (load.pickup_start || "").slice(0, 10),
     delivery: (load.delivery_end || load.delivery_start || "").slice(0, 10),
     miles: leg.miles != null && leg.miles > 0 ? leg.miles : null,
+    emptyLabel: leg.role === "from" && emptyMilesPending(load) ? "Empty Pending" : "",
     linehaul: linehaul.pay,
     ooPercent: ownerOperator ? leg.storedPercent : null,
     basis: !ownerOperator

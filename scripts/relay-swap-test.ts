@@ -379,6 +379,10 @@ async function main() {
     leg: "delivery",
   });
 
+  db.getDb()
+    .prepare("UPDATE loads SET empty_confirmed = 0, empty_suggestion = ? WHERE id = ?")
+    .run(JSON.stringify({ place: "Omaha, NE" }), loadA);
+
   const steve = statements.buildSettlement(steveId, WEEK);
   const chris = statements.buildSettlement(chrisId, WEEK);
   const jordan = statements.buildSettlement(jordanId, WEEK);
@@ -390,11 +394,13 @@ async function main() {
   assert.equal(steveA?.leg, "1");
   assert.equal(steveA?.legLabel, "Leg 1");
   assert.equal(steveA?.miles, 500);
+  assert.equal(steveA?.emptyLabel, "Empty Pending");
   assert.equal(steveA?.linehaul, 1275);
   assert.equal(steveA?.ooPercent, 85);
   assert.equal(steveB?.leg, "2");
   assert.equal(steveB?.legLabel, "Leg 2");
   assert.equal(steveB?.miles, 500);
+  assert.equal(steveB?.emptyLabel, "");
   assert.equal(steveB?.linehaul, 1275);
   assert.equal(steve.extras.find((line) => line.label.startsWith("Fuel surcharge"))?.amount, 85);
   assert.equal(steve.extras.filter((line) => line.label === "Detention").reduce((sum, line) => sum + line.amount, 0), 200);
