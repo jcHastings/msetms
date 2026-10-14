@@ -5,8 +5,10 @@ import { formatReeferSetpoint, labelForReeferMode, resolveReeferSpec } from "./r
 export type LoadSummaryStop = {
   kind?: string | null;
   name?: string | null;
+  street?: string | null;
   city?: string | null;
   state?: string | null;
+  zip?: string | null;
   window_start?: string | null;
   window_end?: string | null;
   schedule_type?: string | null;
@@ -108,22 +110,59 @@ export function driverFacingLoadNumber(load: {
   return internal;
 }
 
-function smsStopPlace(stop: LoadSummaryStop, fallback: string): string {
-  const city = String(stop.city ?? "").trim();
-  const state = String(stop.state ?? "").trim();
-  if (city && state) return `${city}, ${state}`;
-  if (city) return city;
-  return String(stop.name ?? "").trim() || fallback;
+function cleanSmsPart(value: string | null | undefined): string {
+  if (value == null) return "";
+  const text = String(value).trim();
+  if (!text || /^undefined$/i.test(text)) return "";
+  return text;
 }
 
-function smsStopWindow(
-  start: string | null | undefined,
-  end: string | null | undefined,
-  scheduleType?: string | null,
-  fallbackStart = "",
-  fallbackEnd = "",
-): string {
-  return formatSmsStopWindow(start?.trim() || fallbackStart, end?.trim() || fallbackEnd, scheduleType);
+function smsCityLine(stop: LoadSummaryStop): string {
+  const city = cleanSmsPart(stop.city);
+  const state = cleanSmsPart(stop.state);
+  const zip = cleanSmsPart(stop.zip);
+  const cityState = [city, state].filter(Boolean).join(", ");
+  return [cityState, zip].filter(Boolean).join(" ");
+}
+
+function smsFacilityName(stop: LoadSummaryStop, cityLine: string): string {
+  const name = cleanSmsPart(stop.name);
+  if (!name || /^(pickup|delivery)$/i.test(name)) return "";
+  const city = cleanSmsPart(stop.city);
+  const state = cleanSmsPart(stop.state);
+  const cityState = [city, state].filter(Boolean).join(", ");
+  const folded = name.toLowerCase();
+  if (city && folded === city.toLowerCase()) return "";
+  if (cityState && folded === cityState.toLowerCase()) return "";
+  if (cityLine && folded === cityLine.toLowerCase()) return "";
+  return name;
+}
+
+function smsStreetLine(stop: LoadSummaryStop, cityLine: string, facility: string): string {
+  const street = cleanSmsPart(stop.street);
+  if (!street) return "";
+  const folded = street.toLowerCase();
+  if (facility && folded === facility.toLowerCase()) return "";
+  if (cityLine && folded === cityLine.toLowerCase()) return "";
+  return street;
+}
+
+function smsPlaceLines(stop: LoadSummaryStop): string[] {
+  const cityLine = smsCityLine(stop);
+  const facility = smsFacilityName(stop, cityLine);
+  const street = smsStreetLine(stop, cityLine, facility);
+  return [facility, street, cityLine].filter(Boolean);
+}
+
+function smsWhenLine(copy: { pickup: string; delivery: string }, stop: LoadSummaryStop): string {
+  const window = formatSmsStopWindow(
+    cleanSmsPart(stop.window_start),
+    cleanSmsPart(stop.window_end),
+    stop.schedule_type,
+  );
+  if (!window) return "";
+  const isDelivery = String(stop.kind ?? "").trim().toLowerCase() === "delivery";
+  return `${isDelivery ? copy.delivery : copy.pickup} ${window}`;
 }
 
 function smsCopy(locale: DriverMessageLocale) {
@@ -161,35 +200,38 @@ function smsCopy(locale: DriverMessageLocale) {
   };
 }
 
+function smsLaneBlock(label: string, place: string, when: string): string {
+  return [label, place, when].filter(Boolean).join("\n");
+}
+
 function smsStopBlocks(load: LoadSummaryInput): string[] {
   const copy = smsCopy(load.locale === "es" ? "es" : "en");
   const stops = (load.stops ?? []).filter((stop) => stop);
-  const pickups = stops.filter((stop) => String(stop.kind ?? "").trim().toLowerCase() !== "delivery");
-  const deliveries = stops.filter((stop) => String(stop.kind ?? "").trim().toLowerCase() === "delivery");
-  const blocks: string[] = [];
-  const pickup = pickups[0];
-  if (pickup || load.origin.trim()) {
-    const place = pickup ? smsStopPlace(pickup, load.origin) : load.origin.trim();
-    const window = smsStopWindow(
-      pickup?.window_start,
-      pickup?.window_end,
-      pickup?.schedule_type,
-      load.pickup_start,
-      load.pickup_end,
-    );
-    blocks.push([copy.shipper, place, window ? `${copy.pickup} ${window}` : ""].filter(Boolean).join("\n"));
-  }
-  if (deliveries.length) {
-    for (const stop of deliveries) {
-      const place = smsStopPlace(stop, load.destination);
-      const window = smsStopWindow(stop.window_start, stop.window_end, stop.schedule_type, load.delivery_start, load.delivery_end);
-      blocks.push([copy.receiver, place, window ? `${copy.delivery} ${window}` : ""].filter(Boolean).join("\n"));
+  if (stops.length) {
+    const blocks: string[] = [];
+    for (const stop of stops) {
+      const isDelivery = String(stop.kind ?? "").trim().toLowerCase() === "delivery";
+      const lines = [
+        isDelivery ? copy.receiver : copy.shipper,
+        ...smsPlaceLines(stop),
+        smsWhenLine(copy, stop),
+      ].filter(Boolean);
+      // A label with nothing under it is a blank stop. Leave it out.
+      if (lines.length < 2) continue;
+      blocks.push(lines.join("\n"));
     }
-    return blocks;
+    if (blocks.length) return blocks;
   }
-  if (load.destination.trim()) {
-    const window = formatSmsStopWindow(load.delivery_start, load.delivery_end);
-    blocks.push([copy.receiver, load.destination.trim(), window ? `${copy.delivery} ${window}` : ""].filter(Boolean).join("\n"));
+  const blocks: string[] = [];
+  const origin = cleanSmsPart(load.origin);
+  if (origin) {
+    const window = formatSmsStopWindow(cleanSmsPart(load.pickup_start), cleanSmsPart(load.pickup_end));
+    blocks.push(smsLaneBlock(copy.shipper, origin, window ? `${copy.pickup} ${window}` : ""));
+  }
+  const destination = cleanSmsPart(load.destination);
+  if (destination) {
+    const window = formatSmsStopWindow(cleanSmsPart(load.delivery_start), cleanSmsPart(load.delivery_end));
+    blocks.push(smsLaneBlock(copy.receiver, destination, window ? `${copy.delivery} ${window}` : ""));
   }
   return blocks;
 }
