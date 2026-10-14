@@ -2,10 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AssignmentUnitNote } from "@/components/assignment-unit-note";
 import { ComplianceList } from "@/components/compliance-badge";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
 import { collectAssignmentAlerts, driverComplianceAlerts } from "@/lib/compliance";
 import { updateRelayAssignmentAction } from "@/lib/dispatcher-actions";
+import {
+  driverUnitFromFacts,
+  EMPTY_ASSIGNMENT_UNIT_FACTS,
+  nextTruckSelection,
+  type AssignmentUnitFacts,
+} from "@/lib/driver-unit";
 import { toOfficeDateTime } from "@/lib/format";
 import { lastCompletedRelay, relayHasReceiverEquipment, type LoadRelayView } from "@/lib/relays";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
@@ -22,6 +29,7 @@ export function LoadCarrierScreen({
   card = true,
   onExpiredChange,
   onDriverIdChange,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: {
   drivers: DriverWithTruck[];
   trucks: Truck[];
@@ -33,6 +41,7 @@ export function LoadCarrierScreen({
   card?: boolean;
   onExpiredChange?: (expired: boolean, confirmed: boolean) => void;
   onDriverIdChange?: (driverId: string) => void;
+  unitFacts?: AssignmentUnitFacts;
 }) {
   const hasRelay = relays.length > 0;
   const firstRelay = relays[0];
@@ -82,6 +91,7 @@ export function LoadCarrierScreen({
         }
         alertWindows={alertWindows}
         card={card}
+        unitFacts={unitFacts}
         onExpiredChange={liveRelay ? undefined : onExpiredChange}
         onDriverIdChange={liveRelay ? undefined : onDriverIdChange}
       />
@@ -107,6 +117,7 @@ export function LoadCarrierScreen({
           showCompletedAt
           alertWindows={alertWindows}
           card={card}
+          unitFacts={unitFacts}
           onExpiredChange={liveRelay ? onExpiredChange : undefined}
           onDriverIdChange={liveRelay ? onDriverIdChange : undefined}
         />
@@ -131,6 +142,7 @@ function DriverAssignmentBlock({
   showCompletedAt = false,
   alertWindows,
   card,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
   onExpiredChange,
   onDriverIdChange,
 }: {
@@ -154,6 +166,7 @@ function DriverAssignmentBlock({
   showCompletedAt?: boolean;
   alertWindows: ComplianceWindows;
   card: boolean;
+  unitFacts?: AssignmentUnitFacts;
   onExpiredChange?: (expired: boolean, confirmed: boolean) => void;
   onDriverIdChange?: (driverId: string) => void;
 }) {
@@ -168,6 +181,7 @@ function DriverAssignmentBlock({
   const [trailerId, setTrailerId] = useState(initialTrailerId ? String(initialTrailerId) : "");
   const [completedAt, setCompletedAt] = useState(initialCompletedAt ? toOfficeDateTime(initialCompletedAt) : "");
   const [confirmed, setConfirmed] = useState(false);
+  const [truckExplicit, setTruckExplicit] = useState(Boolean(initialTruckId));
   const [relayError, setRelayError] = useState<string | null>(null);
   const selectedDriver = drivers.find((item) => String(item.id) === driverId);
   const selectedTruck = trucks.find((item) => String(item.id) === truckId);
@@ -223,22 +237,39 @@ function DriverAssignmentBlock({
   function assignDriver(next: string, event: { stopPropagation: () => void }) {
     setDriverId(next);
     syncConfirm(false);
+    const nextDriver = drivers.find((item) => String(item.id) === next);
+    const usual = driverUnitFromFacts(unitFacts, nextDriver);
+    const nextTruck = nextTruckSelection({
+      truckExplicit,
+      currentTruckId: truckId,
+      usualTruckId: usual?.truckId ?? null,
+      usualListed: usual != null && trucks.some((item) => item.id === usual.truckId),
+    });
+    const truckChanged = nextTruck !== truckId;
+    if (truckChanged) setTruckId(nextTruck);
+    const extra: Record<string, string> = {};
+    if (truckExplicit) extra.truck_explicit = "1";
+    if (confirmed) extra.confirm_expired = "1";
+    if (truckChanged && fieldNames) extra[fieldNames.truck] = nextTruck;
     if (persistRelay) {
-      void persistRelayFields({ [persistRelay.driverKey]: next });
+      const fields: Record<string, string> = { [persistRelay.driverKey]: next, ...extra };
+      if (truckChanged) fields[persistRelay.truckKey] = nextTruck;
+      void persistRelayFields(fields);
       return;
     }
     if (load && fieldNames) {
-      handleAssign(load.driver_id, next, fieldNames.driver, event, confirmed ? { confirm_expired: "1" } : undefined);
+      handleAssign(load.driver_id, next, fieldNames.driver, event, extra);
     }
   }
 
   function assignTruck(next: string, event: { stopPropagation: () => void }) {
     setTruckId(next);
+    setTruckExplicit(true);
     if (persistRelay) {
-      void persistRelayFields({ [persistRelay.truckKey]: next });
+      void persistRelayFields({ [persistRelay.truckKey]: next, truck_explicit: "1" });
       return;
     }
-    if (load && fieldNames) handleAssign(load.truck_id, next, fieldNames.truck, event);
+    if (load && fieldNames) handleAssign(load.truck_id, next, fieldNames.truck, event, { truck_explicit: "1" });
   }
 
   function assignTrailer(next: string, event: { stopPropagation: () => void }) {
@@ -304,6 +335,7 @@ function DriverAssignmentBlock({
           id={`${idPrefix}_truck_id`}
           name={fieldNames?.truck}
           value={truckId}
+          aria-describedby={`${idPrefix}-unit-note`}
           data-first-assign={load?.truck_id && !persistRelay ? undefined : persistRelay ? undefined : ""}
           onChange={(event) => assignTruck(event.target.value, event)}
         >
@@ -315,6 +347,16 @@ function DriverAssignmentBlock({
           ))}
         </select>
       </div>
+      {truckExplicit ? <input type="hidden" name="truck_explicit" value="1" /> : null}
+      <AssignmentUnitNote
+        id={`${idPrefix}-unit-note`}
+        facts={unitFacts}
+        driver={selectedDriver ?? null}
+        truckId={truckId}
+        trucks={trucks}
+        thisLoadId={load?.id ?? null}
+        className="md:col-span-2"
+      />
       <div className="field">
         <label htmlFor={`${idPrefix}_trailer_id`}>Trailer</label>
         <select

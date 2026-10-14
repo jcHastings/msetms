@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
 import { createLoadAction } from "@/lib/actions";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 import { equipmentOptions, getCompanySettings, loadFormSettings } from "@/lib/settings";
 import { EQUIPMENT_REQUIRED } from "@/lib/types";
@@ -22,6 +23,7 @@ export default async function NewLoadPage() {
   const customers = listCustomers();
   const trucks = listTrucks();
   const drivers = listDrivers();
+  const unitFacts = loadAssignmentUnitFacts();
   const role = dispatcher.role;
   const equipment = equipmentOptions();
   const equipmentChoices = equipment.length > 0 ? [{ value: "", label: "Any" }, ...equipment] : [...EQUIPMENT_REQUIRED];
@@ -64,6 +66,7 @@ export default async function NewLoadPage() {
           locations={[]}
           drivers={drivers}
           formSettings={loadFormSettings()}
+          unitFacts={unitFacts}
         >
           <LoadWorkspace
             loadId={null}
@@ -93,6 +96,7 @@ export default async function NewLoadPage() {
               {...loadFormSettings()}
               action={createLoadAction}
               submitLabel="Create load"
+              unitFacts={unitFacts}
             />
           </LoadWorkspace>
         </RateConImport>
