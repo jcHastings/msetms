@@ -1,4 +1,5 @@
 import { listLoadAudit, type AuditActorKind } from "./audit";
+import { driverTrailerChangeSentence } from "./driver-trailer-change";
 import { getDb } from "./db";
 import { formatDateTime } from "./format";
 import { isMaterialReeferReading } from "./exceptions";
@@ -35,6 +36,7 @@ function sourceForActor(kind: AuditActorKind): LoadTimelineSource {
 function titleForAudit(action: string, field: string): string {
   if (action === "pod_delivery") return "POD at delivery";
   if (action === "dispatch_ack") return "Acknowledged dispatch";
+  if (action === "driver_trailer") return "Driver changed trailer";
   const key = action.trim() || field.trim() || "update";
   return key.replaceAll("_", " ");
 }
@@ -45,6 +47,7 @@ function detailForAudit(row: {
   old_value: string;
   new_value: string;
 }): string {
+  if (row.action === "driver_trailer") return driverTrailerChangeSentence(row.old_value, row.new_value);
   if (row.action === "pod_delivery") return row.new_value;
   if (row.action === "dispatch_ack") {
     return row.new_value ? `Got it · ${formatDateTime(row.new_value)}` : "Got it";

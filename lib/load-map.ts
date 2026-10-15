@@ -1,4 +1,5 @@
 import { listLoadLog } from "./audit";
+import { driverTrailerChangeSentence } from "./driver-trailer-change";
 import { getDb } from "./db";
 import { getGoogleMapsBrowserKey } from "./env";
 import { orbcommMapPinFromReading, samsaraTruckPinStyle } from "./fleet-map-shared";
@@ -240,7 +241,9 @@ export async function listLoadTrackingEvents(loadId: number): Promise<LoadTracki
           ? row.new_value
           : row.action === "sms"
             ? `Text to ${row.new_value}`
-            : row.new_value || row.action.replaceAll("_", " "),
+            : row.action === "driver_trailer"
+              ? driverTrailerChangeSentence(row.old_value, row.new_value)
+              : row.new_value || row.action.replaceAll("_", " "),
       source: row.action === "check_call" ? "check_call" : row.action === "sms" ? "sms" : "status",
     });
   }

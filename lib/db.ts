@@ -843,6 +843,7 @@ export function migrate(db: Database): void {
   ensureColumn(db, "loads", "dispatch_ack_by", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "loads", "dispatch_ack_driver_id", "INTEGER");
   ensureColumn(db, "loads", "dispatch_ack_fingerprint", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "driver_trailer_note", "TEXT NOT NULL DEFAULT ''");
   const ackIntroduced = db
     .prepare("SELECT dispatch_ack_introduced_at AS at FROM company_profile WHERE id = 1")
     .get() as { at?: string } | undefined;

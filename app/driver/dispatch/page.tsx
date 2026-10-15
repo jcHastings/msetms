@@ -126,6 +126,23 @@ export default async function DriverDispatchPage() {
                         </div>
                       ) : null}
                     </Link>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs uppercase text-slate-500">Trailer</div>
+                        <div className="text-base font-medium text-white" data-current-trailer="">
+                          {load.trailer_unit || load.trailer_number || "None yet"}
+                        </div>
+                      </div>
+                      <Link
+                        href={`/driver/loads/${load.id}/trailer/change`}
+                        className="btn btn-secondary"
+                        style={{ minHeight: "3.5rem", fontSize: "1.0625rem" }}
+                        data-change-trailer=""
+                        aria-label={`Change trailer for ${load.load_number}`}
+                      >
+                        Change trailer
+                      </Link>
+                    </div>
                     {(() => {
                       const ack = presentDispatchAck(load);
                       if (ack.state === "none") return null;
