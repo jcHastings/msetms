@@ -880,7 +880,7 @@ export async function parseRateConAction(
       readRateConWithAi,
     } = await import("./rate-con-ai");
     const { isOpenAiConfigured } = await import("./env");
-    const { listCustomers, listAllLocations } = await import("./queries");
+    const { listCustomers, listAllLocations, locationsWithAliases } = await import("./queries");
     const { loadLocationLinkCounts } = await import("./location-resolve");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
@@ -929,7 +929,7 @@ export async function parseRateConAction(
       }
     }
     const { getDb } = await import("./db");
-    parsed = attachParsedLocationMatches(parsed, listAllLocations(), loadLocationLinkCounts(getDb()));
+    parsed = attachParsedLocationMatches(parsed, locationsWithAliases(listAllLocations()), loadLocationLinkCounts(getDb()));
     const facilityRecords = listFacilityMatchRecords();
     const facilityMatches = {
       shipper: previewFacilityMatch(facilityRecords, parsed.shipper),

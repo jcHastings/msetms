@@ -319,6 +319,9 @@ export function LocationPicker({
                               {location.name}
                               <LocationVerifyBadge verifiedAt={location.verified_at} />
                             </div>
+                            {location.matched_alias ? (
+                              <div className="location-suggest-address text-sm">also known as {location.matched_alias}</div>
+                            ) : null}
                             {address ? <div className="location-suggest-address text-sm">{address}</div> : null}
                           </button>
                         </li>

@@ -4,6 +4,7 @@
  */
 import fs from "node:fs";
 
+import { aliasNameAlreadyStored, aliasNameForKeeper, insertKeeperAlias } from "./location-alias";
 import {
   loadLocationLinkCounts,
   locationCompleteness,
@@ -524,29 +525,26 @@ function fillStopAddress(db: Database, keepId: number, street: string, zip: stri
 }
 
 function aliasName(keep: LocationMergeRow, copy: LocationMergeRow): string {
-  const name = String(copy.name ?? "").trim();
-  if (!name) return "";
-  if (name.toLowerCase() === String(keep.name ?? "").trim().toLowerCase()) return "";
-  return name;
+  return aliasNameForKeeper(keep.name, copy.name);
 }
 
 function addNameAlias(db: Database, keep: LocationMergeRow, copy: LocationMergeRow, now: string) {
   const name = aliasName(keep, copy);
   if (!name) return;
-  const existing = db
-    .prepare("SELECT id FROM location_aliases WHERE location_id = ? AND name = ? COLLATE NOCASE")
-    .get(keep.id, name) as { id: number } | undefined;
-  if (existing) return;
-  db.prepare(
-    `INSERT INTO location_aliases (location_id, name, street, city, state, zip, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
+  const existing = db.prepare("SELECT name FROM location_aliases WHERE location_id = ?").all(keep.id) as Array<{
+    name: string;
+  }>;
+  if (aliasNameAlreadyStored(existing.map((row) => row.name), name)) return;
+  insertKeeperAlias(
+    db,
     keep.id,
-    name,
-    String(copy.street ?? "").trim(),
-    String(copy.city ?? "").trim(),
-    String(copy.state ?? "").trim().toUpperCase(),
-    String(copy.zip ?? "").trim(),
+    {
+      name,
+      street: copy.street,
+      city: copy.city,
+      state: copy.state,
+      zip: copy.zip,
+    },
     now,
   );
 }
