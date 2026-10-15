@@ -1,4 +1,5 @@
-import { locationMatchesRole } from "./locations";
+import { resolveLocation, type LocationResolveRow } from "./location-resolve";
+import { isArchivedLocation, locationMatchesRole } from "./locations";
 import type { Customer, Location } from "./types";
 
 export type RateConFieldStatus = "ok" | "missing" | "low";
@@ -342,14 +343,41 @@ export function matchLocationForParsedStop(
   );
 }
 
-export function attachParsedLocationMatches(parsed: ParsedRateCon, locations: Location[]): ParsedRateCon {
-  const shipper = matchLocationForParsedStop(locations, parsed.shipper, "shipper");
-  const consignee = matchLocationForParsedStop(locations, parsed.consignee, "receiver");
+export function attachParsedLocationMatches(
+  parsed: ParsedRateCon,
+  locations: Location[],
+  linkCounts?: Map<number, number>,
+): ParsedRateCon {
+  const shipper = chooseParsedLocation(locations, parsed.shipper, "shipper", linkCounts);
+  const consignee = chooseParsedLocation(locations, parsed.consignee, "receiver", linkCounts);
   return {
     ...parsed,
     shipper_location_id: shipper?.id ?? null,
     consignee_location_id: consignee?.id ?? null,
   };
+}
+
+function chooseParsedLocation(
+  locations: Location[],
+  stop: ParsedStop | null | undefined,
+  role: "shipper" | "receiver",
+  linkCounts?: Map<number, number>,
+): Location | null {
+  const active = locations.filter((location) => isKeptParsedLocation(location));
+  const legacy = matchLocationForParsedStop(active, stop, role);
+  if (legacy) return legacy;
+  if (!stop) return null;
+  const resolved = resolveLocation(locations as LocationResolveRow[], stop, linkCounts);
+  if (!resolved) return null;
+  const row = locations.find((location) => location.id === resolved.id) ?? null;
+  if (!row || !isKeptParsedLocation(row)) return null;
+  return row;
+}
+
+function isKeptParsedLocation(location: Location): boolean {
+  if (isArchivedLocation(location)) return false;
+  const merged = Number(location.merged_into);
+  return !Number.isFinite(merged) || merged <= 0;
 }
 
 function matchByName(locations: Location[], stop: ParsedStop): Location | null {

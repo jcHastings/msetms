@@ -7,7 +7,8 @@ import { LocationCsvImport } from "@/components/location-csv-import";
 import { PageHeader } from "@/components/page-header";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { formatLocationAddress, formatSchedulingSummary, isArchivedLocation } from "@/lib/locations";
-import { DirectoryPager, DirectorySearch } from "@/components/directory-chrome";
+import { DirectoryPager } from "@/components/directory-chrome";
+import { LocationDirectorySearch } from "@/components/location-directory-search";
 import { LocationArchiveToggle } from "@/components/location-archive-toggle";
 import { searchLocationsDirectory } from "@/lib/queries";
 import { LocationVerifyBadge } from "@/components/location-verify-badge";
@@ -61,15 +62,9 @@ export default async function LocationsPage({
       />
       {canImport ? <LocationCsvImport /> : null}
       <div className="card overflow-hidden">
-        <DirectorySearch
-          action="/locations"
-          q={q}
-          label="Find a location"
-          placeholder="Name, city, street, or state"
-          extra={archiveExtra}
-        >
+        <LocationDirectorySearch q={q} extra={archiveExtra}>
           <LocationArchiveToggle q={q} includeArchived={includeArchived} />
-        </DirectorySearch>
+        </LocationDirectorySearch>
         {locations.length === 0 ? (
           <p className="p-6 text-sm text-slate-600">
             No locations yet.{" "}

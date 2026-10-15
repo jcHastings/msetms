@@ -1,12 +1,11 @@
 import { attachInboxToLoad } from "./files";
-import { matchLocationForStop } from "./locations";
 import {
   createLoad,
   createLocation,
   findOrCreateCustomer,
   getLoad,
   getLocation,
-  listLocations,
+  resolveExistingLocation,
   updateLoadDetails,
   updateLocation,
   type LoadInput,
@@ -40,8 +39,9 @@ function findOrCreateBookLocation(input: {
   role: "shipper" | "receiver";
   schedule_type: "appointment" | "fcfs";
 }): number | null {
-  const existing = matchLocationForStop(listLocations(), {
+  const existing = resolveExistingLocation({
     name: input.name,
+    street: "",
     city: input.city,
     state: input.state,
   });

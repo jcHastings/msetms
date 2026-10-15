@@ -81,7 +81,8 @@ import {
 } from "./types";
 import { MISC_LOAD_STATUSES, PLANNING_LOAD_STATUSES } from "./load-list-shared";
 import { normalizeFacilityAddress, type FacilityRecord } from "./location-match";
-import { ACTIVE_LOCATION_SQL, extractStateCode, isArchivedLocation, locationPlaceKey } from "./locations";
+import { loadLocationLinkCounts, resolveLocation } from "./location-resolve";
+import { ACTIVE_LOCATION_SQL, extractStateCode, isArchivedLocation, locationPlaceKey, LOCATION_SUGGEST_LIMIT, locationQueryTokens } from "./locations";
 import type { LocationInput } from "./locations";
 import { locationMatchKey, parseAscendLocationCsv, type LocationCsvRowError } from "./location-csv";
 import { allocateNextLoadNumber, reserveNumericLoadNumber } from "./load-numbers";
@@ -208,24 +209,32 @@ export type LocationPickerHit = {
   city: string;
   state: string;
   zip: string;
+  phone?: string;
   verified_at?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string | null;
 };
 
-export function searchLocationPickerRows(query: string, limit = 50): LocationPickerHit[] {
-  const needle = String(query ?? "").replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
-  if (!needle) return [];
-  const like = `%${needle}%`;
-  const size = Math.min(50, Math.max(1, Math.floor(limit)));
+/** Live rows that were not merged away. Suggestions and pickers use this. */
+export const KEPT_LOCATION_SQL = `${ACTIVE_LOCATION_SQL} AND IFNULL(merged_into, 0) = 0`;
+
+export function searchLocationPickerRows(query: string, limit = LOCATION_SUGGEST_LIMIT): LocationPickerHit[] {
+  const tokens = locationQueryTokens(String(query ?? "").replace(/[%_]/g, " "));
+  if (!tokens.length) return [];
+  const size = Math.min(LOCATION_SUGGEST_LIMIT, Math.max(1, Math.floor(limit)));
+  const clauses = tokens.map(() => "(name LIKE ? OR city LIKE ?)").join(" AND ");
+  const params = tokens.flatMap((token) => [`%${token}%`, `%${token}%`]);
   return getDb()
     .prepare(
-      `SELECT id, name, street, city, state, zip, verified_at
+      `SELECT id, name, street, city, state, zip, phone, verified_at, latitude, longitude, google_place_id
        FROM locations
-       WHERE ${ACTIVE_LOCATION_SQL}
-         AND (name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ?)
+       WHERE ${KEPT_LOCATION_SQL}
+         AND ${clauses}
        ORDER BY name COLLATE NOCASE
        LIMIT ?`,
     )
-    .all(like, like, like, like, like, size) as LocationPickerHit[];
+    .all(...params, size) as LocationPickerHit[];
 }
 
 export type LocationDirectoryPage = {
@@ -266,6 +275,28 @@ export function searchLocationsDirectory(
 
 export function getLocation(id: number): Location | null {
   return (getDb().prepare("SELECT * FROM locations WHERE id = ?").get(id) as Location | undefined) ?? null;
+}
+
+export function listAllLocations(): Location[] {
+  return getDb().prepare("SELECT * FROM locations ORDER BY id").all() as Location[];
+}
+
+/** Match a facility without creating one. Archived rows are followed to the keeper. */
+export function resolveExistingLocation(input: {
+  name?: string | null;
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  google_place_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}): Location | null {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM locations").all() as Location[];
+  const found = resolveLocation(rows, input, loadLocationLinkCounts(db));
+  if (!found) return null;
+  return rows.find((row) => row.id === found.id) ?? null;
 }
 
 export function findDuplicateLocation(input: {
@@ -326,13 +357,14 @@ export function importLocationsFromCsv(text: string): {
   let updated = 0;
   getDb().transaction(() => {
     for (const row of parsed.rows) {
-      const existing = findLocationByNameAddress(
-        row.input.name,
-        row.input.street,
-        row.input.city,
-        row.input.state,
-        row.input.zip,
-      );
+      const existing =
+        findLocationByNameAddress(
+          row.input.name,
+          row.input.street,
+          row.input.city,
+          row.input.state,
+          row.input.zip,
+        ) ?? resolveExistingLocation(row.input);
       if (existing) {
         updateLocation(existing.id, {
           ...row.input,

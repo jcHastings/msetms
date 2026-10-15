@@ -39,6 +39,9 @@ export function isArchivedLocation(location: { archived_at?: string | null }): b
 /** SQL predicate for locations that still belong in lists, search, and pickers. */
 export const ACTIVE_LOCATION_SQL = "IFNULL(archived_at, '') = ''";
 
+/** Typeahead cap. Kept records only: not archived, and not merged into another row. */
+export const LOCATION_SUGGEST_LIMIT = 10;
+
 export const ARCHIVED_MERGE_LEAD = "Archived, merged into";
 
 export function archivedMergeNote(keeperName: string): string {
@@ -115,7 +118,19 @@ export function formatStopRowAddress(
 export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city" | "state" | "zip"> & {
   verified_at?: string | null;
   archived_at?: string | null;
+  merged_into?: number | null;
+  phone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  google_place_id?: string | null;
+  scheduling_type?: string | null;
 };
+
+export function isKeptLocation(location: { archived_at?: string | null; merged_into?: number | null }): boolean {
+  if (isArchivedLocation(location)) return false;
+  const merged = Number(location.merged_into);
+  return !Number.isFinite(merged) || merged <= 0;
+}
 
 export function locationSearchHaystack(location: LocationPickerRow): string {
   return [location.name, location.street, location.city, location.state, location.zip]
@@ -150,6 +165,36 @@ export function filterLocationsForPicker<T extends LocationPickerRow>(
   for (const location of locations) {
     if (isArchivedLocation(location)) continue;
     if (!locationMatchesQuery(location, query)) continue;
+    matched.push(location);
+    if (matched.length >= limit) break;
+  }
+  return matched;
+}
+
+/** Partial, case-insensitive match on the location name and city. */
+export function locationSuggestMatch(
+  location: { name?: string | null; city?: string | null; archived_at?: string | null; merged_into?: number | null },
+  query: string,
+): boolean {
+  if (!isKeptLocation(location)) return false;
+  const tokens = locationQueryTokens(query);
+  if (!tokens.length) return false;
+  const haystack = [location.name, location.city]
+    .map((part) => String(part ?? "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+  return tokens.every((token) => haystack.includes(token));
+}
+
+export function filterLocationSuggestions<T extends LocationPickerRow>(
+  locations: T[],
+  query: string,
+  limit = LOCATION_SUGGEST_LIMIT,
+): T[] {
+  if (!locationQueryTokens(query).length) return [];
+  const matched: T[] = [];
+  for (const location of locations) {
+    if (!locationSuggestMatch(location, query)) continue;
     matched.push(location);
     if (matched.length >= limit) break;
   }

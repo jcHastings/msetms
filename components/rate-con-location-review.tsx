@@ -12,7 +12,7 @@ import {
   suggestFacilityMatchAction,
   type FacilityMatchPreview,
 } from "@/lib/actions";
-import { US_STATES } from "@/lib/locations";
+import { formatLocationAddress, US_STATES, type LocationPickerRow } from "@/lib/locations";
 import { applyNyBoroughState } from "@/lib/places-shared";
 import {
   customerRefFromRateCon,
@@ -23,6 +23,36 @@ import {
   type ParsedStop,
 } from "@/lib/rate-con-shared";
 import type { Location } from "@/lib/types";
+
+function locationToBook(row: LocationPickerRow): Location {
+  const scheduling = row.scheduling_type === "appointment" || row.scheduling_type === "fcfs" ? row.scheduling_type : "fcfs";
+  return {
+    id: row.id,
+    name: row.name,
+    street: row.street ?? "",
+    city: row.city ?? "",
+    state: row.state ?? "",
+    zip: row.zip ?? "",
+    phone: row.phone ?? "",
+    notes: "",
+    role: "both",
+    scheduling_type: scheduling,
+    hours: "",
+    scheduling_notes: "",
+    call_before: 0,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    google_place_id: row.google_place_id ?? "",
+    country: null,
+    verified_at: row.verified_at ?? null,
+    archived_at: row.archived_at ?? null,
+    merged_into: row.merged_into ?? null,
+    samsara_address_id: null,
+    samsara_address_error: "",
+    created_at: "",
+    updated_at: "",
+  };
+}
 
 export function useRateConLocationBook(
   parsed: ParsedRateCon,
@@ -41,7 +71,16 @@ export function useRateConLocationBook(
     else setConsigneeId(String(location.id));
   };
 
-  const pickExisting = (locationId: string, role: "shipper" | "receiver") => {
+  const pickExisting = (
+    locationId: string,
+    role: "shipper" | "receiver",
+    location?: LocationPickerRow | null,
+  ) => {
+    if (location) {
+      setBook((current) =>
+        current.some((item) => item.id === location.id) ? current : [...current, locationToBook(location)],
+      );
+    }
     if (role === "shipper") setShipperId(locationId);
     else setConsigneeId(locationId);
   };
@@ -95,7 +134,7 @@ function RateConLocationReview({
   catalog?: boolean;
   facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
-  onPick: (locationId: string, role: "shipper" | "receiver") => void;
+  onPick: (locationId: string, role: "shipper" | "receiver", location?: LocationPickerRow | null) => void;
 }) {
   const showShipper = parsedStopHasDetails(parsed.shipper);
   const showConsignee = parsedStopHasDetails(parsed.consignee);
@@ -255,7 +294,7 @@ function StopReviewCard({
   suggested?: FacilityMatchPreview;
   suggestionReady?: boolean;
   onSaved: (location: Location, role: "shipper" | "receiver") => void;
-  onPick: (locationId: string, role: "shipper" | "receiver") => void;
+  onPick: (locationId: string, role: "shipper" | "receiver", location?: LocationPickerRow | null) => void;
 }) {
   const stopKey = [stop.name, stop.street, stop.city, stop.state, stop.zip].join("|");
   const [choice, setChoice] = useState<"checking" | "prompt" | "create">(
@@ -317,7 +356,11 @@ function StopReviewCard({
         {title}
       </div>
       {matched ? (
-        <p className="mt-1 text-xs">Matched a saved location. Change it below if this is the wrong place.</p>
+        <div className="mt-1">
+          <p className="text-xs">Matched a saved location. Change it below if this is the wrong place.</p>
+          <p className="mt-1 font-medium">{matched.name}</p>
+          {formatLocationAddress(matched) ? <p className="text-xs">{formatLocationAddress(matched)}</p> : null}
+        </div>
       ) : choice === "checking" ? (
         <p className="mt-1 text-slate-600" role="status">
           Checking saved locations.
@@ -347,7 +390,7 @@ function StopReviewCard({
           catalog={catalog}
           locations={book}
           value={selectedId}
-          onChange={(locationId) => onPick(locationId, role)}
+          onChange={(locationId, location) => onPick(locationId, role, location)}
           emptyLabel="No saved location"
           placeholder="Type any name or address"
         />

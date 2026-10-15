@@ -17,6 +17,7 @@ import {
   addLocationAlias,
   createLocation,
   findDuplicateLocation,
+  resolveExistingLocation,
   getLoad,
   listFacilityMatchRecords,
   getLocation,
@@ -879,7 +880,8 @@ export async function parseRateConAction(
       readRateConWithAi,
     } = await import("./rate-con-ai");
     const { isOpenAiConfigured } = await import("./env");
-    const { listCustomers, listLocations } = await import("./queries");
+    const { listCustomers, listAllLocations } = await import("./queries");
+    const { loadLocationLinkCounts } = await import("./location-resolve");
     const buffer = await fileToBuffer(file);
     const { inboxId } = saveInboxFile(file, buffer);
     let text = "";
@@ -926,7 +928,8 @@ export async function parseRateConAction(
         parsed = hint;
       }
     }
-    parsed = attachParsedLocationMatches(parsed, listLocations());
+    const { getDb } = await import("./db");
+    parsed = attachParsedLocationMatches(parsed, listAllLocations(), loadLocationLinkCounts(getDb()));
     const facilityRecords = listFacilityMatchRecords();
     const facilityMatches = {
       shipper: previewFacilityMatch(facilityRecords, parsed.shipper),
@@ -1619,13 +1622,16 @@ export async function saveRateConLocationAction(
     const declined = Number.parseInt(String(formData.get("declined_location_id") ?? ""), 10);
     if (!confirmed) {
       const match = suggestFacilityMatch(listFacilityMatchRecords(), input);
-      if (match && match.id !== declined) {
+      const resolved = match ? null : resolveExistingLocation(input);
+      const existingId = match?.id ?? resolved?.id ?? null;
+      const existingName = match?.name ?? resolved?.name ?? "";
+      if (existingId && existingId !== declined) {
         return {
           ok: false,
-          error: `Looks like ${match.name}. Use it?`,
+          error: `Looks like ${existingName}. Use it?`,
           duplicate: true,
-          existingId: match.id,
-          existingName: match.name,
+          existingId,
+          existingName,
           draft: locationDraft(formData, input),
         };
       }
@@ -1662,7 +1668,8 @@ export async function createLocationAction(
     if (String(formData.get("confirm_duplicate") ?? "") !== "1") {
       const exact = findDuplicateLocation(input);
       const suggested = exact ? null : suggestFacilityMatch(listFacilityMatchRecords(), input);
-      const existing = exact ?? (suggested ? getLocation(suggested.id) : null);
+      const resolved = exact || suggested ? null : resolveExistingLocation(input);
+      const existing = exact ?? (suggested ? getLocation(suggested.id) : null) ?? resolved;
       if (existing) {
         return {
           ok: false,
