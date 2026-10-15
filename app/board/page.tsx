@@ -352,6 +352,16 @@ async function BoardLiveSection({
                           {lateByLoad.get(load.id)?.label}
                         </span>
                       ) : null}
+                      {load.driver_trailer_note ? (
+                        <span
+                          className="status-pill status-tone-warning mt-1"
+                          data-driver-trailer-flag=""
+                          title={load.driver_trailer_note}
+                        >
+                          Trailer change
+                          <span className="sr-only">. {load.driver_trailer_note}</span>
+                        </span>
+                      ) : null}
                       <DispatchAckStatus ack={presentDispatchAck(load, ackRules)} compact />
                     </td>
                     <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />

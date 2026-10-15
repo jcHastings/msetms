@@ -32,12 +32,16 @@ export const dynamic = "force-dynamic";
 
 export default async function DriverLoadPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ trailer?: string }>;
 }) {
   const driver = await getSignedInDriver();
   if (!driver) redirect("/driver/login");
-  const load = getLoad(Number.parseInt((await params).id, 10));
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const trailerSaved = query.trailer === "saved";
+  const load = getLoad(Number.parseInt(id, 10));
   if (!load || !driverAssignedToLoad(load.id, driver.id, load.driver_id)) notFound();
   const yourLeg = relayForDriver(load.id, driver.id);
   const swapLeg = driverSwapLegView({
@@ -111,6 +115,11 @@ export default async function DriverLoadPage({
         </p>
       ) : null}
       <p className="text-slate-400">{load.customer_name}</p>
+      {trailerSaved ? (
+        <p className="driver-sheet mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-base font-medium" role="status" data-trailer-saved="">
+          Trailer saved.
+        </p>
+      ) : null}
       {load.docs_requested ? (
         <section className="driver-sheet mt-4 rounded-2xl bg-amber-50 p-4">
           <div className="driver-sheet-label text-xs font-semibold uppercase tracking-wide">Documents requested</div>
@@ -173,7 +182,22 @@ export default async function DriverLoadPage({
           label="Ref / PO"
           value={stops.map((stop) => driverFacingStopPo(stop, load)).filter(Boolean).join(" · ") || "—"}
         />
-        <Row label="Trailer" value={swapLeg?.trailer || load.trailer_number || load.trailer_unit || "—"} />
+        <div className="border-b border-slate-100 py-2 last:border-0">
+          <div className="driver-sheet-label text-xs uppercase tracking-wide">Trailer</div>
+          <div className="driver-sheet-value text-base" data-current-trailer="">
+            {swapLeg?.trailer || load.trailer_number || load.trailer_unit || "None yet"}
+          </div>
+          {!isClosedStatus(load.status) ? (
+            <Link
+              href={`/driver/loads/${load.id}/trailer/change`}
+              className="btn btn-primary mt-3 w-full"
+              style={{ minHeight: "3.5rem", fontSize: "1.0625rem" }}
+              data-change-trailer=""
+            >
+              Change trailer
+            </Link>
+          ) : null}
+        </div>
         {reeferSpec.isReefer ? (
           <>
             <Row label="Setpoint" value={formatReeferSetpoint(reeferSpec.setpointF) || "—"} />

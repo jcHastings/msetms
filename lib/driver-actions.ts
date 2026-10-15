@@ -11,6 +11,7 @@ import { driverMayRetypeAttachment, isDriverUploadKind } from "./driver-docs";
 import { acknowledgeDispatch } from "./dispatch-ack";
 import { submitDriverReimbursement } from "./reimbursements";
 import { performDriverProgress, performDriverStopCheck, performDriverUpload, podDeliveryFromForm } from "./driver-ops";
+import { driverChangeLoadTrailer } from "./driver-trailer-change-db";
 import { type ActionResult, type AttachmentKind } from "./types";
 
 function refresh(): void {
@@ -50,6 +51,32 @@ export async function driverLoginAction(
     });
     return fail(error);
   }
+}
+
+export async function driverChangeTrailerAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      const driver = await requireDriver();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const trailerId = parseOptionalInt(formData.get("trailer_id"));
+      const customNumber = String(formData.get("custom_number") ?? "");
+      if (!loadId) throw new Error("Load is missing.");
+      driverChangeLoadTrailer({
+        driverId: driver.id,
+        loadId,
+        trailerId,
+        customNumber,
+      });
+      refresh();
+      redirect(`/driver/loads/${loadId}?trailer=saved`);
+    } catch (error) {
+      if (error && typeof error === "object" && "digest" in error) throw error;
+      return fail(error);
+    }
+  });
 }
 
 export async function driverLogoutAction(): Promise<void> {
