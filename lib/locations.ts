@@ -124,6 +124,8 @@ export type LocationPickerRow = Pick<Location, "id" | "name" | "street" | "city"
   longitude?: number | null;
   google_place_id?: string | null;
   scheduling_type?: string | null;
+  matched_alias?: string | null;
+  aliases?: Array<{ name?: string | null }> | null;
 };
 
 export function isKeptLocation(location: { archived_at?: string | null; merged_into?: number | null }): boolean {
@@ -171,15 +173,22 @@ export function filterLocationsForPicker<T extends LocationPickerRow>(
   return matched;
 }
 
-/** Partial, case-insensitive match on the location name and city. */
+/** Partial, case-insensitive match on the kept name, city, and aliases. */
 export function locationSuggestMatch(
-  location: { name?: string | null; city?: string | null; archived_at?: string | null; merged_into?: number | null },
+  location: {
+    name?: string | null;
+    city?: string | null;
+    archived_at?: string | null;
+    merged_into?: number | null;
+    matched_alias?: string | null;
+    aliases?: Array<{ name?: string | null }> | null;
+  },
   query: string,
 ): boolean {
   if (!isKeptLocation(location)) return false;
   const tokens = locationQueryTokens(query);
   if (!tokens.length) return false;
-  const haystack = [location.name, location.city]
+  const haystack = [location.name, location.city, location.matched_alias, ...(location.aliases ?? []).map((alias) => alias.name)]
     .map((part) => String(part ?? "").trim().toLowerCase())
     .filter(Boolean)
     .join(" ");

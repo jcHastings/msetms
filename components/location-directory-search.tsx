@@ -136,6 +136,9 @@ export function LocationDirectorySearch({
                       onClick={() => choose(row)}
                     >
                       <div className="location-suggest-name font-semibold">{row.name}</div>
+                      {row.matched_alias ? (
+                        <div className="location-suggest-address text-sm">also known as {row.matched_alias}</div>
+                      ) : null}
                       {address ? <div className="location-suggest-address text-sm">{address}</div> : null}
                     </button>
                   </li>

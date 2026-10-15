@@ -214,6 +214,8 @@ export type LocationPickerHit = {
   latitude?: number | null;
   longitude?: number | null;
   google_place_id?: string | null;
+  /** Set when the query matched an alias rather than the kept name or city. */
+  matched_alias?: string | null;
 };
 
 /** Live rows that were not merged away. Suggestions and pickers use this. */
@@ -223,9 +225,18 @@ export function searchLocationPickerRows(query: string, limit = LOCATION_SUGGEST
   const tokens = locationQueryTokens(String(query ?? "").replace(/[%_]/g, " "));
   if (!tokens.length) return [];
   const size = Math.min(LOCATION_SUGGEST_LIMIT, Math.max(1, Math.floor(limit)));
-  const clauses = tokens.map(() => "(name LIKE ? OR city LIKE ?)").join(" AND ");
-  const params = tokens.flatMap((token) => [`%${token}%`, `%${token}%`]);
-  return getDb()
+  const clauses = tokens
+    .map(
+      () => `(locations.name LIKE ? OR locations.city LIKE ? OR EXISTS (
+        SELECT 1 FROM location_aliases
+        WHERE location_aliases.location_id = locations.id
+          AND location_aliases.name LIKE ?
+      ))`,
+    )
+    .join(" AND ");
+  const params = tokens.flatMap((token) => [`%${token}%`, `%${token}%`, `%${token}%`]);
+  const db = getDb();
+  const rows = db
     .prepare(
       `SELECT id, name, street, city, state, zip, phone, verified_at, latitude, longitude, google_place_id
        FROM locations
@@ -235,10 +246,19 @@ export function searchLocationPickerRows(query: string, limit = LOCATION_SUGGEST
        LIMIT ?`,
     )
     .all(...params, size) as LocationPickerHit[];
+  return attachMatchedAliases(db, rows, (row, aliases) => {
+    const nameCity = `${row.name} ${row.city}`.toLowerCase();
+    if (tokens.every((token) => nameCity.includes(token))) return null;
+    return (
+      aliases.find((alias) => tokens.every((token) => `${nameCity} ${alias}`.toLowerCase().includes(token))) ?? null
+    );
+  });
 }
 
+export type LocationSearchRow = Location & { matched_alias?: string | null };
+
 export type LocationDirectoryPage = {
-  locations: Location[];
+  locations: LocationSearchRow[];
   total: number;
   page: number;
   pageSize: number;
@@ -255,9 +275,15 @@ export function searchLocationsDirectory(
   if (!input.includeArchived) clauses.push(ACTIVE_LOCATION_SQL);
   if (needle) {
     clauses.push(
-      "(name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ? OR IFNULL(phone, '') LIKE ?)",
+      `(name LIKE ? OR street LIKE ? OR city LIKE ? OR state LIKE ? OR zip LIKE ? OR IFNULL(phone, '') LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM location_aliases
+          WHERE location_aliases.location_id = locations.id
+            AND location_aliases.name LIKE ?
+            AND ${KEPT_LOCATION_SQL}
+        ))`,
     );
-    filterParams.push(...Array<string>(6).fill(`%${needle}%`));
+    filterParams.push(...Array<string>(7).fill(`%${needle}%`));
   }
   const filterSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const db = getDb();
@@ -267,10 +293,51 @@ export function searchLocationsDirectory(
   const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
   const requested = Math.floor(Number(input.page));
   const page = Math.min(pageCount, Math.max(1, Number.isFinite(requested) && requested > 0 ? requested : 1));
-  const locations = db
-    .prepare(`SELECT * FROM locations ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
-    .all(...filterParams, pageSize, (page - 1) * pageSize) as Location[];
+  const locations = attachMatchedAliases(
+    db,
+    db
+      .prepare(`SELECT * FROM locations ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
+      .all(...filterParams, pageSize, (page - 1) * pageSize) as LocationSearchRow[],
+    (row, aliases) => {
+      if (!needle) return null;
+      const own = [row.name, row.street, row.city, row.state, row.zip, row.phone]
+        .map((part) => String(part ?? "").toLowerCase())
+        .join(" ");
+      const folded = needle.toLowerCase();
+      if (own.includes(folded)) return null;
+      return aliases.find((alias) => alias.toLowerCase().includes(folded)) ?? null;
+    },
+  );
   return { locations, total, page, pageSize, pageCount };
+}
+
+function attachMatchedAliases<T extends { id: number }>(
+  db: ReturnType<typeof getDb>,
+  rows: T[],
+  pick: (row: T, aliases: string[]) => string | null,
+): Array<T & { matched_alias: string | null }> {
+  if (!rows.length) return rows.map((row) => ({ ...row, matched_alias: null }));
+  const aliases = db
+    .prepare(
+      `SELECT location_id, name FROM location_aliases
+       WHERE location_id IN (${rows.map(() => "?").join(", ")})
+       ORDER BY id`,
+    )
+    .all(...rows.map((row) => row.id)) as Array<{ location_id: number; name: string }>;
+  const grouped = new Map<number, string[]>();
+  for (const alias of aliases) {
+    const list = grouped.get(alias.location_id) ?? [];
+    list.push(alias.name);
+    grouped.set(alias.location_id, list);
+  }
+  const seen = new Set<number>();
+  const unique: Array<T & { matched_alias: string | null }> = [];
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    unique.push({ ...row, matched_alias: pick(row, grouped.get(row.id) ?? []) });
+  }
+  return unique;
 }
 
 export function getLocation(id: number): Location | null {
@@ -293,10 +360,28 @@ export function resolveExistingLocation(input: {
   longitude?: number | null;
 }): Location | null {
   const db = getDb();
-  const rows = db.prepare("SELECT * FROM locations").all() as Location[];
+  const rows = locationsWithAliases(db.prepare("SELECT * FROM locations").all() as Location[]);
   const found = resolveLocation(rows, input, loadLocationLinkCounts(db));
   if (!found) return null;
   return rows.find((row) => row.id === found.id) ?? null;
+}
+
+export function locationsWithAliases<T extends { id: number }>(rows: T[]): Array<T & { aliases: Array<{ name: string }> }> {
+  if (!rows.length) return [];
+  const aliases = getDb()
+    .prepare(
+      `SELECT location_id, name FROM location_aliases
+       WHERE location_id IN (${rows.map(() => "?").join(", ")})
+       ORDER BY id`,
+    )
+    .all(...rows.map((row) => row.id)) as Array<{ location_id: number; name: string }>;
+  const grouped = new Map<number, Array<{ name: string }>>();
+  for (const alias of aliases) {
+    const list = grouped.get(alias.location_id) ?? [];
+    list.push({ name: alias.name });
+    grouped.set(alias.location_id, list);
+  }
+  return rows.map((row) => ({ ...row, aliases: grouped.get(row.id) ?? [] }));
 }
 
 export function findDuplicateLocation(input: {

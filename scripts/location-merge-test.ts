@@ -401,8 +401,11 @@ async function main() {
   }>;
   assert.ok(aliases.every((row) => row.location_id === keeperId));
   assert.ok(aliases.some((row) => row.name === "Harbor Dock 4"));
-  assert.ok(aliases.some((row) => row.name === "Pine Harbor Foods LLC"));
-  assert.ok(aliases.some((row) => row.name === "Pine Harbor Foods, Inc."));
+  assert.equal(
+    aliases.filter((row) => normalizeMergeName(row.name) === "pine harbor foods").length,
+    0,
+    "a copy whose name normalizes to the keeper does not become an alias",
+  );
   const cache = after.prepare("SELECT location_id FROM location_verify_cache WHERE query_key = 'pine-harbor'").get() as {
     location_id: number;
   };

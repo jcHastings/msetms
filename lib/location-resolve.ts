@@ -26,6 +26,7 @@ export type LocationResolveRow = {
   hours?: string | null;
   created_at?: string | null;
   linkCount?: number | null;
+  aliases?: Array<{ name?: string | null }>;
 };
 
 export type LocationResolveInput = {
@@ -206,15 +207,20 @@ export function resolveLocation<T extends LocationResolveRow>(
   const incomingState = normalizeMergeState(incoming.state);
   const matched = new Map<number, T>();
 
+  function knownAs(row: T): boolean {
+    if (normalizeMergeName(row.name) === name) return true;
+    return (row.aliases ?? []).some((alias) => normalizeMergeName(alias.name) === name);
+  }
+
   function add(row: T) {
-    if (normalizeMergeName(row.name) !== name) return;
+    if (!knownAs(row)) return;
     const kept = keeperOf(row);
     if (!kept) return;
     matched.set(kept.id, kept);
   }
 
   for (const row of rows) {
-    if (normalizeMergeName(row.name) !== name) continue;
+    if (!knownAs(row)) continue;
     const street = normalizeMergeStreet(row.street);
     const zip = normalizeMergeZip(row.zip);
     const place = String(row.google_place_id ?? "").trim();
@@ -227,9 +233,7 @@ export function resolveLocation<T extends LocationResolveRow>(
   }
 
   if (!incomingStreet) {
-    const pool = rows.filter(
-      (row) => normalizeMergeName(row.name) === name && cityStateAgrees(row, incomingCity, incomingState),
-    );
+    const pool = rows.filter((row) => knownAs(row) && cityStateAgrees(row, incomingCity, incomingState));
     // A blank street plus the same name and city/state counts. One addressed
     // candidate wins the rank. Several addressed candidates are still ranked
     // so the caller does not create another copy.

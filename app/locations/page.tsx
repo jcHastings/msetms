@@ -97,6 +97,9 @@ export default async function LocationsPage({
                         </span>
                       ) : null}
                     </div>
+                    {location.matched_alias ? (
+                      <div className="text-xs text-slate-500">also known as {location.matched_alias}</div>
+                    ) : null}
                     {location.phone ? <div className="text-xs text-slate-500">{location.phone}</div> : null}
                   </td>
                   <td className="text-slate-600">{formatLocationAddress(location) || "—"}</td>
