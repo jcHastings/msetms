@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { LocationPicker } from "@/components/location-picker";
 import { confirmDeadheadAction } from "@/lib/dispatcher-actions";
 import { deadheadPromptText } from "@/lib/empty-miles-shared";
-import type { LocationPickerRow } from "@/lib/locations";
+import { formatLocationAddress, type LocationPickerRow } from "@/lib/locations";
 
 export function DeadheadPrompt({
   loadId,
@@ -26,6 +26,7 @@ export function DeadheadPrompt({
   initialEditing?: boolean;
 }) {
   const [editing, setEditing] = useState(initialEditing);
+  const [address, setAddress] = useState("");
   const [state, action, pending] = useActionState(confirmDeadheadAction, null);
   return (
     <section className="card mb-4 p-4" data-deadhead-prompt="">
@@ -79,11 +80,20 @@ export function DeadheadPrompt({
               catalog
               emptyLabel="Pick a saved location"
               placeholder="Search locations"
+              onChange={(_locationId, location) => {
+                setAddress(location ? formatLocationAddress(location) : "");
+              }}
             />
           </div>
           <div className="field md:col-span-2">
             <label htmlFor={`deadhead-address-${loadId}`}>Address</label>
-            <input id={`deadhead-address-${loadId}`} name="address" placeholder="Street, city, state" />
+            <input
+              id={`deadhead-address-${loadId}`}
+              name="address"
+              placeholder="Street, city, state"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+            />
           </div>
           <button className="btn btn-primary" type="submit" disabled={pending || readOnly}>
             Save start

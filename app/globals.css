@@ -1753,6 +1753,46 @@ select[data-view-only=""]:disabled {
   font-size: 12.5px;
 }
 
+.location-suggest-input:focus {
+  border-color: #0f66b4;
+  box-shadow: 0 0 0 3px rgba(19, 124, 221, 0.35);
+  outline: 2px solid #0f66b4;
+  outline-offset: 1px;
+}
+
+.location-suggest-menu {
+  border: 1px solid #8aa0b5;
+  background: #fff;
+  color: #1c2833;
+  box-shadow: 0 8px 24px rgba(7, 50, 90, 0.18);
+}
+
+.location-suggest-option {
+  color: #1c2833;
+  background: #fff;
+}
+
+.location-suggest-option .location-suggest-name {
+  color: #1c2833;
+}
+
+.location-suggest-option .location-suggest-address {
+  color: #3d4f61;
+}
+
+.location-suggest-option.is-active,
+.location-suggest-option:focus-visible {
+  background: #07325a;
+  color: #fff;
+}
+
+.location-suggest-option.is-active .location-suggest-name,
+.location-suggest-option:focus-visible .location-suggest-name,
+.location-suggest-option.is-active .location-suggest-address,
+.location-suggest-option:focus-visible .location-suggest-address {
+  color: #fff;
+}
+
 .section-head {
   background: #f4f5f7;
   border-bottom: 1px solid var(--border);

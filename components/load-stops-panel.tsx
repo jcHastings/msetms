@@ -227,7 +227,19 @@ function stopPrivateNotes(draft: StopDraft, location: Location | null | undefine
     .join(" · ");
 }
 
-function applyLocationToDraft(draft: StopDraft, location: Location): StopDraft {
+function applyLocationToDraft(
+  draft: StopDraft,
+  location: {
+    id: number;
+    name: string;
+    street?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+    phone?: string | null;
+    scheduling_type?: string | null;
+  },
+): StopDraft {
   return {
     ...draft,
     locationId: String(location.id),
@@ -236,8 +248,13 @@ function applyLocationToDraft(draft: StopDraft, location: Location): StopDraft {
     city: location.city ?? "",
     state: location.state ?? "",
     zip: location.zip ?? "",
-    phone: location.phone ?? "",
-    scheduleType: location.scheduling_type === "fcfs" ? "fcfs" : location.scheduling_type === "appointment" ? "appointment" : draft.scheduleType,
+    phone: location.phone ?? draft.phone,
+    scheduleType:
+      location.scheduling_type === "fcfs"
+        ? "fcfs"
+        : location.scheduling_type === "appointment"
+          ? "appointment"
+          : draft.scheduleType,
   };
 }
 
@@ -279,12 +296,12 @@ function StopDialog({
   const [error, setError] = useState<string | null>(null);
   const persistedLocationId = stop?.location_id ? String(stop.location_id) : "";
 
-  function pickLocation(locationId: string) {
+  function pickLocation(locationId: string, picked?: { id: number; name: string; street?: string | null; city?: string | null; state?: string | null; zip?: string | null; phone?: string | null; scheduling_type?: string | null } | null) {
     if (!locationId) {
       setDraft((current) => ({ ...current, locationId: "" }));
       return;
     }
-    const location = locations.find((row) => String(row.id) === locationId);
+    const location = picked ?? locations.find((row) => String(row.id) === locationId);
     if (!location) return;
     setDraft((current) => applyLocationToDraft(current, location));
   }
@@ -571,14 +588,17 @@ function StopGridBlock({
     }
   }
 
-  function pickLocation(locationId: string) {
+  function pickLocation(
+    locationId: string,
+    picked?: { id: number; name: string; street?: string | null; city?: string | null; state?: string | null; zip?: string | null; phone?: string | null; scheduling_type?: string | null } | null,
+  ) {
     if (!locationId) {
       const next = { ...draft, locationId: "" };
       setDraft(next);
       if (isAssignEdit(persistedLocationId, "")) edit?.markDirty();
       return;
     }
-    const location = locations.find((row) => String(row.id) === locationId);
+    const location = picked ?? locations.find((row) => String(row.id) === locationId);
     if (!location) return;
     const next = applyLocationToDraft(draft, location);
     setDraft(next);

@@ -4,16 +4,19 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { createPortal } from "react-dom";
 import { LocationVerifyBadge } from "@/components/location-verify-badge";
 import {
+  filterLocationSuggestions,
   filterLocationsForPicker,
   formatLocationAddress,
   isArchivedLocation,
+  LOCATION_SUGGEST_LIMIT,
+  locationSuggestMatch,
   type LocationPickerRow,
 } from "@/lib/locations";
 import { placeDetailsAction, searchPlacesAction } from "@/lib/places-actions";
 import { searchLocationsAction } from "@/lib/search-actions";
 import { matchLocationForPlace, type PlaceDetails, type PlaceSuggestion } from "@/lib/places-shared";
 
-const RESULT_LIMIT = 50;
+const SUGGEST_DEBOUNCE_MS = 200;
 
 export function LocationPicker({
   id,
@@ -35,7 +38,7 @@ export function LocationPicker({
   locations: LocationPickerRow[];
   value?: string;
   defaultValue?: string;
-  onChange?: (locationId: string) => void;
+  onChange?: (locationId: string, location: LocationPickerRow | null) => void;
   onPlacePick?: (place: PlaceDetails) => void;
   placesEnabled?: boolean;
   emptyLabel?: string;
@@ -46,7 +49,21 @@ export function LocationPicker({
   const inputId = id ?? (name ? `${name}-search` : listId.replace(/-location-list$/, "-search"));
   const [uncontrolled, setUncontrolled] = useState(defaultValue);
   const selectedId = value ?? uncontrolled;
-  const [remoteRows, setRemoteRows] = useState<LocationPickerRow[]>([]);
+  const [remoteResult, setRemoteResult] = useState<{ query: string; items: LocationPickerRow[] }>({
+    query: "",
+    items: [],
+  });
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const remoteRows = useMemo(
+    () => (debouncedQuery.trim() && remoteResult.query === debouncedQuery.trim() ? remoteResult.items : []),
+    [debouncedQuery, remoteResult],
+  );
   const catalogRows = useMemo(() => {
     const map = new Map<number, LocationPickerRow>();
     for (const row of locations) map.set(row.id, row);
@@ -54,38 +71,47 @@ export function LocationPicker({
     return [...map.values()];
   }, [locations, remoteRows]);
   const selected = catalogRows.find((location) => String(location.id) === selectedId) ?? null;
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const matches = useMemo(() => {
-    if (!catalog) return filterLocationsForPicker(locations, query, RESULT_LIMIT);
-    const local = filterLocationsForPicker(locations, query, RESULT_LIMIT);
+    const local = filterLocationSuggestions(
+      filterLocationsForPicker(locations, debouncedQuery, 50),
+      debouncedQuery,
+      LOCATION_SUGGEST_LIMIT,
+    );
+    if (!catalog) return local;
     const map = new Map<number, LocationPickerRow>();
-    for (const row of [...local, ...remoteRows]) map.set(row.id, row);
-    return [...map.values()].slice(0, RESULT_LIMIT);
-  }, [catalog, locations, query, remoteRows]);
+    for (const row of local) map.set(row.id, row);
+    for (const row of remoteRows) {
+      if (!locationSuggestMatch(row, debouncedQuery)) continue;
+      map.set(row.id, row);
+    }
+    return [...map.values()].slice(0, LOCATION_SUGGEST_LIMIT);
+  }, [catalog, locations, debouncedQuery, remoteRows]);
   const [placeResults, setPlaceResults] = useState<PlaceSuggestion[]>([]);
   const [placePending, setPlacePending] = useState(false);
   const options = useMemo(() => [{ id: "", name: emptyLabel }, ...matches], [emptyLabel, matches]);
 
   useEffect(() => {
-    if (!catalog) return;
-    const trimmed = query.trim();
-    const handle = window.setTimeout(() => {
-      if (trimmed.length < 1) {
-        setRemoteRows([]);
-        return;
-      }
-      void searchLocationsAction(trimmed)
-        .then((rows) => setRemoteRows(rows))
-        .catch(() => setRemoteRows([]));
-    }, 200);
+    const handle = window.setTimeout(() => setDebouncedQuery(query), SUGGEST_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [catalog, query]);
+  }, [query]);
+
+  useEffect(() => {
+    if (!catalog) return;
+    const trimmed = debouncedQuery.trim();
+    if (trimmed.length < 1) return;
+    let cancelled = false;
+    void searchLocationsAction(trimmed)
+      .then((rows) => {
+        if (!cancelled) setRemoteResult({ query: trimmed, items: rows });
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteResult({ query: trimmed, items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalog, debouncedQuery]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -105,7 +131,6 @@ export function LocationPicker({
 
   function setSelected(next: string) {
     if (value === undefined) setUncontrolled(next);
-    onChange?.(next);
   }
 
   function close() {
@@ -114,10 +139,11 @@ export function LocationPicker({
     setHighlight(0);
   }
 
-  function pick(next: string) {
-    const location = next ? catalogRows.find((row) => String(row.id) === next) : null;
-    if (next && !location) return;
+  function pick(next: string, location?: LocationPickerRow | null) {
+    const row = next ? location ?? catalogRows.find((item) => String(item.id) === next) ?? null : null;
+    if (next && !row) return;
     setSelected(next);
+    onChange?.(next, row);
     close();
   }
 
@@ -133,6 +159,7 @@ export function LocationPicker({
         return;
       }
       setSelected("");
+      onChange?.("", null);
       onPlacePick?.(place);
       close();
     } catch {
@@ -195,7 +222,9 @@ export function LocationPicker({
     } else if (event.key === "Enter") {
       event.preventDefault();
       const choice = options[highlight];
-      if (choice) pick(choice.id === "" ? "" : String(choice.id));
+      if (!choice) return;
+      if (choice.id === "") pick("");
+      else pick(String(choice.id), choice as LocationPickerRow);
     }
   }
 
@@ -212,10 +241,11 @@ export function LocationPicker({
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={open ? `${listId}-opt-${highlight}` : undefined}
         autoComplete="off"
         value={display}
         placeholder={placeholder}
-        className="mt-1 w-full"
+        className="location-suggest-input mt-1 w-full"
         onFocus={() => {
           setOpen(true);
           setQuery("");
@@ -242,16 +272,17 @@ export function LocationPicker({
         ? createPortal(
             <div
               data-location-picker-menu=""
-              className="fixed z-50 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg"
+              className="location-suggest-menu fixed z-50 overflow-hidden rounded-md"
               style={{ top: menuRect.top, left: menuRect.left, width: Math.min(menuRect.width, 420) }}
             >
               <ul id={listId} role="listbox" className="max-h-64 overflow-auto text-sm">
                 <li>
                   <button
                     type="button"
+                    id={`${listId}-opt-0`}
                     role="option"
                     aria-selected={highlight === 0}
-                    className={`w-full px-3 py-2 text-left ${highlight === 0 ? "bg-slate-100" : ""}`}
+                    className={`location-suggest-option w-full px-3 py-2 text-left ${highlight === 0 ? "is-active" : ""}`}
                     onMouseEnter={() => setHighlight(0)}
                     onClick={() => pick("")}
                   >
@@ -259,7 +290,11 @@ export function LocationPicker({
                   </button>
                 </li>
                 {query.trim() ? (
-                  matches.length === 0 ? (
+                  query.trim() !== debouncedQuery.trim() ? (
+                    <li className="px-3 py-2 text-sm text-slate-700" role="status">
+                      Searching locations…
+                    </li>
+                  ) : matches.length === 0 ? (
                     <li className="px-3 py-2 text-xs text-slate-500">
                       {placesEnabled
                         ? "No saved location matches. Pick a Google result or keep a one-off address."
@@ -273,17 +308,18 @@ export function LocationPicker({
                         <li key={location.id}>
                           <button
                             type="button"
+                            id={`${listId}-opt-${optionIndex}`}
                             role="option"
                             aria-selected={highlight === optionIndex}
-                            className={`w-full px-3 py-2 text-left ${highlight === optionIndex ? "bg-slate-100" : ""}`}
+                            className={`location-suggest-option w-full px-3 py-2 text-left ${highlight === optionIndex ? "is-active" : ""}`}
                             onMouseEnter={() => setHighlight(optionIndex)}
-                            onClick={() => pick(String(location.id))}
+                            onClick={() => pick(String(location.id), location)}
                           >
-                            <div className="font-semibold text-slate-900">
+                            <div className="location-suggest-name font-semibold">
                               {location.name}
                               <LocationVerifyBadge verifiedAt={location.verified_at} />
                             </div>
-                            {address ? <div className="text-xs text-slate-500">{address}</div> : null}
+                            {address ? <div className="location-suggest-address text-sm">{address}</div> : null}
                           </button>
                         </li>
                       );

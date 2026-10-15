@@ -184,15 +184,25 @@ function RelayDialog({
     setAddress(place.formatted || [place.street, place.city, place.state, place.zip].filter(Boolean).join(", "));
   }
 
-  function rememberSaved(locationId: string) {
-    const location = locations.find((row) => String(row.id) === locationId);
+  function rememberSaved(
+    locationId: string,
+    picked?: { id: number; name: string; street?: string | null; city?: string | null; state?: string | null; zip?: string | null; latitude?: number | null; longitude?: number | null; google_place_id?: string | null } | null,
+  ) {
+    const location = picked ?? locations.find((row) => String(row.id) === locationId);
     if (!location) return;
     const cityState = [location.city, location.state].filter(Boolean).join(", ");
     setHandoff([location.name, cityState].filter(Boolean).join(", "));
     setPlaceId(String(location.google_place_id ?? ""));
     setLat(location.latitude != null ? String(location.latitude) : "");
     setLng(location.longitude != null ? String(location.longitude) : "");
-    setAddress(formatLocationAddress(location));
+    setAddress(
+      formatLocationAddress({
+        street: location.street ?? "",
+        city: location.city ?? "",
+        state: location.state ?? "",
+        zip: location.zip ?? "",
+      }),
+    );
   }
 
   return (
