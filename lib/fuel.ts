@@ -66,7 +66,7 @@ export type FuelTransaction = {
   prompt_data: string;
   dedup_key: string;
   created_at: string;
-  /** import_name | truck_load | manual. Empty on rows saved before this column. */
+  /** import_name | truck_assignment | manual. Empty on rows saved before this column. */
   driver_source?: string;
 };
 
@@ -397,7 +397,24 @@ export type FuelMatchLoad = {
   delivery_end?: string | null;
 };
 
-export type FuelDriverSource = "import_name" | "truck_load" | "manual";
+export type FuelDriverSource = "import_name" | "truck_assignment" | "manual";
+
+export type FuelCardAlias = {
+  driverId: number;
+  alias: string;
+};
+
+export type FuelTruckAssignment = {
+  truckId: number;
+  driverId: number;
+};
+
+/** Passed by the importer. Load rows are not an input: they never assign a fuel driver. */
+export type FuelMatchContext = {
+  aliases?: FuelCardAlias[];
+  assignments?: FuelTruckAssignment[];
+  backupDriverIds?: number[];
+};
 
 const FUEL_LOAD_SLACK_MS = 86_400_000;
 
@@ -450,7 +467,7 @@ function rowOnTruck(row: FuelLabelRow, truckId: number | null, unit: string): bo
 
 /**
  * Driver label for a truck in a report window.
- * Fuel rows win, then the driver on that truck's load. Profile truck is never used.
+ * The label is the fuel row's driver. Profile truck and load records are not used.
  */
 export function fuelTruckDriverLabel(input: {
   truckId: number | null;
@@ -458,11 +475,10 @@ export function fuelTruckDriverLabel(input: {
   fromIso: string;
   toIso: string;
   rows: FuelLabelRow[];
-  loads: FuelMatchLoad[];
+  loads?: FuelMatchLoad[];
   drivers: Array<{ id: number; name: string }>;
 }): { driverId: number | null; driverName: string } {
-  const fromMs = Date.parse(input.fromIso);
-  const toMs = Date.parse(input.toIso);
+  void input.loads;
   const fuelIds = distinctPositiveIds(
     input.rows
       .filter((row) => {
@@ -471,15 +487,7 @@ export function fuelTruckDriverLabel(input: {
       })
       .map((row) => row.driver_id),
   );
-  const loadIds =
-    input.truckId == null || !Number.isFinite(fromMs) || !Number.isFinite(toMs)
-      ? []
-      : distinctPositiveIds(
-          input.loads
-            .filter((load) => load.truck_id === input.truckId && fuelLoadOverlapsRange(load, fromMs, toMs))
-            .map((load) => load.driver_id),
-        );
-  const driverId = fuelIds.length === 1 ? fuelIds[0]! : fuelIds.length === 0 && loadIds.length === 1 ? loadIds[0]! : null;
+  const driverId = fuelIds.length === 1 ? fuelIds[0]! : null;
   if (driverId == null) return { driverId: null, driverName: "Unassigned" };
   const name = input.drivers.find((driver) => driver.id === driverId)?.name?.trim();
   return { driverId, driverName: name || "Unassigned" };
@@ -492,40 +500,57 @@ export function matchFuelDriver(
   },
   drivers: DriverWithTruck[],
   trucks: TruckWithDriver[],
-  loads: FuelMatchLoad[] = [],
+  _loads: FuelMatchLoad[] = [],
+  context: FuelMatchContext = {},
 ): { driverId: number | null; truckId: number | null; unitNumber: string; driverSource: FuelDriverSource | null } {
+  void _loads;
   const truck =
     findTruckByUnit(row.unitNumber, trucks) ?? findTruckByUnit(row.prompt ?? "", trucks);
   const unitNumber = truck?.unit_number || row.unitNumber.trim() || (row.prompt ?? "").trim();
-  if (isMoneyCodeCategory(row.category ?? "")) {
-    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
-  }
+  const blank = {
+    driverId: null,
+    truckId: truck?.id ?? null,
+    unitNumber,
+    driverSource: null as FuelDriverSource | null,
+  };
+  if (isMoneyCodeCategory(row.category ?? "")) return blank;
   const byId = findDriverById(row.driverIdRaw, drivers);
   if (byId) {
     return { driverId: byId.id, truckId: truck?.id ?? null, unitNumber, driverSource: "import_name" };
   }
-  const named =
-    matchDriverName(row.driverName, drivers, { truckId: truck?.id ?? null, occurredAt: row.occurredAt, loads }) ??
-    matchDriverName(row.prompt ?? "", drivers, { truckId: truck?.id ?? null, occurredAt: row.occurredAt, loads });
-  if (named?.ambiguous) {
-    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
+  const fromAlias =
+    matchCardAlias(row.driverName, context.aliases ?? [], drivers) ??
+    matchCardAlias(row.prompt ?? "", context.aliases ?? [], drivers);
+  if (fromAlias?.driver) {
+    return { driverId: fromAlias.driver.id, truckId: truck?.id ?? null, unitNumber, driverSource: "import_name" };
   }
+  const named = fromAlias?.ambiguous
+    ? fromAlias
+    : (matchDriverName(row.driverName, drivers) ?? matchDriverName(row.prompt ?? "", drivers));
   if (named?.driver) {
     return { driverId: named.driver.id, truckId: truck?.id ?? null, unitNumber, driverSource: "import_name" };
   }
   const namePresent =
     normalizedDriverTokens(row.driverName).length > 0 || normalizedDriverTokens(row.prompt ?? "").length > 0;
-  if (namePresent) {
-    return { driverId: null, truckId: truck?.id ?? null, unitNumber, driverSource: null };
+  if (!namePresent || named?.ambiguous) {
+    const assigned = assignedDriverForTruck(truck?.id ?? null, drivers, context);
+    if (assigned) {
+      return { driverId: assigned.id, truckId: truck?.id ?? null, unitNumber, driverSource: "truck_assignment" };
+    }
   }
-  const loadDriverId = loadDriverForFuel(truck?.id ?? null, row.occurredAt, loads);
-  const loadDriver = loadDriverId == null ? undefined : drivers.find((driver) => driver.id === loadDriverId);
-  return {
-    driverId: loadDriver?.id ?? null,
-    truckId: truck?.id ?? null,
-    unitNumber,
-    driverSource: loadDriver ? "truck_load" : null,
-  };
+  return blank;
+}
+
+/** True when a card name hits an alias or a cleaned driver name. Used by the new-card-name prompt. */
+export function fuelCardNameMatchesDriver(
+  raw: string,
+  drivers: DriverWithTruck[],
+  aliases: FuelCardAlias[] = [],
+): boolean {
+  const alias = matchCardAlias(raw, aliases, drivers);
+  if (alias?.driver) return true;
+  if (alias?.ambiguous) return false;
+  return Boolean(matchDriverName(raw, drivers)?.driver);
 }
 
 export function parseEfsFuelText(text: string): FuelCsvParseResult {
@@ -1103,39 +1128,45 @@ function onlyDriver(hits: DriverWithTruck[]): DriverNameHit | null {
   return null;
 }
 
-function loadDriverForFuel(
-  truckId: number | null,
-  occurredAt: string | undefined,
-  loads: FuelMatchLoad[],
-): number | null {
-  if (truckId == null || !occurredAt) return null;
-  const at = Date.parse(occurredAt);
-  if (!Number.isFinite(at)) return null;
+/** Case, punctuation, and a leading "Fuel " folded away. Digits stay so a truck number in an alias still counts. */
+export function fuelCardAliasKey(raw: string): string {
+  let text = String(raw ?? "").replace(/\s+/g, " ").trim();
+  text = text.replace(/^fuel\s+/i, "").trim();
+  if (!text) return "";
+  const extracted = extractNProductDriverName(text);
+  const chosen = extracted || text;
+  return chosen
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function matchCardAlias(raw: string, aliases: FuelCardAlias[], drivers: DriverWithTruck[]): DriverNameHit | null {
+  const key = fuelCardAliasKey(raw);
+  if (!key) return null;
   const ids = distinctPositiveIds(
-    loads.filter((load) => load.truck_id === truckId && fuelLoadCoversAt(load, at)).map((load) => load.driver_id),
+    aliases.filter((alias) => fuelCardAliasKey(alias.alias) === key).map((alias) => alias.driverId),
   );
-  return ids.length === 1 ? ids[0]! : null;
+  if (ids.length > 1) return { driver: null, ambiguous: true };
+  if (ids.length === 0) return null;
+  const driver = drivers.find((item) => item.id === ids[0]);
+  return driver ? { driver, ambiguous: false } : null;
 }
 
-function driverOnTruckLoad(
-  driverId: number,
+function assignedDriverForTruck(
   truckId: number | null,
-  occurredAt: string | undefined,
-  loads: FuelMatchLoad[],
-): boolean {
-  return loadDriverForFuel(truckId, occurredAt, loads) === driverId
-    || loads.some((load) => {
-      if (truckId == null || load.truck_id !== truckId || load.driver_id !== driverId) return false;
-      const at = occurredAt ? Date.parse(occurredAt) : Number.NaN;
-      return fuelLoadCoversAt(load, at);
-    });
+  drivers: DriverWithTruck[],
+  context: FuelMatchContext,
+): DriverWithTruck | null {
+  if (truckId == null) return null;
+  const assignment = (context.assignments ?? []).find((item) => item.truckId === truckId);
+  if (!assignment) return null;
+  if ((context.backupDriverIds ?? []).includes(assignment.driverId)) return null;
+  return drivers.find((driver) => driver.id === assignment.driverId) ?? null;
 }
 
-function matchDriverName(
-  raw: string,
-  drivers: DriverWithTruck[],
-  context: { truckId: number | null; occurredAt?: string; loads: FuelMatchLoad[] },
-): DriverNameHit | null {
+function matchDriverName(raw: string, drivers: DriverWithTruck[]): DriverNameHit | null {
   const card = driverNameParts(raw);
   if (!card) return null;
   const roster = drivers.map((driver) => ({ driver, parts: driverNameParts(driver.name) })).filter((item) => item.parts);
@@ -1192,24 +1223,13 @@ function matchDriverName(
     );
     if (bySurname) return bySurname;
   }
-
-  if (card.tokens.length === 1 && card.first.length >= 3) {
-    const hits = roster.filter((item) => sameGivenName(card.first, item.parts!.first)).map((item) => item.driver);
-    if (hits.length > 1) return { driver: null, ambiguous: true };
-    if (hits.length === 1) {
-      const driver = hits[0]!;
-      if (driverOnTruckLoad(driver.id, context.truckId, context.occurredAt, context.loads)) {
-        return { driver, ambiguous: false };
-      }
-      return { driver: null, ambiguous: true };
-    }
-  }
   return null;
 }
 
 const NAME_ALIASES: Record<string, string> = {
   christoph: "christopher",
   chrisopher: "christopher",
+  lukas: "lucas",
   avilla: "avila",
   howel: "howell",
   jospeh: "joseph",

@@ -1,12 +1,10 @@
 import {
   addYmdDays,
   foldNameKey,
-  fuelTruckDriverLabel,
   fuelTxListKind,
   localWeekRange,
   normalizeUnit,
   zonedWallToUtc,
-  type FuelMatchLoad,
 } from "./fuel";
 import { DISPLAY_TIME_ZONE, formatMdYDisplay, ymdInTimeZone } from "./format";
 
@@ -362,7 +360,7 @@ export function scoreFuelAudit(
   rows: FuelAuditRow[],
   window: FuelAuditWindow,
   thresholds: FuelAuditThresholds = FUEL_AUDIT_THRESHOLDS,
-  context?: { loads?: FuelMatchLoad[]; drivers?: Array<{ id: number; name: string }> },
+  context?: { drivers?: Array<{ id: number; name: string }> },
 ): FuelAuditReport {
   const windowRows = rows.filter((row) => inFuelAuditWindow(row.occurred_at, window));
   const scored = windowRows.filter((row) => fuelAuditProduct(row.category) != null);
@@ -569,23 +567,7 @@ export function scoreFuelAudit(
     }
   }
 
-  if (context?.loads?.length) {
-    for (const flag of flags) {
-      if (flag.driverName !== "Unassigned") continue;
-      const label = fuelTruckDriverLabel({
-        truckId: null,
-        unit: flag.unit,
-        fromIso: window.fromIso,
-        toIso: window.toIso,
-        rows,
-        loads: context.loads,
-        drivers: context.drivers ?? [],
-      });
-      if (!label.driverId) continue;
-      flag.driverId = label.driverId;
-      flag.driverName = label.driverName;
-    }
-  }
+  void context;
   const ranked = flags.sort((left, right) => {
     if (left.severity !== right.severity) return left.severity === "high" ? -1 : 1;
     return right.score - left.score;

@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
+import { DriverCardAliases } from "@/components/driver-card-aliases";
 import { DriverComplianceCard } from "@/components/driver-compliance-card";
 import { DriverDrugTestsCard } from "@/components/driver-drug-tests-card";
 import { DriverFuelCard } from "@/components/driver-fuel-card";
 import { DriverForm } from "@/components/driver-form";
 import { FleetDocsPanel } from "@/components/fleet-docs-panel";
 import { PageHeader } from "@/components/page-header";
+import { canEditFleet, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { listFleetDocuments } from "@/lib/files";
+import { listDriverCardAliases } from "@/lib/fuel-card-aliases";
 import { driverFormValues } from "@/lib/fleet-form-shared";
 import { hasDriverPassword } from "@/lib/driver-password";
 import { getDriver, listDriverDrugTests } from "@/lib/queries";
@@ -28,6 +31,7 @@ export default async function EditDriverPage({
 }) {
   const driver = getDriver(Number.parseInt((await params).id, 10));
   if (!driver) notFound();
+  const dispatcher = await getSignedInDispatcher();
   const { pin, ...driverWithoutPin } = driver;
 
   return (
@@ -48,6 +52,11 @@ export default async function EditDriverPage({
       <DriverComplianceCard driver={driver} windows={complianceWindows()} />
       <DriverDrugTestsCard driverId={Number(driver.id)} tests={listDriverDrugTests(Number(driver.id), 5)} />
       <DriverFuelCard driverId={Number(driver.id)} />
+      <DriverCardAliases
+        driverId={Number(driver.id)}
+        aliases={listDriverCardAliases(Number(driver.id))}
+        canEdit={canEditFleet(dispatcher?.role ?? "")}
+      />
       <DriverForm
         driver={driverFormValues({
           ...driverWithoutPin,

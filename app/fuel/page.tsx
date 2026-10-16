@@ -4,6 +4,7 @@ import { deskMetadata } from "@/lib/desk-metadata";
 export const metadata = deskMetadata("Fuel");
 import { AccessDenied } from "@/components/access-denied";
 import { FuelCsvImport } from "@/components/fuel-csv-import";
+import { FuelNewCardNames } from "@/components/fuel-new-card-names";
 import { FuelMatchQueue } from "@/components/fuel-match-queue";
 import { FuelMpgTable } from "@/components/fuel-mpg-table";
 import { FuelRollupTable } from "@/components/fuel-rollup-table";
@@ -13,7 +14,8 @@ import { IdleFuelEstimate } from "@/components/idle-fuel-estimate";
 import { FuelWeekSpendCards, FuelWeekStrip } from "@/components/fuel-week-strip";
 import { PageHeader } from "@/components/page-header";
 import { FuelTransactionLists, FuelUnassignedLists, FuelViewTabs, fuelPageHref } from "@/components/fuel-transaction-lists";
-import { canExportCsv, canViewFuel, getPageAccess } from "@/lib/dispatcher-session";
+import { canEditFleet, canExportCsv, canViewFuel, getPageAccess } from "@/lib/dispatcher-session";
+import { listNewFuelCardNames } from "@/lib/fuel-card-aliases";
 import { fuelAuditWindowForWeek, scoreFuelAudit } from "@/lib/fuel-audit";
 import { parseFuelPageView, parseFuelTxList } from "@/lib/fuel";
 import { listDriverMpg, parseDriverMpgPeriod } from "@/lib/fuel-mpg";
@@ -120,7 +122,6 @@ export default async function FuelPage({
       <IdleFuelEstimate board={idleBoard} />
       <FuelAuditStrip
         report={scoreFuelAudit(listFuelTransactions(), fuelAuditWindowForWeek(week), undefined, {
-          loads: listLoads({ status: "all" }),
           drivers: drivers.map((driver) => ({ id: driver.id, name: driver.name })),
         })}
       />
@@ -147,6 +148,11 @@ export default async function FuelPage({
         week={week}
       />
       <FuelCsvImport />
+      <FuelNewCardNames
+        names={listNewFuelCardNames()}
+        drivers={driverOptions}
+        canEdit={canEditFleet(dispatcher.role)}
+      />
       <FuelMatchQueue />
       <FuelRollupTable
         title="Per-driver totals"

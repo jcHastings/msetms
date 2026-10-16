@@ -9,7 +9,6 @@ import {
   type FuelAuditSubject,
 } from "./fuel-audit";
 import {
-  fuelTruckDriverLabel,
   fuelTxListKind,
   fuelWeekSpentTotalsForWeek,
   isFuelUnassignedRow,
@@ -294,31 +293,9 @@ export function buildFuelCloseout(input: {
   const now = input.now ?? new Date();
   const closed = Date.parse(window.toIso) <= now.getTime();
   const weekRows = input.rows.filter((row) => inFuelAuditWindow(row.occurred_at, window));
-  const labelContext = {
-    fromIso: window.fromIso,
-    toIso: window.toIso,
-    rows: input.rows,
-    loads: input.loads ?? [],
-    drivers: input.drivers ?? [],
-  };
-  const subjectFor = (row: FuelCloseoutTx): FuelAuditSubject => {
-    const subject = fuelAuditSubject(row);
-    if (subject.driverId != null || subject.driverName !== "Unassigned" || !labelContext.loads.length) return subject;
-    const label = fuelTruckDriverLabel({
-      truckId: row.truck_id ?? null,
-      unit: subject.unit,
-      ...labelContext,
-    });
-    if (!label.driverId) return subject;
-    return {
-      key: `d:${label.driverId}`,
-      driverId: label.driverId,
-      driverName: label.driverName,
-      unit: subject.unit,
-    };
-  };
+  void input.loads;
+  const subjectFor = (row: FuelCloseoutTx): FuelAuditSubject => fuelAuditSubject(row);
   const audit = scoreFuelAudit(input.rows, window, undefined, {
-    loads: input.loads,
     drivers: input.drivers,
   });
   const flagsBySubject = new Map<string, FuelAuditFlag[]>();

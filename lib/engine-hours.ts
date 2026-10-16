@@ -2,7 +2,6 @@ import { fuelTruckDriverLabel, normalizeUnit, type FuelLabelRow, type FuelMatchL
 import { listFuelTransactions } from "./fuel-store";
 import {
   listDrivers,
-  listLoads,
   listTruckEngineHourReadings,
   listTrucks,
   TRUCK_ENGINE_HOUR_STATS,
@@ -235,7 +234,6 @@ export function engineHoursFromReadings(
   const trucks = input?.trucks ?? listTrucks();
   const drivers = input?.drivers ?? listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
   const rows = input?.rows ?? listFuelTransactions();
-  const loads = input?.loads ?? listLoads({ status: "all" });
   const readings = input?.readings ?? listTruckEngineHourReadings();
   const byTruck = new Map<number, TruckEngineHourReading[]>();
   for (const row of readings) {
@@ -256,7 +254,6 @@ export function engineHoursFromReadings(
       fromIso: window.fromIso,
       toIso: window.toIso,
       rows,
-      loads,
       drivers,
     });
     out.push({

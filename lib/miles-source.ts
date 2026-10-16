@@ -2,7 +2,7 @@ import { odometerDeltaMiles } from "./fuel-mpg";
 import { addYmdDays, fuelTruckDriverLabel, localWeekRange, normalizeUnit, type FuelLabelRow, type FuelMatchLoad } from "./fuel";
 import { listFuelTransactions } from "./fuel-store";
 import { isSamsaraConfigured } from "./integrations/samsara";
-import { listDrivers, listLoads, listTruckOdometerReadings, listTrucks } from "./queries";
+import { listDrivers, listTruckOdometerReadings, listTrucks } from "./queries";
 
 /** Weekly miles come from Samsara odometer deltas. There is no Ascend miles path. */
 export const MILES_SOURCE_ID = "samsara" as const;
@@ -137,7 +137,6 @@ export function milesFromSamsaraOdometer(
   const trucks = input?.trucks ?? listTrucks();
   const drivers = input?.drivers ?? listDrivers().map((driver) => ({ id: driver.id, name: driver.name }));
   const rows = input?.rows ?? listFuelTransactions();
-  const loads = input?.loads ?? listLoads({ status: "all" });
   const readings = (input?.readings ?? listTruckOdometerReadings()).filter((row) => row.source === "samsara");
   const byTruck = new Map<number, typeof readings>();
   for (const row of readings) {
@@ -156,7 +155,6 @@ export function milesFromSamsaraOdometer(
       fromIso: window.fromIso,
       toIso: window.toIso,
       rows,
-      loads,
       drivers,
     });
     out.push({
@@ -167,7 +165,7 @@ export function milesFromSamsaraOdometer(
       truckId: truck.id,
       miles: delta,
       source: MILES_SOURCE_ID,
-      note: label.driverId != null ? "Samsara odometer delta" : "Samsara odometer delta (no fuel or load driver)",
+      note: label.driverId != null ? "Samsara odometer delta" : "Samsara odometer delta (no fuel driver)",
     });
   }
 
