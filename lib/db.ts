@@ -10,6 +10,7 @@ import { expandTruncatedDispatchNotes } from "./rate-con-paperwork";
 import { Database, SQLITE_BUSY_TIMEOUT_MS } from "./sqlite";
 import { appleDevDriverFixtureEnabled, ensureAppleDevDriverLogin } from "./driver-login-fixture";
 import { raiseLoadNumberWatermark } from "./load-numbers";
+import { ensureFuelCardTables } from "./fuel-card-seed";
 import { seedDatabase, seedDemoLocations } from "./seed";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "tms.db");
@@ -1284,6 +1285,7 @@ export function migrate(db: Database): void {
   migrateFacilityAndCompanyDocs(db);
   migrateLocationArchive(db);
   migrateLocationAliases(db);
+  ensureFuelCardTables(db);
   ensureColumn(db, "loads", "qbo_send_claimed_at", "TEXT NOT NULL DEFAULT ''");
   const qboInvoiceIds = migrateQboInvoiceIdUnique(db);
   if (!qboInvoiceIds.created && qboInvoiceIds.conflicts.length) {

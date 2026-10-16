@@ -18,7 +18,6 @@ import {
   startOfLocalWeek,
   weekStartsFromFuelRows,
   type FuelCsvRowError,
-  type FuelMatchLoad,
   type FuelPeriodTotals,
   type FuelRollup,
   type FuelTransactionView,
@@ -27,6 +26,7 @@ import {
 } from "./fuel";
 import { extractNProductDriverName } from "./fuel-fleetone";
 import { autoMatchPendingFuelReceipts } from "./fuel-receipt-match";
+import { fuelMatchContext } from "./fuel-card-aliases";
 import { listDrivers, listTrucks } from "./queries";
 
 function nowIso(): string {
@@ -84,16 +84,6 @@ export function getFuelTransaction(id: number): FuelTransactionView | null {
   );
 }
 
-function listFuelMatchLoads(): FuelMatchLoad[] {
-  return getDb()
-    .prepare(
-      `SELECT truck_id, driver_id, status, pickup_start, pickup_end, delivery_start, delivery_end
-       FROM loads
-       WHERE truck_id IS NOT NULL AND driver_id IS NOT NULL AND status != 'cancelled'`,
-    )
-    .all() as FuelMatchLoad[];
-}
-
 function sameId(left: number | null | undefined, right: number | null | undefined): boolean {
   const a = Number(left);
   const b = Number(right);
@@ -134,7 +124,7 @@ function applyParsedFuelDriverNames(
 ): number {
   const drivers = listDrivers();
   const trucks = listTrucks();
-  const loads = listFuelMatchLoads();
+  const matchContext = fuelMatchContext();
   const db = getDb();
   const existing = db
     .prepare(
@@ -172,7 +162,8 @@ function applyParsedFuelDriverNames(
       },
       drivers,
       trucks,
-      loads,
+      [],
+      matchContext,
     );
     for (const hit of existing) {
       if (isMoneyCodeCategory(hit.category)) continue;
@@ -237,23 +228,18 @@ function applyStoredFuelImportNames(unmatchedOnly = false): number {
   return updated;
 }
 
-function looksLikeTruckOrLoadAssign(
+function looksLikeProfileTruckAssign(
   row: { driver_id: number | null; truck_id: number | null; unit_number: string },
   trucks: ReturnType<typeof listTrucks>,
   drivers: ReturnType<typeof listDrivers>,
-  loads: FuelMatchLoad[],
 ): boolean {
   if (!row.driver_id) return false;
   const truck =
     trucks.find((item) => sameId(item.id, row.truck_id)) ??
     trucks.find((item) => item.unit_number.trim() === row.unit_number.trim());
-  if (truck) {
-    if (sameId(truck.assigned_driver_id, row.driver_id)) return true;
-    if (drivers.some((driver) => sameId(driver.truck_id, truck.id) && sameId(driver.id, row.driver_id))) {
-      return true;
-    }
-  }
-  return loads.some((load) => sameId(load.truck_id, row.truck_id) && sameId(load.driver_id, row.driver_id));
+  if (!truck) return false;
+  if (sameId(truck.assigned_driver_id, row.driver_id)) return true;
+  return drivers.some((driver) => sameId(driver.truck_id, truck.id) && sameId(driver.id, row.driver_id));
 }
 
 export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolean; replaySources?: boolean }): number {
@@ -262,7 +248,7 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
   let updated = replaySources ? applyStoredFuelImportNames(unmatchedOnly) : 0;
   const drivers = listDrivers();
   const trucks = listTrucks();
-  const loads = listFuelMatchLoads();
+  const matchContext = fuelMatchContext();
   const db = getDb();
   const rows = db
     .prepare(
@@ -286,8 +272,14 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
   db.transaction(() => {
     for (const row of rows) {
       if (unmatchedOnly && row.driver_id) continue;
-      if (isMoneyCodeCategory(row.category)) continue;
       if (row.driver_source === "manual") continue;
+      if (isMoneyCodeCategory(row.category)) {
+        if (row.driver_id) {
+          update.run(null, row.truck_id, "", row.id);
+          updated += 1;
+        }
+        continue;
+      }
       const name = fuelRowDriverName(row);
       const match = matchFuelDriver(
         {
@@ -300,14 +292,15 @@ export function rematchFuelTransactionDrivers(options?: { unmatchedOnly?: boolea
         },
         drivers,
         trucks,
-        loads,
+        [],
+        matchContext,
       );
       let nextDriverId = match.driverId;
       let nextSource = match.driverSource ?? "";
       const legacyManual =
         !row.driver_source &&
         row.driver_id &&
-        !looksLikeTruckOrLoadAssign(row, trucks, drivers, loads);
+        !looksLikeProfileTruckAssign(row, trucks, drivers);
       if (!match.driverId && legacyManual) {
         nextDriverId = row.driver_id;
         nextSource = row.driver_source;
@@ -407,7 +400,7 @@ export function importFuelFromText(
   const parsed = parseFuelReport(text, sourceFile);
   const drivers = listDrivers();
   const trucks = listTrucks();
-  const loads = listFuelMatchLoads();
+  const matchContext = fuelMatchContext();
   const db = getDb();
   const existing = new Set(
     (db.prepare("SELECT dedup_key FROM fuel_transactions").all() as Array<{ dedup_key: string }>).map(
@@ -431,7 +424,7 @@ export function importFuelFromText(
         skipped += 1;
         continue;
       }
-      const match = matchFuelDriver(row, drivers, trucks, loads);
+      const match = matchFuelDriver(row, drivers, trucks, [], matchContext);
       insert.run(
         row.occurredAt,
         match.driverId,

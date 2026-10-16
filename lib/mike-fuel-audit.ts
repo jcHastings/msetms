@@ -9,7 +9,7 @@ import {
   type FuelAuditWindowKind,
 } from "./fuel-audit";
 import { listFuelTransactions } from "./fuel-store";
-import { listDrivers, listLoads } from "./queries";
+import { listDrivers } from "./queries";
 
 export type MikeFuelAuditQuestion = {
   kind: "fuel_audit";
@@ -84,7 +84,7 @@ export function answerMikeFuelAuditQuestion(
     window,
     undefined,
     live
-      ? { loads: listLoads({ status: "all" }), drivers: listDrivers().map((driver) => ({ id: driver.id, name: driver.name })) }
+      ? { drivers: listDrivers().map((driver) => ({ id: driver.id, name: driver.name })) }
       : undefined,
   );
   return formatMikeFuelAuditReply(report);
@@ -94,7 +94,6 @@ export function buildMikeFuelAuditSnapshot(now = new Date()) {
   const window = resolveFuelAuditWindow("week", now);
   return summarizeFuelAudit(
     scoreFuelAudit(listFuelTransactions(), window, undefined, {
-      loads: listLoads({ status: "all" }),
       drivers: listDrivers().map((driver) => ({ id: driver.id, name: driver.name })),
     }),
   );

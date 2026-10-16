@@ -94,8 +94,14 @@ import type { TollImportResult } from "./tolls";
 import { syncLocationToSamsara } from "./integrations/samsara-addresses";
 import { importTollsFromUpload } from "./toll-import";
 import {
+  addDriverCardAlias,
+  deleteDriverCardAlias,
+  updateDriverCardAlias,
+} from "./fuel-card-aliases";
+import {
   assignFuelTransaction,
   deleteFuelTransaction,
+  rematchFuelTransactionDrivers,
 } from "./fuel-store";
 import { assignTollTransaction, pullPrepassTollTransactions } from "./tolls-store";
 import {
@@ -1816,6 +1822,64 @@ export async function linkFuelReceiptAction(formData: FormData): Promise<ActionR
     linkFuelReceipt(receiptId, fuelId);
     refresh();
     return { ok: true };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+function readAliasText(formData: FormData): string {
+  return String(formData.get("alias") ?? "");
+}
+
+export async function addDriverCardAliasAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Driver edits are for Administrator and Standard.");
+    const driverId = parseOptionalInt(formData.get("driver_id"));
+    if (!driverId) return { ok: false, error: "Pick a driver." };
+    addDriverCardAlias(driverId, readAliasText(formData));
+    rematchFuelTransactionDrivers();
+    refresh();
+    return { ok: true, message: "Card name saved." };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function updateDriverCardAliasAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Driver edits are for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("alias_id"));
+    if (!id) return { ok: false, error: "Card name is missing." };
+    updateDriverCardAlias(id, readAliasText(formData));
+    rematchFuelTransactionDrivers();
+    refresh();
+    return { ok: true, message: "Card name saved." };
+  } catch (error) {
+    if (error && typeof error === "object" && "digest" in error) throw error;
+    return fail(error);
+  }
+}
+
+export async function deleteDriverCardAliasAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireCapability(canEditFleet, "Driver edits are for Administrator and Standard.");
+    const id = parseOptionalInt(formData.get("alias_id"));
+    if (!id) return { ok: false, error: "Card name is missing." };
+    deleteDriverCardAlias(id);
+    rematchFuelTransactionDrivers();
+    refresh();
+    return { ok: true, message: "Card name removed." };
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
     return fail(error);

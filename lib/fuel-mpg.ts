@@ -1,7 +1,6 @@
 import { DISPLAY_TIME_ZONE, ymdInTimeZone } from "./format";
 import {
   addYmdDays,
-  fuelLoadOverlapsRange,
   isTruckDieselCategory,
   normalizeUnit,
   startOfLocalMonth,
@@ -130,16 +129,13 @@ export function googleMilesForDriverInRange(
   return found ? Math.round(total * 10) / 10 : null;
 }
 
-function truckForDriverFuelOrLoad(
+function truckForDriverFuel(
   driverId: number,
   trucks: ReturnType<typeof listTrucks>,
   fuel: ReturnType<typeof listFuelTransactions>,
-  loads: LoadView[],
   startIso: string,
   endIso: string,
 ) {
-  const fromMs = Date.parse(startIso);
-  const toMs = Date.parse(endIso);
   const fuelTrucks = new Set<number>();
   for (const row of fuel) {
     if (row.driver_id !== driverId) continue;
@@ -151,13 +147,6 @@ function truckForDriverFuelOrLoad(
     if (truck) fuelTrucks.add(truck.id);
   }
   if (fuelTrucks.size === 1) return trucks.find((truck) => truck.id === [...fuelTrucks][0]);
-  const loadTrucks = new Set<number>();
-  for (const load of loads) {
-    if (load.driver_id !== driverId || load.truck_id == null) continue;
-    if (!fuelLoadOverlapsRange(load, fromMs, toMs)) continue;
-    loadTrucks.add(load.truck_id);
-  }
-  if (loadTrucks.size === 1) return trucks.find((truck) => truck.id === [...loadTrucks][0]);
   return undefined;
 }
 
@@ -193,7 +182,7 @@ export function listDriverMpg(period: DriverMpgPeriod = "week", now = new Date()
             Number.isFinite(row.gallons),
         )
         .reduce((sum, row) => sum + (row.gallons ?? 0), 0);
-      const truck = truckForDriverFuelOrLoad(driver.id, trucks, fuel, loads, startIso, endIso);
+      const truck = truckForDriverFuel(driver.id, trucks, fuel, startIso, endIso);
       const odometerMiles = truck
         ? odometerDeltaMiles(odometerByTruck.get(truck.id) ?? [], startIso, endIso)
         : null;

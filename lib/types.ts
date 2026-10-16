@@ -428,6 +428,8 @@ export type Driver = {
   pin: string;
   samsara_driver_id: string;
   truck_id: number | null;
+  /** 1 when this driver is a backup. Fuel truck assignment never selects or overrides a backup. */
+  fuel_backup?: number;
   status: DriverStatus;
   alt_phone: string;
   cell_phone: string;
