@@ -31,7 +31,7 @@ export function mailFromAddress(): string {
 export async function sendMail(
   input: OutgoingMail,
   fetchImpl: typeof fetch = fetch,
-): Promise<void> {
+): Promise<{ messageId: string }> {
   const transport = mailTransport();
   if (transport === "none") throw new Error(MAIL_MISSING);
   const to = input.to.trim();
@@ -40,25 +40,27 @@ export async function sendMail(
   const text = input.text.trim();
   if (!subject || !text) throw new Error("Email is empty.");
   const from = input.from?.trim() || mailFromAddress();
+  const fromName = input.fromName?.trim() || MAIL_FROM_NAME;
   const replyTo = input.replyTo?.trim() || undefined;
-  if (transport === "smtp") {
-    await sendSmtpMail({ from, to, subject, text, replyTo, attachments: input.attachments ?? [] });
-    return;
-  }
-  await sendSendgridMail({ from, to, subject, text, replyTo, attachments: input.attachments ?? [] }, fetchImpl);
+  const cc = input.cc?.trim() || undefined;
+  const payload = { from, fromName, to, cc, subject, text, replyTo, attachments: input.attachments ?? [] };
+  if (transport === "smtp") return sendSmtpMail(payload);
+  return sendSendgridMail(payload, fetchImpl);
 }
 
 async function sendSendgridMail(
   input: {
     from: string;
+    fromName: string;
     to: string;
+    cc?: string;
     subject: string;
     text: string;
     replyTo?: string;
     attachments: NonNullable<OutgoingMail["attachments"]>;
   },
   fetchImpl: typeof fetch,
-): Promise<void> {
+): Promise<{ messageId: string }> {
   const key = getSendgridApiKey();
   if (!key) throw new Error(MAIL_MISSING);
   const response = await fetchImpl("https://api.sendgrid.com/v3/mail/send", {
@@ -68,8 +70,13 @@ async function sendSendgridMail(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: input.to }] }],
-      from: { email: input.from, name: MAIL_FROM_NAME },
+      personalizations: [
+        {
+          to: [{ email: input.to }],
+          ...(input.cc ? { cc: [{ email: input.cc }] } : {}),
+        },
+      ],
+      from: { email: input.from, name: input.fromName },
       ...(input.replyTo ? { reply_to: { email: input.replyTo } } : {}),
       subject: input.subject,
       content: [{ type: "text/plain", value: input.text }],
@@ -82,7 +89,9 @@ async function sendSendgridMail(
     }),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (response.ok || response.status === 202) return;
+  if (response.ok || response.status === 202) {
+    return { messageId: response.headers.get("x-message-id") ?? "" };
+  }
   let detail = `SendGrid returned ${response.status}.`;
   try {
     const payload = (await response.json()) as { errors?: Array<{ message?: string }> };
@@ -96,12 +105,14 @@ async function sendSendgridMail(
 
 async function sendSmtpMail(input: {
   from: string;
+  fromName: string;
   to: string;
+  cc?: string;
   subject: string;
   text: string;
   replyTo?: string;
   attachments: NonNullable<OutgoingMail["attachments"]>;
-}): Promise<void> {
+}): Promise<{ messageId: string }> {
   const host = getSmtpHost();
   if (!host) throw new Error(MAIL_MISSING);
   const port = getSmtpPort();
@@ -114,9 +125,10 @@ async function sendSmtpMail(input: {
     auth: user && pass ? { user, pass } : undefined,
   });
   try {
-    await transporter.sendMail({
-      from: `${MAIL_FROM_NAME} <${input.from}>`,
+    const info = await transporter.sendMail({
+      from: `${input.fromName} <${input.from}>`,
       to: input.to,
+      cc: input.cc,
       replyTo: input.replyTo,
       subject: input.subject,
       text: input.text,
@@ -126,6 +138,7 @@ async function sendSmtpMail(input: {
         contentType: file.contentType,
       })),
     });
+    return { messageId: String(info.messageId ?? "") };
   } catch (error) {
     throw new Error(redactSecrets(error instanceof Error ? error.message : "Mail send failed.", user ?? "", pass ?? ""));
   } finally {

@@ -815,7 +815,7 @@ async function main() {
   assert.doesNotMatch(sendActionChunk, /refresh\(\)|revalidatePath\("\/", "layout"\)/);
   assert.doesNotMatch(workspaceSource, /Release to invoicing/);
   assert.match(workspaceSource, /Request POD/);
-  assert.match(workspaceSource, /Request Detention email/);
+  assert.match(workspaceSource, /Draft detention request/);
   assert.match(workspaceSource, /Email invoice/);
   assert.match(workspaceSource, /data-email-invoice-action/);
   assert.match(workspaceSource, /setTab\("financials", "email-invoice"\)/);

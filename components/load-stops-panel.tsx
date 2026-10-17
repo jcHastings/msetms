@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addStopAction,
@@ -16,6 +16,8 @@ import { applyLocationToStop, formatLocationAddress, formatStopRowAddress, match
 import { applyNyBoroughState, nyBoroughStateError, type PlaceDetails } from "@/lib/places-shared";
 import { locationRuleLabels } from "@/lib/location-rules-shared";
 import { detentionTwoHourMark } from "@/lib/detention-clock";
+import { detentionRequestTrigger } from "@/lib/detention-request";
+import { DetentionRequestDialog } from "@/components/detention-request-dialog";
 import { formatDateTime, formatStopWindow, isAppointmentSchedule, toInputDateTime } from "@/lib/format";
 import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/routing-shared";
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
@@ -28,6 +30,10 @@ export function LoadStopsPanel({
   routeGuide,
   placesEnabled = false,
   catalog = false,
+  loadStatus = "",
+  detentionFreeMinutes = null,
+  detentionRoundMinutes = null,
+  detentionPickups = false,
 }: {
   loadId: number;
   stops: LoadStop[];
@@ -35,8 +41,14 @@ export function LoadStopsPanel({
   routeGuide?: LoadRouteGuide;
   placesEnabled?: boolean;
   catalog?: boolean;
+  loadStatus?: string;
+  detentionFreeMinutes?: number | null;
+  detentionRoundMinutes?: number | null;
+  detentionPickups?: boolean;
 }) {
   const router = useRouter();
+  const [draftStopId, setDraftStopId] = useState<number | null>(null);
+  const [detentionNotice, setDetentionNotice] = useState("");
   const [dialog, setDialog] = useState<{ mode: "add" | "edit"; kind: "pickup" | "delivery"; stop?: LoadStop } | null>(
     null,
   );
@@ -49,6 +61,65 @@ export function LoadStopsPanel({
     setOrder(next);
     orderRef.current = next;
   }, [stops]);
+
+  const stopReadyForDraft = useCallback(
+    (stop: LoadStop) =>
+      detentionRequestTrigger({
+        loadStatus,
+        stopKind: stop.kind,
+        arrivedAt: stop.arrived_at,
+        departedAt: stop.departed_at,
+        scheduleType: stop.schedule_type,
+        windowStart: stop.window_start,
+        windowEnd: stop.window_end,
+        freeMinutes: detentionFreeMinutes,
+        roundMinutes: detentionRoundMinutes,
+        pickupsEnabled: detentionPickups,
+      }).show,
+    [loadStatus, detentionFreeMinutes, detentionRoundMinutes, detentionPickups],
+  );
+
+  useEffect(() => {
+    function openFromLocation() {
+      const param = new URL(window.location.href).searchParams.get("detention");
+      if (!param) return;
+      if (param === "open") {
+        const eligible = stops.find((stop) => stopReadyForDraft(stop));
+        if (eligible) {
+          setDetentionNotice("");
+          setDraftStopId(eligible.id);
+        } else {
+          setDraftStopId(null);
+          setDetentionNotice("No stop is past free time yet.");
+        }
+        return;
+      }
+      const stopId = Number(param);
+      const stop = stops.find((item) => item.id === stopId);
+      if (stop && stopReadyForDraft(stop)) {
+        setDetentionNotice("");
+        setDraftStopId(stop.id);
+        return;
+      }
+      setDraftStopId(null);
+      setDetentionNotice("That stop is not ready for a detention draft.");
+    }
+    openFromLocation();
+    window.addEventListener("detention-draft-open", openFromLocation);
+    return () => window.removeEventListener("detention-draft-open", openFromLocation);
+  }, [stops, stopReadyForDraft]);
+
+  function closeDraft() {
+    setDraftStopId(null);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("detention")) return;
+    url.searchParams.delete("detention");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`,
+    );
+  }
 
   const orderedStops = order
     .map((id) => stops.find((stop) => stop.id === id))
@@ -67,6 +138,11 @@ export function LoadStopsPanel({
       <div className="section-head flex flex-wrap items-center justify-between gap-2 px-4 py-2">
         <div>
           <h2 className="text-sm font-semibold">Stops</h2>
+          {detentionNotice ? (
+            <p className="text-xs text-slate-600" role="status" data-detention-notice="">
+              {detentionNotice}
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <button type="button" className="btn btn-secondary" onClick={() => setDialog({ mode: "add", kind: "pickup" })}>
@@ -115,6 +191,11 @@ export function LoadStopsPanel({
                       : null
                   }
                   onEdit={() => setDialog({ mode: "edit", kind: stop.kind, stop })}
+                  showDetentionDraft={stopReadyForDraft(stop)}
+                  onDraftDetention={() => {
+                    setDetentionNotice("");
+                    setDraftStopId(stop.id);
+                  }}
                   onDragStart={() => setDraggingId(stop.id)}
                   onDragOver={(overId) => {
                     if (draggingId == null || draggingId === overId) return;
@@ -153,6 +234,9 @@ export function LoadStopsPanel({
           catalog={catalog}
           onClose={() => setDialog(null)}
         />
+      ) : null}
+      {draftStopId != null ? (
+        <DetentionRequestDialog loadId={loadId} stopId={draftStopId} onClose={closeDraft} />
       ) : null}
     </section>
   );
@@ -527,6 +611,8 @@ function StopGridBlock({
   gapMiles,
   dragging,
   onEdit,
+  showDetentionDraft = false,
+  onDraftDetention,
   onDragStart,
   onDragOver,
   onDrop,
@@ -537,6 +623,8 @@ function StopGridBlock({
   gapMiles: number | null;
   dragging: boolean;
   onEdit: () => void;
+  showDetentionDraft?: boolean;
+  onDraftDetention?: () => void;
   onDragStart: () => void;
   onDragOver: (overId: number) => void;
   onDrop: () => void;
@@ -736,6 +824,17 @@ function StopGridBlock({
             onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))}
             onBlur={(event) => commitTime("departedAt", event.target.value)}
           />
+          {showDetentionDraft ? (
+            <button
+              type="button"
+              className="btn btn-ghost mt-1 px-2 py-1 text-xs"
+              data-detention-draft=""
+              aria-label={`Draft detention request for ${draft.name || "this stop"}`}
+              onClick={onDraftDetention}
+            >
+              Draft detention request
+            </button>
+          ) : null}
         </td>
         <td className="stop-front-notes" title={notes || undefined}>
           {notes || "—"}

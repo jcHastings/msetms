@@ -5,7 +5,7 @@ export const MAIL_FROM_DEFAULT = "dispatch@msloads.com";
 export const MAIL_FROM_NAME = "MS Express TMS";
 export const MAIL_NOREPLY = "noreply@msloads.com";
 
-export const LOAD_MAIL_KINDS = ["driver_load", "customer_update", "customer_invoice"] as const;
+export const LOAD_MAIL_KINDS = ["driver_load", "customer_update", "customer_invoice", "detention_request"] as const;
 export type LoadMailKind = (typeof LOAD_MAIL_KINDS)[number];
 
 export type MailAttachment = {
@@ -16,7 +16,9 @@ export type MailAttachment = {
 
 export type OutgoingMail = {
   to: string;
+  cc?: string;
   from?: string;
+  fromName?: string;
   subject: string;
   text: string;
   replyTo?: string;

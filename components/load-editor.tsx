@@ -33,6 +33,8 @@ import { listDefaultedDocuments } from "@/lib/load-documents";
 import { RateConRedactionPanel } from "@/components/rate-con-redaction-panel";
 import { RateConApply } from "@/components/rate-con-apply";
 import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
+import { lockedDetentionPayItemIds } from "@/lib/detention-lock";
+import { getDetentionSettings, readLoadDetentionTerms } from "@/lib/detention-store";
 import { laneAverageSnapshot } from "@/lib/lane-average";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
@@ -128,6 +130,8 @@ export async function LoadEditor({
   const dispatchers = listDispatcherUsers(false).map((person) => ({ id: person.id, name: person.name }));
   const relays = listRelays(load.id);
   const stops = ensureDefaultStops(load.id);
+  const detentionTerms = readLoadDetentionTerms(load.id);
+  const detentionSettings = getDetentionSettings();
   const locations = locationsForIds(
     [load.shipper_location_id, load.consignee_location_id, ...stops.map((stop) => stop.location_id)].filter(
       (id): id is number => id != null,
@@ -392,6 +396,10 @@ export async function LoadEditor({
             locations={locations}
             routeGuide={routeGuide}
             placesEnabled={formSettings.placesEnabled}
+            loadStatus={load.status}
+            detentionFreeMinutes={detentionTerms.freeMinutes}
+            detentionRoundMinutes={detentionTerms.roundMinutes}
+            detentionPickups={detentionSettings.pickupsEnabled}
           />
           <LoadRoutingGuide
             loadId={load.id}
@@ -449,6 +457,7 @@ export async function LoadEditor({
                 })}
                 laneMiles={load.route_miles}
                 readOnly={readOnly}
+                lockedPayItemIds={lockedDetentionPayItemIds(load.id)}
                 ownerOperators={drivers
                   .filter((driver) => isOwnerOperator(driver.driver_type))
                   .map((driver) => assignedLoadName(driver))}

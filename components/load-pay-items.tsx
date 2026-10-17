@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { addPayItemAction, deletePayItemAction } from "@/lib/actions";
 import { CustomerRateField, OwnerOperatorPayFields } from "@/components/load-rate-fields";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
+import { DETENTION_LINE_LOCKED } from "@/lib/detention-request";
 import { formatMoney } from "@/lib/format";
 import type { LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { officeSharePercentForOoLoad } from "@/lib/settlement";
@@ -26,6 +27,7 @@ export function LoadPayItems({
   laneAverage = null,
   laneMiles = null,
   readOnly = false,
+  lockedPayItemIds = [],
 }: {
   load: Load;
   items: LoadPayItem[];
@@ -37,6 +39,7 @@ export function LoadPayItems({
   laneAverage?: LaneAverageSnapshot | null;
   laneMiles?: number | null;
   readOnly?: boolean;
+  lockedPayItemIds?: number[];
 }) {
   const income = items.filter((item) => item.side === "income");
   const expenses = items.filter((item) => item.side === "expense");
@@ -99,6 +102,7 @@ export function LoadPayItems({
         ownerOperators={ooNames}
         emptyText="No extra line items. Detention, fuel, and lumpers go here."
         readOnly={readOnly}
+        lockedPayItemIds={lockedPayItemIds}
         lead={
           <div className="grid gap-4 md:grid-cols-2">
             <CustomerRateField
@@ -130,6 +134,7 @@ export function LoadPayItems({
             : "No line items. Click + Add Line Item."
         }
         readOnly={readOnly}
+        lockedPayItemIds={lockedPayItemIds}
         lead={
           ownerOperator ? (
             <OwnerOperatorPayFields
@@ -188,6 +193,7 @@ function PayItemGroup({
   lead,
   emptyText = "No line items. Click + Add Line Item.",
   readOnly = false,
+  lockedPayItemIds = [],
 }: {
   loadId: number;
   side: PayItemSide;
@@ -204,6 +210,7 @@ function PayItemGroup({
   lead?: ReactNode;
   emptyText?: string;
   readOnly?: boolean;
+  lockedPayItemIds?: number[];
 }) {
   const [open, setOpen] = useState(false);
   const tone = side === "income" ? "finance-income" : "finance-expense";
@@ -256,19 +263,25 @@ function PayItemGroup({
                   <td>{item.qty ?? "—"}</td>
                   <td className="font-semibold">{formatMoney(item.total)}</td>
                   <td>
-                    <form action={async (formData) => { await deletePayItemAction(formData); }}>
-                      <input type="hidden" name="pay_item_id" value={item.id} />
-                      <button
-                        className="btn btn-ghost text-rose-700"
-                        type="submit"
-                        data-view-only={readOnly ? "" : undefined}
-                        disabled={readOnly}
-                        aria-disabled={readOnly || undefined}
-                        title={readOnly ? "View-only access" : undefined}
-                      >
-                        Remove
-                      </button>
-                    </form>
+                    {lockedPayItemIds.includes(item.id) ? (
+                      <span className="text-xs font-semibold text-slate-600" title={DETENTION_LINE_LOCKED} data-detention-line-locked="">
+                        Locked
+                      </span>
+                    ) : (
+                      <form action={async (formData) => { await deletePayItemAction(formData); }}>
+                        <input type="hidden" name="pay_item_id" value={item.id} />
+                        <button
+                          className="btn btn-ghost text-rose-700"
+                          type="submit"
+                          data-view-only={readOnly ? "" : undefined}
+                          disabled={readOnly}
+                          aria-disabled={readOnly || undefined}
+                          title={readOnly ? "View-only access" : undefined}
+                        >
+                          Remove
+                        </button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}

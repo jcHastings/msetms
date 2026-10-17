@@ -1468,6 +1468,7 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_paystubs_driver_date ON paystubs(driver_id, pay_date, status);
     CREATE INDEX IF NOT EXISTS idx_paystubs_status ON paystubs(status, id);
   `);
+  migrateDetentionRequests(db);
 }
 
 function seedExampleDeductionTemplates(db: Database): void {
@@ -2007,6 +2008,57 @@ function migrateRateConRedactions(db: Database): void {
       ON rate_con_redactions(source_attachment_id);
     CREATE INDEX IF NOT EXISTS idx_rate_con_redactions_load
       ON rate_con_redactions(load_id, status);
+  `);
+}
+
+function migrateDetentionRequests(db: Database): void {
+  ensureColumn(db, "loads", "detention_rate", "REAL");
+  ensureColumn(db, "loads", "detention_free_minutes", "INTEGER");
+  ensureColumn(db, "loads", "detention_cap", "REAL");
+  ensureColumn(db, "loads", "detention_round_minutes", "INTEGER");
+  ensureColumn(db, "loads", "detention_clause", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "loads", "detention_terms_scanned", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "company_profile", "detention_reply_to", "TEXT NOT NULL DEFAULT 'dispatch@msloads.com'");
+  ensureColumn(db, "company_profile", "detention_pickups", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS detention_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      stop_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      arrived_at TEXT NOT NULL DEFAULT '',
+      departed_at TEXT NOT NULL DEFAULT '',
+      clock_start TEXT NOT NULL DEFAULT '',
+      time_source TEXT NOT NULL DEFAULT '',
+      rate_source TEXT NOT NULL DEFAULT '',
+      rate REAL,
+      free_min INTEGER,
+      billable_min INTEGER,
+      round_min INTEGER,
+      cap REAL,
+      amount REAL,
+      clause TEXT NOT NULL DEFAULT '',
+      to_email TEXT NOT NULL DEFAULT '',
+      cc TEXT NOT NULL DEFAULT '',
+      recipients TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      sent_at TEXT NOT NULL DEFAULT '',
+      sent_by TEXT NOT NULL DEFAULT '',
+      message_id TEXT NOT NULL DEFAULT '',
+      sent_mail_id INTEGER,
+      pay_item_id INTEGER,
+      note TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      status_by TEXT NOT NULL DEFAULT '',
+      approved_at TEXT NOT NULL DEFAULT '',
+      denied_at TEXT NOT NULL DEFAULT '',
+      paid_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_detention_requests_load ON detention_requests(load_id, id);
+    CREATE INDEX IF NOT EXISTS idx_detention_requests_stop ON detention_requests(stop_id, id);
   `);
 }
 
