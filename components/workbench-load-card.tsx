@@ -342,7 +342,9 @@ export async function WorkbenchLoadCard({
           {group.items.length === 0 ? (
             <li className="text-xs text-slate-500">No open issues</li>
           ) : (
-            group.items.map((item) => <ExceptionIssueLine key={item.id} item={item} compact />)
+            group.items.map((item) => (
+              <ExceptionIssueLine key={item.id} item={item} compact readOnly={!canChangeStatus} />
+            ))
           )}
         </ul>
       </div>

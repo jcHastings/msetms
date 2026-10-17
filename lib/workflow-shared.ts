@@ -5,6 +5,7 @@ export type WorkflowLateKind = "pickup" | "delivery" | "either";
 export type WorkflowLateMode = "same_day" | "specified";
 export type WorkflowDurationUnit = "minutes" | "hours";
 export type WorkflowDocumentTrigger = "invoice_sent" | "docs_requested";
+export type DepartDeliveryAction = "flag" | "delivered" | "off";
 
 export type WorkflowSettings = {
   autoAssignDispatcherOnCreate: boolean;
@@ -17,6 +18,7 @@ export type WorkflowSettings = {
   departPickupTruckStatus: string;
   arriveDeliveryLoadStatus: string;
   arriveDeliveryTruckStatus: string;
+  departDeliveryAction: DepartDeliveryAction;
   driverAssignLoadStatus: string;
   driverAssignTruckStatus: string;
   lateStopKind: WorkflowLateKind;
@@ -46,6 +48,7 @@ export const DEFAULT_WORKFLOW_SETTINGS: WorkflowSettings = {
   departPickupTruckStatus: "",
   arriveDeliveryLoadStatus: "at_delivery",
   arriveDeliveryTruckStatus: "",
+  departDeliveryAction: "flag",
   driverAssignLoadStatus: "",
   driverAssignTruckStatus: "",
   lateStopKind: "either",
@@ -78,6 +81,10 @@ export type WorkflowCard = (typeof WORKFLOW_CARDS)[number];
 
 export const WORKFLOW_LOAD_STATUSES = LOAD_STATUSES.filter((status) => status !== "cancelled");
 export const WORKFLOW_TRUCK_STATUSES = LOAD_TRUCK_STATUSES.filter((item) => item.value);
+
+export function asDepartDeliveryAction(value: unknown): DepartDeliveryAction {
+  return value === "delivered" || value === "off" || value === "flag" ? value : "flag";
+}
 
 function asLateKind(value: unknown): WorkflowLateKind {
   return value === "pickup" || value === "delivery" || value === "either" ? value : "either";
@@ -115,6 +122,7 @@ export function parseWorkflowSettings(raw: string | null | undefined): WorkflowS
       blockAssignExpiredDriver: Boolean(parsed.blockAssignExpiredDriver),
       blockAssignExpiredTruck: Boolean(parsed.blockAssignExpiredTruck),
       blockAssignExpiredTrailer: Boolean(parsed.blockAssignExpiredTrailer),
+      departDeliveryAction: asDepartDeliveryAction(parsed.departDeliveryAction),
       lateStopKind: asLateKind(parsed.lateStopKind),
       lateStopMode: asLateMode(parsed.lateStopMode),
       lateStopMinutes: asMinutes(parsed.lateStopMinutes, defaults.lateStopMinutes),

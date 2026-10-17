@@ -10,10 +10,13 @@ import {
   listTruckGpsReadings,
   saveLocationCoords,
 } from "./queries";
+import { isClosedStatus } from "./types";
 import { gpsInstantMs, instantMs, timeZoneForStop } from "./wall-time";
 import { applyWorkflowAfterGeofence } from "./workflow";
 
 export const GEOFENCE_MILES = 2;
+/** One ping this far out is a depart. Closer exits need two pings outside the 2-mile fence. */
+export const GEOFENCE_DEPART_MILES = 2.5;
 /** Pings earlier than this before the first stop window are another trip. */
 export const GEOFENCE_WINDOW_LEAD_MS = 12 * 60 * 60 * 1000;
 
@@ -180,6 +183,23 @@ export function coordsForStop(
   return null;
 }
 
+function samePing(left: GpsPing, right: GpsPing): boolean {
+  return left.recordedAt === right.recordedAt && left.latitude === right.latitude && left.longitude === right.longitude;
+}
+
+/** Outside streak already on the books before this live ping. A single replay ping cannot see it. */
+function outsideStreakBefore(loadId: number, dest: GpsPoint, arrivedMs: number, current: GpsPing): number {
+  const currentMs = gpsInstantMs(current.recordedAt) ?? Number.POSITIVE_INFINITY;
+  let streak = 0;
+  for (const ping of gpsPingsForLoad(loadId)) {
+    if (samePing(ping, current)) continue;
+    const at = gpsInstantMs(ping.recordedAt) ?? 0;
+    if (at < arrivedMs || at > currentMs) continue;
+    streak = milesBetween(ping, dest) > GEOFENCE_MILES ? streak + 1 : 0;
+  }
+  return streak;
+}
+
 function stampIfEmpty(stopId: number, field: "arrived_at" | "departed_at", iso: string): boolean {
   const result = getDb()
     .prepare(`UPDATE load_stops SET ${field} = ? WHERE id = ? AND ${field} = ''`)
@@ -195,52 +215,66 @@ export function applyGeofenceArrivals(
 ): number {
   const stops = listFenceStops(loadId);
   if (!stops.length) return 0;
-  if (stops.every((stop) => String(stop.arrived_at ?? "").trim() && String(stop.departed_at ?? "").trim())) {
-    return 0;
-  }
-  const floor = geofenceFloorMs(loadId, stops);
-  const nowMs = now.getTime();
-  const pings = (onlyPing ? [onlyPing] : gpsPingsForLoad(loadId)).filter((ping) => pingAfterFloor(ping, floor, nowMs));
-  if (!pings.length) return 0;
-  const directory: LocationDirectory = {};
+  const load = getLoad(loadId);
+  const open = Boolean(load && !isClosedStatus(load.status));
+  const allStamped = stops.every(
+    (stop) => String(stop.arrived_at ?? "").trim() && String(stop.departed_at ?? "").trim(),
+  );
   let stamped = 0;
-  const fallback = now.toISOString();
-  let priorDepartedMs: number | null = null;
-  for (const stop of stops) {
-    const zone = timeZoneForStop(stop.state, stop.city);
-    let arrived = String(stop.arrived_at ?? "").trim();
-    let departed = String(stop.departed_at ?? "").trim();
-    let arrivedMs = instantMs(arrived, zone);
-    let departedMs = instantMs(departed, zone);
-    if (arrived && departed) {
-      if (departedMs != null) priorDepartedMs = departedMs;
-      continue;
-    }
-    const dest = coordsForStop(stop, extraCoords, directory);
-    if (!dest) {
-      if (departedMs != null) priorDepartedMs = departedMs;
-      continue;
-    }
-    for (const ping of pings) {
-      const atMs = gpsInstantMs(ping.recordedAt) ?? nowMs;
-      if (priorDepartedMs != null && atMs < priorDepartedMs) continue;
-      const at = ping.recordedAt || fallback;
-      const inside = milesBetween(ping, dest) <= GEOFENCE_MILES;
-      if (!arrived && inside) {
-        if (stampIfEmpty(stop.id, "arrived_at", at)) stamped += 1;
-        arrived = at;
-        arrivedMs = atMs;
+  if (!allStamped) {
+    const floor = geofenceFloorMs(loadId, stops);
+    const nowMs = now.getTime();
+    const pings = (onlyPing ? [onlyPing] : gpsPingsForLoad(loadId)).filter((ping) => pingAfterFloor(ping, floor, nowMs));
+    if (pings.length) {
+      const directory: LocationDirectory = {};
+      const fallback = now.toISOString();
+      let priorDepartedMs: number | null = null;
+      for (const stop of stops) {
+        const zone = timeZoneForStop(stop.state, stop.city);
+        let arrived = String(stop.arrived_at ?? "").trim();
+        let departed = String(stop.departed_at ?? "").trim();
+        let arrivedMs = instantMs(arrived, zone);
+        let departedMs = instantMs(departed, zone);
+        if (arrived && departed) {
+          if (departedMs != null) priorDepartedMs = departedMs;
+          continue;
+        }
+        const dest = coordsForStop(stop, extraCoords, directory);
+        if (!dest) {
+          if (departedMs != null) priorDepartedMs = departedMs;
+          continue;
+        }
+        let consecutiveOutside =
+          onlyPing && arrived && !departed && arrivedMs != null
+            ? outsideStreakBefore(loadId, dest, arrivedMs, onlyPing)
+            : 0;
+        for (const ping of pings) {
+          const atMs = gpsInstantMs(ping.recordedAt) ?? nowMs;
+          if (priorDepartedMs != null && atMs < priorDepartedMs) continue;
+          const at = ping.recordedAt || fallback;
+          const miles = milesBetween(ping, dest);
+          const inside = miles <= GEOFENCE_MILES;
+          const outside = miles > GEOFENCE_MILES;
+          if (!arrived && inside) {
+            if (stampIfEmpty(stop.id, "arrived_at", at)) stamped += 1;
+            arrived = at;
+            arrivedMs = atMs;
+          }
+          const confirmedLeave =
+            miles > GEOFENCE_DEPART_MILES || (outside && consecutiveOutside + 1 >= 2);
+          if (arrived && !departed && confirmedLeave && arrivedMs != null && atMs >= arrivedMs) {
+            if (stampIfEmpty(stop.id, "departed_at", at)) stamped += 1;
+            departed = at;
+            departedMs = atMs;
+          }
+          consecutiveOutside = outside ? consecutiveOutside + 1 : 0;
+          if (arrived && departed) break;
+        }
+        if (departedMs != null) priorDepartedMs = departedMs;
       }
-      if (arrived && !departed && !inside && arrivedMs != null && atMs >= arrivedMs) {
-        if (stampIfEmpty(stop.id, "departed_at", at)) stamped += 1;
-        departed = at;
-        departedMs = atMs;
-      }
-      if (arrived && departed) break;
     }
-    if (departedMs != null) priorDepartedMs = departedMs;
   }
-  if (stamped > 0) applyWorkflowAfterGeofence(loadId);
+  if (open && (stamped > 0 || allStamped)) applyWorkflowAfterGeofence(loadId);
   return stamped;
 }
 

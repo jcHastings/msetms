@@ -39,6 +39,7 @@ import {
   type DocumentType,
 } from "./settings";
 import {
+  asDepartDeliveryAction,
   minutesFromAmount,
   type WorkflowCard,
   type WorkflowDurationUnit,
@@ -336,6 +337,7 @@ export async function saveWorkflowAction(
       next.departPickupTruckStatus = String(formData.get("depart_pu_truck") ?? "");
       next.arriveDeliveryLoadStatus = String(formData.get("arrive_del_load") ?? "");
       next.arriveDeliveryTruckStatus = String(formData.get("arrive_del_truck") ?? "");
+      next.departDeliveryAction = asDepartDeliveryAction(formData.get("depart_delivery_action"));
     }
     if (card === "driver_assign" || card === "all") {
       next.driverAssignLoadStatus = String(formData.get("driver_assign_load") ?? "");

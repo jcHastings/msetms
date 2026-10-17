@@ -118,7 +118,7 @@ export function WorkflowEngine({ settings, canEdit }: { settings: WorkflowSettin
 
       <WorkflowCard
         title="Set Load / Truck Status based on arrive and depart"
-        note="Samsara 2-mile geofence stamps Arrived / Departed only when those times are empty — dispatcher-typed times stay. Driver Check In / Check Out uses the same rules. Detention alerts stay separate."
+        note="Samsara 2-mile geofence stamps Arrived / Departed only when those times are empty. Dispatcher-typed times stay. A leave counts past 2.5 miles, or past 2 miles on two pings in a row. Leaving the last receiver flags the desk with a one-click Mark delivered. You can mark the load delivered instead, or turn that off. Driver Check In / Check Out uses the same rules. Detention alerts stay separate."
         submitLabel="Save arrive / depart rules"
         canEdit={canEdit}
       >
@@ -188,6 +188,19 @@ export function WorkflowEngine({ settings, canEdit }: { settings: WorkflowSettin
               {truckStatusOptions(settings.arriveDeliveryTruckStatus)}
             </select>
           </label>
+        </div>
+        <div className="field">
+          <label htmlFor="depart_delivery_action">When the truck leaves the last receiver</label>
+          <select
+            id="depart_delivery_action"
+            name="depart_delivery_action"
+            defaultValue={settings.departDeliveryAction}
+            data-depart-delivery-action=""
+          >
+            <option value="flag">Flag the desk: Left receiver, mark delivered</option>
+            <option value="delivered">Mark the load delivered</option>
+            <option value="off">Leave the status as it is</option>
+          </select>
         </div>
       </WorkflowCard>
 

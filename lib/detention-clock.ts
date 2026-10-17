@@ -58,6 +58,46 @@ export function detentionTwoHourMark(input: {
   return new Date(start.getTime() + DETENTION_FREE_MS);
 }
 
+function clockLabel(value: Date, timeZone: string): string {
+  const bits = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => bits.find((item) => item.type === type)?.value ?? "";
+  const hour = part("hour");
+  const minute = part("minute");
+  const period = part("dayPeriod").toUpperCase() || "PM";
+  if (!hour || !minute) return "";
+  return `${hour}:${minute} ${period}`;
+}
+
+function dwellLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours <= 0) return `${mins}m`;
+  return `${hours}h ${mins}m`;
+}
+
+/** Past tense once the truck has a departed_at. Never "still at". */
+export function detentionVisitPhrase(input: {
+  role: string;
+  arrivedAt?: string | Date | null;
+  departedAt?: string | Date | null;
+  timeZone?: string;
+}): string | null {
+  const arrived = asDetentionDate(input.arrivedAt);
+  const departed = asDetentionDate(input.departedAt);
+  if (!arrived || !departed) return null;
+  const minutes = Math.round((departed.getTime() - arrived.getTime()) / 60_000);
+  if (!Number.isFinite(minutes) || minutes < 0) return null;
+  const role = input.role.trim() || "stop";
+  const left = clockLabel(departed, input.timeZone || "America/New_York");
+  if (!left) return null;
+  return `Was at ${role} ${dwellLabel(minutes)} (left ${left})`;
+}
+
 export function detentionStillInsideAtMark(input: {
   arrivedAt?: string | Date | null;
   departedAt?: string | Date | null;

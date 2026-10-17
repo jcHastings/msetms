@@ -1,16 +1,17 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
 import { dispatchAckRules, shouldFlagMissingDispatchAck, type DispatchAckRules } from "./dispatch-ack";
-import { detentionStillInsideAtMark, detentionTwoHourMark } from "./detention-clock";
+import { detentionStillInsideAtMark, detentionTwoHourMark, detentionVisitPhrase } from "./detention-clock";
 import { missingPodAlert } from "./pod-delivery";
 import { coordsForStop, stillInsideGeofenceAt } from "./geofence";
-import { complianceWindows, getCompanySettings } from "./settings";
+import { complianceWindows, getCompanySettings, getWorkflowSettings } from "./settings";
 import { formatDateTime } from "./format";
 import { resolveInvoiceCustomerEmail } from "./load-mail";
 import { isUsableEmail } from "./mail-shared";
 import { loadIdsWithSentMail } from "./mail-store";
 import { loadsChangeStamp, readResultCache, writeResultCache } from "./working-loads";
 import { matchLocationForStop } from "./locations";
+import { timeZoneForStop } from "./wall-time";
 import { listDrivers, listLoads, listLocations, listTrailers, listTrucks } from "./queries";
 import type { LoadStop } from "./stops";
 import { listSamsaraInboxFlags } from "./integrations/samsara-webhook";
@@ -47,6 +48,7 @@ export const EXCEPTION_KINDS = [
   "dispatch_ack",
   "its_import",
   "qbo_payment",
+  "left_receiver",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -142,6 +144,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   dispatch_ack: 10,
   its_import: 11,
   qbo_payment: 12,
+  left_receiver: 13,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -296,6 +299,7 @@ export function isMaterialReeferReading(load: LoadView, reading: ReeferReading |
 export function isOutOfToleranceException(item: Pick<InboxException, "kind" | "severity">): boolean {
   if (item.severity === "CRITICAL") return true;
   if (item.kind === "detention" || item.kind === "reefer" || item.kind === "missing_contact") return true;
+  if (item.kind === "left_receiver") return true;
   if (item.kind === "late" && item.severity === "HIGH") return true;
   return false;
 }
@@ -360,6 +364,7 @@ export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | 
   if (item.kind === "samsara") return "Samsara";
   if (item.kind === "dispatch_ack") return "No ack";
   if (item.kind === "detention") return "Detention";
+  if (item.kind === "left_receiver") return "Left receiver";
   if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
   if (item.severity === "CRITICAL") return "Critical";
   if (item.severity === "HIGH") return "Important";
@@ -406,14 +411,14 @@ export function loadCriticalReasons(
   return reasons;
 }
 
-function lastStopArrival(stops: Array<Pick<InboxStop, "kind" | "arrived_at">>, kind: string): string {
-  let arrival = "";
+function lastArrivedStop(stops: InboxStop[], kind: string): InboxStop | null {
+  let found: InboxStop | null = null;
   for (const stop of stops) {
     if (stop.kind !== kind) continue;
-    const value = String(stop.arrived_at ?? "").trim();
-    if (value) arrival = value;
+    if (!String(stop.arrived_at ?? "").trim()) continue;
+    found = stop;
   }
-  return arrival;
+  return found;
 }
 
 function arrivalIsAfterWindow(arrivalIso: string, windowEnd: string): boolean {
@@ -427,10 +432,13 @@ function arrivalIsAfterWindow(arrivalIso: string, windowEnd: string): boolean {
 function lateExceptions(load: LoadView, _now: Date, stops: InboxStop[]): InboxException[] {
   if (isClosedStatus(load.status)) return [];
 
-  const pickupArrival = lastStopArrival(stops, "pickup");
-  const deliveryArrival = lastStopArrival(stops, "delivery");
+  const pickup = lastArrivedStop(stops, "pickup");
+  const delivery = lastArrivedStop(stops, "delivery");
+  const pickupArrival = String(pickup?.arrived_at ?? "").trim();
+  const deliveryArrival = String(delivery?.arrived_at ?? "").trim();
+  const pickupStillThere = Boolean(pickupArrival) && !String(pickup?.departed_at ?? "").trim();
 
-  if (pickupArrival && arrivalIsAfterWindow(pickupArrival, load.pickup_end)) {
+  if (pickupStillThere && arrivalIsAfterWindow(pickupArrival, load.pickup_end)) {
     return [
       withLoad(
         load,
@@ -679,6 +687,7 @@ function computeExceptionInbox(now: Date): ExceptionInbox {
     items.push(...unassignedExceptions(load, now));
     items.push(...dispatchAckExceptions(load, ackRules));
     items.push(...detentionExceptions(load, now, ctx));
+    items.push(...leftReceiverExceptions(load, ctx.stops.get(load.id) ?? []));
     items.push(...missingContactExceptions(load, rateCons.has(load.id)));
     items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
   }
@@ -757,6 +766,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "ITS import";
     case "qbo_payment":
       return "QBO payment";
+    case "left_receiver":
+      return "Left receiver";
   }
 }
 
@@ -847,6 +858,7 @@ function samsaraFlagExceptions(load: LoadView, flags: ReturnType<typeof listSams
 function detentionExceptions(load: LoadView, now: Date, ctx: InboxContext): InboxException[] {
   if (isClosedStatus(load.status)) return [];
   const pings = load.truck_id ? ctx.pings.get(load.truck_id) ?? [] : [];
+  const items: InboxException[] = [];
   for (const stop of ctx.stops.get(load.id) ?? []) {
     if (!String(stop.arrived_at ?? "").trim()) continue;
     const mark = detentionTwoHourMark({
@@ -864,19 +876,50 @@ function detentionExceptions(load: LoadView, now: Date, ctx: InboxContext): Inbo
     })) {
       continue;
     }
-    const dest = coordsForStop(stop, ctx.stopCoords);
-    if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
     const role = stop.kind === "delivery" ? "receiver" : "shipper";
     const stopLabel = stop.kind === "delivery" ? "delivery" : "pickup";
-    return [
+    const departed = String(stop.departed_at ?? "").trim();
+    const visited = departed
+      ? detentionVisitPhrase({
+          role,
+          arrivedAt: stop.arrived_at,
+          departedAt: departed,
+          timeZone: timeZoneForStop(stop.state, stop.city),
+        })
+      : null;
+    if (!visited) {
+      const dest = coordsForStop(stop, ctx.stopCoords);
+      if (dest && !stillInsideGeofenceAt(dest, pings, mark, stop.departed_at)) continue;
+    }
+    items.push(
       withLoad(
         load,
         "detention",
         "HIGH",
-        `Possible detention — still at ${role} (${stopLabel}) 2+ hours past appointment`,
+        visited ?? `Possible detention — still at ${role} (${stopLabel}) 2+ hours past appointment`,
         `${stop.name || (stop.kind === "delivery" ? "Delivery" : "Pickup")} · mark ${formatDateTime(mark.toISOString())}`,
+        false,
+        String(stop.id),
       ),
-    ];
+    );
   }
-  return [];
+  return items;
+}
+
+function leftReceiverExceptions(load: LoadView, stops: InboxStop[]): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  if (getWorkflowSettings().departDeliveryAction !== "flag") return [];
+  const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery");
+  const departed = String(lastDelivery?.departed_at ?? "").trim();
+  if (!departed) return [];
+  const place = lastDelivery?.name?.trim() || "the receiver";
+  return [
+    withLoad(
+      load,
+      "left_receiver",
+      "HIGH",
+      "Left receiver, mark delivered",
+      `Truck left ${place} ${formatDateTime(departed)}.`,
+    ),
+  ];
 }

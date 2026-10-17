@@ -1,4 +1,4 @@
-import { exceptionAction } from "@/lib/dispatcher-actions";
+import { exceptionAction, markLeftReceiverDeliveredAction } from "@/lib/dispatcher-actions";
 import {
   attentionLabel,
   exceptionReasonText,
@@ -17,6 +17,26 @@ const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
 };
 
 const VIEW_ONLY = "View-only access";
+
+function MarkDeliveredButton({ item, readOnly }: { item: InboxException; readOnly: boolean }) {
+  if (item.kind !== "left_receiver") return null;
+  return (
+    <form action={markLeftReceiverDeliveredAction} className="mt-1" data-mark-delivered-form="">
+      <input type="hidden" name="load_id" value={String(item.loadId)} />
+      <button
+        className="btn btn-ghost text-xs"
+        type="submit"
+        disabled={readOnly}
+        aria-disabled={readOnly || undefined}
+        title={readOnly ? VIEW_ONLY : "Mark delivered"}
+        data-view-only={readOnly ? "" : undefined}
+        data-mark-delivered=""
+      >
+        Mark delivered
+      </button>
+    </form>
+  );
+}
 
 export function ExceptionIssueLine({
   item,
@@ -41,6 +61,7 @@ export function ExceptionIssueLine({
             {reason}
           </span>
         </div>
+        <MarkDeliveredButton item={item} readOnly={readOnly} />
       </li>
     );
   }
@@ -62,6 +83,7 @@ export function ExceptionIssueLine({
       </div>
       <div className="mt-1 text-sm text-slate-700">{item.title}</div>
       <div className="mt-0.5 text-xs text-slate-600">{item.detail}</div>
+      <MarkDeliveredButton item={item} readOnly={readOnly} />
       <form action={exceptionAction} className="mt-2 flex flex-wrap items-center gap-2" data-exception-actions="">
         <input type="hidden" name="exception_key" value={item.id} />
         <input

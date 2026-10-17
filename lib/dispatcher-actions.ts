@@ -64,6 +64,7 @@ import {
 import {
   applyWorkflowAfterGeofence,
   applyWorkflowOnDocumentAction,
+  markLeftReceiverDelivered,
   maybeAssignCreatingDispatcher,
 } from "./workflow";
 import { closeDriverPayPeriod, createBill, markBillPaid, markSettlementPaid } from "./accounting";
@@ -899,6 +900,16 @@ export async function setStopAppointmentAction(formData: FormData): Promise<void
       oldValue: stop.window_start,
       newValue: when,
     });
+    refresh();
+  });
+}
+
+export async function markLeftReceiverDeliveredAction(formData: FormData): Promise<void> {
+  await withRequestAuditActor(async () => {
+    await requireLoadEditor();
+    const loadId = parseOptionalInt(formData.get("load_id"));
+    if (!loadId) throw new Error("Load is missing.");
+    markLeftReceiverDelivered(loadId);
     refresh();
   });
 }

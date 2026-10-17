@@ -117,6 +117,22 @@ export function applyWorkflowAfterGeofence(loadId: number): void {
   if (lastDelivery?.arrived_at) {
     applyLoadAndTruck(loadId, settings.arriveDeliveryLoadStatus, settings.arriveDeliveryTruckStatus);
   }
+  if (lastDelivery?.departed_at && !isClosedStatus(load.status)) {
+    if (settings.departDeliveryAction === "delivered") {
+      applyLoadAndTruck(loadId, "delivered", "");
+    }
+  }
+}
+
+/** One-click from the desk flag. Writes the delivered status and its load_audit row. */
+export function markLeftReceiverDelivered(loadId: number): boolean {
+  const load = getLoad(loadId);
+  if (!load || isClosedStatus(load.status)) return false;
+  const stops = listStops(loadId, { geofence: false });
+  const lastDelivery = [...stops].reverse().find((stop) => stop.kind === "delivery");
+  if (!String(lastDelivery?.departed_at ?? "").trim()) return false;
+  applyLoadAndTruck(loadId, "delivered", "");
+  return getLoad(loadId)?.status === "delivered";
 }
 
 export function applyWorkflowOnDriverAssign(loadId: number): void {
