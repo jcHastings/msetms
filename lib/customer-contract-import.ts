@@ -25,6 +25,7 @@ import {
   saveCustomerDetentionTerms,
   saveCustomerRequirement,
 } from "./customer-contracts";
+import { listCustomerAliasRefs } from "./customer-alias";
 import { getDb } from "./db";
 
 export type ImportReportLine = {
@@ -76,11 +77,12 @@ export function importCustomerContracts(input: {
     throw new Error(`PDF folder was not found: ${input.pdfDir}`);
   }
   const customers = listCustomerNames();
+  const aliases = listCustomerAliasRefs();
   const lines: ImportReportLine[] = [];
   const unmatched = new Set<string>();
-  const plannedTerms = csvRecords(termsText).map((row, index) => planTerm(row, index + 2, customers));
+  const plannedTerms = csvRecords(termsText).map((row, index) => planTerm(row, index + 2, customers, aliases));
   const plannedRequirements = csvRecords(requirementsText).map((row, index) =>
-    planRequirement(row, index + 2, customers),
+    planRequirement(row, index + 2, customers, aliases),
   );
 
   for (const item of plannedTerms) {
@@ -188,7 +190,12 @@ type PlannedTerm =
       };
     };
 
-function planTerm(row: Record<string, string>, rowNumber: number, customers: CustomerName[]): PlannedTerm {
+function planTerm(
+  row: Record<string, string>,
+  rowNumber: number,
+  customers: CustomerName[],
+  aliases: Array<{ customerId: number; name: string; normalized: string }> = [],
+): PlannedTerm {
   const customer = String(row.customer_name ?? "").trim();
   const numbers = {
     rate_per_hour: row.rate_per_hour,
@@ -211,7 +218,7 @@ function planTerm(row: Record<string, string>, rowNumber: number, customers: Cus
   if (signedOn && !/^\d{4}-\d{2}-\d{2}$/.test(signedOn)) {
     return { kind: "bad", row: rowNumber, customer, detail: "signed_on uses YYYY-MM-DD" };
   }
-  const match = customer ? matchCustomerByName(customer, customers) : null;
+  const match = customer ? matchCustomerByName(customer, customers, aliases) : null;
   return {
     kind: "ok",
     row: rowNumber,
@@ -232,9 +239,14 @@ function planTerm(row: Record<string, string>, rowNumber: number, customers: Cus
   };
 }
 
-function planRequirement(row: Record<string, string>, rowNumber: number, customers: CustomerName[]) {
+function planRequirement(
+  row: Record<string, string>,
+  rowNumber: number,
+  customers: CustomerName[],
+  aliases: Array<{ customerId: number; name: string; normalized: string }> = [],
+) {
   const customer = String(row.customer_slug ?? "").trim();
-  const match = customer ? matchCustomerByName(customer, customers) : null;
+  const match = customer ? matchCustomerByName(customer, customers, aliases) : null;
   const mapped = mapRequirementRow(row);
   if (!customer) {
     return { row: rowNumber, customer: "(blank)", customerId: null, action: "skipped" as const, detail: "customer_slug is blank", mapped: null };
@@ -257,7 +269,9 @@ function planRequirement(row: Record<string, string>, rowNumber: number, custome
 }
 
 function listCustomerNames(): CustomerName[] {
-  return getDb().prepare("SELECT id, name FROM customers ORDER BY id").all() as CustomerName[];
+  return getDb()
+    .prepare("SELECT id, name FROM customers WHERE archived_at IS NULL ORDER BY id")
+    .all() as CustomerName[];
 }
 
 function readText(filePath: string, label: string): string {

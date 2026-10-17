@@ -1470,6 +1470,7 @@ export function migrate(db: Database): void {
   `);
   migrateDetentionRequests(db);
   migrateCustomerContracts(db);
+  migrateCustomerIdentity(db);
 }
 
 function seedExampleDeductionTemplates(db: Database): void {
@@ -2009,6 +2010,35 @@ function migrateRateConRedactions(db: Database): void {
       ON rate_con_redactions(source_attachment_id);
     CREATE INDEX IF NOT EXISTS idx_rate_con_redactions_load
       ON rate_con_redactions(load_id, status);
+  `);
+}
+
+function migrateCustomerIdentity(db: Database): void {
+  ensureColumn(db, "customers", "mc_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "dot_number", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "archived_at", "TEXT");
+  ensureColumn(db, "customers", "merged_into", "INTEGER");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      normalized TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_aliases_normalized ON customer_aliases(normalized);
+    CREATE INDEX IF NOT EXISTS idx_customer_aliases_customer ON customer_aliases(customer_id);
+
+    CREATE TABLE IF NOT EXISTS customer_merges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keeper_id INTEGER NOT NULL,
+      loser_ids TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      actor TEXT NOT NULL DEFAULT '',
+      undone_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_customer_merges_keeper ON customer_merges(keeper_id, id);
   `);
 }
 

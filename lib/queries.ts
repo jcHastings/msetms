@@ -25,6 +25,8 @@ import {
   trailerUnit,
   truckUnit,
 } from "./audit";
+import { aliasNamesByCustomerId, aliasNamesForCustomer, findLiveCustomerIdByAlias } from "./customer-alias";
+import { normalizeMcNumber } from "./customer-name";
 import { getDb } from "./db";
 import { applyLoadCustody } from "./trailer-custody";
 import {
@@ -647,7 +649,27 @@ export function locationsForLoad(load: {
 }
 
 export function listCustomers(): Customer[] {
-  return getDb().prepare("SELECT * FROM customers ORDER BY name COLLATE NOCASE").all() as Customer[];
+  const rows = getDb()
+    .prepare("SELECT * FROM customers WHERE archived_at IS NULL ORDER BY name COLLATE NOCASE")
+    .all() as Customer[];
+  return withAliasNames(rows);
+}
+
+export function findCustomersWithSameMc(
+  mc: string,
+  exceptId?: number,
+): Array<{ id: number; name: string; mc_number: string }> {
+  const needle = normalizeMcNumber(mc);
+  if (!needle) return [];
+  const rows = getDb()
+    .prepare("SELECT id, name, mc_number FROM customers WHERE archived_at IS NULL")
+    .all() as Array<{ id: number; name: string; mc_number: string }>;
+  return rows.filter((row) => row.id !== exceptId && normalizeMcNumber(row.mc_number) === needle);
+}
+
+function withAliasNames<T extends { id: number }>(rows: T[]): Array<T & { alias_names: string[] }> {
+  const aliases = aliasNamesByCustomerId();
+  return rows.map((row) => ({ ...row, alias_names: aliases.get(row.id) ?? [] }));
 }
 
 export const CUSTOMERS_PAGE_SIZE = 25;
@@ -676,13 +698,17 @@ export function searchCustomersDirectory(
   const pageSize = Math.min(100, Math.max(1, Math.floor(input.pageSize ?? CUSTOMERS_PAGE_SIZE)));
   const needle = customerSearchNeedle(String(input.q ?? ""));
   const db = getDb();
+  const digits = needle.replace(/\D/g, "");
+  const like = `%${needle}%`;
   const filterSql = needle
-    ? `WHERE (
+    ? `WHERE customers.archived_at IS NULL AND (
         customers.name LIKE ?
         OR IFNULL(customers.payment_terms, '') LIKE ?
         OR IFNULL(customers.main_email, '') LIKE ?
         OR IFNULL(customers.billing_email, '') LIKE ?
         OR IFNULL(customers.billing_notes, '') LIKE ?
+        OR IFNULL(customers.mc_number, '') LIKE ?
+        OR IFNULL(customers.dot_number, '') LIKE ?
         OR EXISTS (
           SELECT 1 FROM contacts
           WHERE contacts.customer_id = customers.id
@@ -692,9 +718,23 @@ export function searchCustomersDirectory(
               OR IFNULL(contacts.email, '') LIKE ?
             )
         )
+        OR EXISTS (
+          SELECT 1 FROM customer_aliases
+          WHERE customer_aliases.customer_id = customers.id
+            AND (
+              customer_aliases.name LIKE ?
+              OR customer_aliases.normalized LIKE ?
+            )
+        )
+        OR (
+          ? <> ''
+          AND REPLACE(REPLACE(REPLACE(REPLACE(UPPER(IFNULL(customers.mc_number, '')), 'MC', ''), '-', ''), ' ', ''), '.', '') LIKE ?
+        )
       )`
-    : "";
-  const filterParams = needle ? Array<string>(8).fill(`%${needle}%`) : [];
+    : "WHERE customers.archived_at IS NULL";
+  const filterParams = needle
+    ? [like, like, like, like, like, like, like, like, like, like, like, like, digits, digits ? `%${digits}%` : ""]
+    : [];
   const total =
     Number(
       (db.prepare(`SELECT COUNT(*) AS count FROM customers ${filterSql}`).get(...filterParams) as { count: number })
@@ -703,9 +743,11 @@ export function searchCustomersDirectory(
   const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
   const requested = Math.floor(Number(input.page));
   const page = Math.min(pageCount, Math.max(1, Number.isFinite(requested) && requested > 0 ? requested : 1));
-  const customers = db
-    .prepare(`SELECT * FROM customers ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
-    .all(...filterParams, pageSize, (page - 1) * pageSize) as Customer[];
+  const customers = withAliasNames(
+    db
+      .prepare(`SELECT * FROM customers ${filterSql} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`)
+      .all(...filterParams, pageSize, (page - 1) * pageSize) as Customer[],
+  );
   const ids = customers.map((customer) => customer.id);
   const contactsByCustomer = new Map<number, Contact[]>();
   if (ids.length) {
@@ -742,7 +784,7 @@ export function getCustomer(id: number): CustomerWithContacts | null {
   const contacts = getDb()
     .prepare("SELECT * FROM contacts WHERE customer_id = ? ORDER BY id")
     .all(id) as Contact[];
-  return { ...customer, contacts };
+  return { ...customer, contacts, alias_names: aliasNamesForCustomer(id) };
 }
 
 export function createCustomer(input: {
@@ -752,14 +794,18 @@ export function createCustomer(input: {
   payment_terms?: string;
   main_email?: string;
   billing_email?: string;
+  mc_number?: string;
+  dot_number?: string;
   contacts: Array<{ name: string; role: string; phone: string; email: string }>;
 }): number {
   const db = getDb();
   const timestamp = now();
   const result = db
     .prepare(
-      `INSERT INTO customers (name, billing_notes, credit_hold, payment_terms, main_email, billing_email, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO customers (
+        name, billing_notes, credit_hold, payment_terms, main_email, billing_email,
+        mc_number, dot_number, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.name,
@@ -768,6 +814,8 @@ export function createCustomer(input: {
       input.payment_terms ?? "",
       String(input.main_email ?? "").trim(),
       String(input.billing_email ?? "").trim(),
+      String(input.mc_number ?? "").trim(),
+      String(input.dot_number ?? "").trim(),
       timestamp,
       timestamp,
     );
@@ -791,6 +839,8 @@ export function updateCustomer(
     payment_terms?: string;
     main_email?: string;
     billing_email?: string;
+    mc_number?: string;
+    dot_number?: string;
     contacts: Array<{ name: string; role: string; phone: string; email: string }>;
   },
 ): void {
@@ -798,7 +848,10 @@ export function updateCustomer(
   if (!existing) throw new Error("Customer not found.");
   getDb()
     .prepare(
-      "UPDATE customers SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, main_email = ?, billing_email = ?, updated_at = ? WHERE id = ?",
+      `UPDATE customers
+       SET name = ?, billing_notes = ?, credit_hold = ?, payment_terms = ?, main_email = ?, billing_email = ?,
+           mc_number = ?, dot_number = ?, updated_at = ?
+       WHERE id = ?`,
     )
     .run(
       input.name,
@@ -807,6 +860,8 @@ export function updateCustomer(
       input.payment_terms ?? existing.payment_terms ?? "",
       String(input.main_email ?? existing.main_email ?? "").trim(),
       String(input.billing_email ?? existing.billing_email ?? "").trim(),
+      input.mc_number !== undefined ? input.mc_number.trim() : (existing.mc_number ?? ""),
+      input.dot_number !== undefined ? input.dot_number.trim() : (existing.dot_number ?? ""),
       now(),
       id,
     );
@@ -1839,6 +1894,8 @@ export function listLoadsForTruck(truckId: number): LoadView[] {
 }
 
 export function findOrCreateCustomer(name: string): number {
+  const alias = findLiveCustomerIdByAlias(name);
+  if (alias) return alias;
   const existing = listCustomers().find(
     (customer) => customer.name.toLowerCase() === name.trim().toLowerCase(),
   );
@@ -2643,7 +2700,9 @@ export function saveIftaReport(input: {
 
 export function listCustomersNeedingQbo(): Customer[] {
   return getDb()
-    .prepare("SELECT * FROM customers WHERE qbo_status = 'needs_qbo' ORDER BY name COLLATE NOCASE")
+    .prepare(
+      "SELECT * FROM customers WHERE qbo_status = 'needs_qbo' AND archived_at IS NULL ORDER BY name COLLATE NOCASE",
+    )
     .all() as Customer[];
 }
 

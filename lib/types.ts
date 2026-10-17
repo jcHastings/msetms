@@ -211,6 +211,14 @@ export type Customer = {
   qbo_status: string;
   main_email: string;
   billing_email: string;
+  mc_number: string;
+  dot_number: string;
+  /** Set when this customer was merged away. Null on live customers. */
+  archived_at: string | null;
+  /** Keeper customer id when this row was merged. Null on live customers. */
+  merged_into: number | null;
+  /** Other names that resolve to this customer. Present on directory and profile reads. */
+  alias_names?: string[];
   created_at: string;
   updated_at: string;
 };
@@ -736,6 +744,7 @@ export type ActionResult =
       error: string;
       status?: number;
       duplicate?: boolean;
+      duplicateMc?: string;
       existingId?: number;
       existingName?: string;
       draft?: LocationFormDraft;

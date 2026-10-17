@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { LoadFormDefaults } from "@/components/load-basics-screen";
 import { useLoadAssignPersist } from "@/components/use-load-assign-persist";
+import { customerMatchesLookup } from "@/lib/customer-name";
 import type { Customer, Load } from "@/lib/types";
 
 export function LoadCustomerScreen({
@@ -27,11 +28,11 @@ export function LoadCustomerScreen({
   const [customerQuery, setCustomerQuery] = useState("");
   const [createName, setCreateName] = useState(load?.customer_id ? "" : (defaults.customer_name ?? ""));
   const selectedCustomer = customers.find((item) => String(item.id) === customerId) ?? null;
-  const customerMatches = customers.filter((customer) =>
-    customer.name.toLowerCase().includes(customerQuery.trim().toLowerCase()),
-  );
-  const customerField = customerQuery || selectedCustomer?.name || "";
   const showMatches = Boolean(customerQuery.trim());
+  const customerMatches = showMatches
+    ? customers.filter((customer) => customerMatchesLookup(customer, customerQuery))
+    : [];
+  const customerField = customerQuery || selectedCustomer?.name || "";
 
   return (
     <section data-load-tab="customer" className={card ? "card overflow-hidden" : undefined}>
@@ -79,6 +80,7 @@ export function LoadCustomerScreen({
                     }}
                   >
                     {customer.name}
+                    {customer.mc_number ? <span className="mt-0.5 block text-xs text-slate-500">MC {customer.mc_number}</span> : null}
                   </button>
                 </li>
               ))
