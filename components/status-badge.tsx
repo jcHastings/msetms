@@ -1,68 +1,100 @@
+import { loadStatusBadgeClass } from "@/lib/load-status-style";
 import {
+  isOwnerOperator,
   labelForDriverKind,
   labelForDriverStatus,
   labelForLoadStatus,
   labelForTruckStatus,
   type DriverKind,
   type DriverStatus,
-  type LoadStatus,
   type TruckStatus,
 } from "@/lib/types";
 
-const LOAD_STYLES: Record<LoadStatus, string> = {
-  available: "bg-sky-50 text-sky-800 ring-sky-200",
-  assigned: "bg-amber-50 text-amber-800 ring-amber-200",
-  in_transit: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  delivered: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  cancelled: "bg-slate-100 text-slate-600 ring-slate-200",
-};
-
 const TRUCK_STYLES: Record<TruckStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  in_use: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  maintenance: "bg-amber-50 text-amber-800 ring-amber-200",
-  out_of_service: "bg-rose-50 text-rose-800 ring-rose-200",
+  available: "status-tone-success",
+  in_use: "status-tone-navy",
+  maintenance: "status-tone-warning",
+  out_of_service: "status-tone-danger",
 };
 
 const DRIVER_STYLES: Record<DriverStatus, string> = {
-  available: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  on_duty: "bg-indigo-50 text-indigo-800 ring-indigo-200",
-  off_duty: "bg-slate-100 text-slate-600 ring-slate-200",
+  available: "status-tone-success",
+  on_duty: "status-tone-navy",
+  off_duty: "status-tone-slate",
 };
 
-function Pill({ className, children }: { className: string; children: React.ReactNode }) {
+function Pill({
+  className,
+  children,
+  title,
+}: {
+  className: string;
+  children: React.ReactNode;
+  title?: string;
+}) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset ${className}`}
-    >
+    <span className={`status-pill ring-1 ring-inset ring-black/5 ${className}`} title={title}>
       {children}
     </span>
   );
 }
 
-export function LoadStatusBadge({ status }: { status: LoadStatus }) {
-  return <Pill className={LOAD_STYLES[status]}>{labelForLoadStatus(status)}</Pill>;
+export function LoadStatusBadge({ status }: { status: string }) {
+  const label = labelForLoadStatus(status);
+  return (
+    <Pill className={loadStatusBadgeClass(status)} title={label}>
+      {label}
+    </Pill>
+  );
+}
+
+export function OnTimeResultBadge({ onTime }: { onTime: boolean }) {
+  const label = onTime ? "On time" : "Late";
+  return (
+    <Pill className={onTime ? "status-tone-success" : "status-tone-warning"} title={label}>
+      {label}
+    </Pill>
+  );
+}
+
+export function CriticalTag({ reason }: { reason?: string }) {
+  const text = reason?.trim() ?? "";
+  return (
+    <span className="exception-badge-stack" title={text || "Critical"}>
+      <Pill className="status-tone-danger shrink-0">Critical</Pill>
+      {text ? (
+        <span className="exception-reason" data-critical-reason="">
+          {text}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 export function TruckStatusBadge({ status }: { status: TruckStatus }) {
-  return <Pill className={TRUCK_STYLES[status]}>{labelForTruckStatus(status)}</Pill>;
+  const label = labelForTruckStatus(status);
+  return (
+    <Pill className={TRUCK_STYLES[status]} title={label}>
+      {label}
+    </Pill>
+  );
 }
 
 export function DriverStatusBadge({ status }: { status: DriverStatus }) {
-  return <Pill className={DRIVER_STYLES[status]}>{labelForDriverStatus(status)}</Pill>;
+  const label = labelForDriverStatus(status);
+  return (
+    <Pill className={DRIVER_STYLES[status]} title={label}>
+      {label}
+    </Pill>
+  );
 }
 
 export function DriverKindBadge({ type }: { type: DriverKind | string }) {
-  const kind = type === "owner_operator" ? "owner_operator" : "company_driver";
+  const ownerOperator = isOwnerOperator(type);
+  const label = labelForDriverKind(type);
   return (
-    <Pill
-      className={
-        kind === "owner_operator"
-          ? "bg-violet-50 text-violet-800 ring-violet-200"
-          : "bg-slate-100 text-slate-600 ring-slate-200"
-      }
-    >
-      {labelForDriverKind(kind)}
+    <Pill className={ownerOperator ? "status-tone-navy" : "status-tone-slate"} title={label}>
+      {label}
     </Pill>
   );
 }

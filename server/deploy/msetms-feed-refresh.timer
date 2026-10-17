@@ -1,0 +1,10 @@
+[Unit]
+Description=MS Express TMS: pull Orbcomm, Samsara fleet GPS, and the route feed
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=20s
+
+[Install]
+WantedBy=timers.target

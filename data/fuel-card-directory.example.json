@@ -1,0 +1,14 @@
+{
+  "aliases": [
+    { "driver": "Mina Quinn Hale", "aliases": ["Mina Q Hale", "Mina Q"] },
+    {
+      "driver": "Christopher Hale",
+      "aliases": ["Chris Hale", "Fuel Chris Hale", "Chris on truck 18"]
+    },
+    { "driver": "Nolan Ellison", "aliases": ["Fuel Nolan Ellison"] },
+    { "driver": "Rowan Avila", "aliases": ["Rowan"] }
+  ],
+  "assignments": [{ "unit": "18", "driver": "Nolan Ellison" }],
+  "backupDrivers": ["Lucas Marrow"],
+  "blockedDrivers": ["Ivan Petro"]
+}
