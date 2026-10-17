@@ -47,3 +47,4 @@ next-env.d.ts
 /data/*.db-shm
 /data/uploads/
 /data/qbo-refresh.json
+/data/fuel-card-directory.json

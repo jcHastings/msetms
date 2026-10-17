@@ -1,14 +1,21 @@
 import { ComplianceList } from "@/components/compliance-badge";
 import { driverComplianceAlerts } from "@/lib/compliance";
 import { formatDate } from "@/lib/format";
-import type { Driver } from "@/lib/types";
+import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
+import { formatCdlEndorsements, type Driver } from "@/lib/types";
 
 function formatDay(value: string): string {
   return value ? formatDate(`${value}T12:00:00`) : "—";
 }
 
-export function DriverComplianceCard({ driver }: { driver: Driver }) {
-  const alerts = driverComplianceAlerts(driver);
+export function DriverComplianceCard({
+  driver,
+  windows = DEFAULT_COMPLIANCE_WINDOWS,
+}: {
+  driver: Driver;
+  windows?: ComplianceWindows;
+}) {
+  const alerts = driverComplianceAlerts(driver, windows);
   const license = [driver.license_state, driver.license_number].filter(Boolean).join("-") || driver.license || "—";
 
   return (
@@ -19,6 +26,7 @@ export function DriverComplianceCard({ driver }: { driver: Driver }) {
           <dt className="text-slate-500">Driver license</dt>
           <dd className="font-semibold">{license}</dd>
           <dd className="text-slate-600">Expires {formatDay(driver.license_expires)}</dd>
+          <dd className="mt-1 text-slate-600">Endorsements {formatCdlEndorsements(driver.cdl_endorsements)}</dd>
         </div>
         <div>
           <dt className="text-slate-500">Medical card</dt>
@@ -31,7 +39,9 @@ export function DriverComplianceCard({ driver }: { driver: Driver }) {
           <ComplianceList alerts={alerts} />
         </div>
       ) : (
-        <p className="mt-3 text-sm text-slate-500">No license or medical card dates in the 30-day window.</p>
+        <p className="mt-3 text-sm text-slate-500">
+          No license or medical card dates in the {windows.driverDays}-day window.
+        </p>
       )}
     </section>
   );
