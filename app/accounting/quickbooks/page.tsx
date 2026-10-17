@@ -11,6 +11,7 @@ import {
 import { canConnectQuickbooks, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { PAY_ITEM_CATEGORIES } from "@/lib/load-page-shared";
 import { loadQuickbooksDesk } from "@/lib/quickbooks-desk";
+import { QboOutsidePayments } from "@/components/qbo-outside-payments";
 
 export const metadata = deskMetadata("QuickBooks");
 export const dynamic = "force-dynamic";
@@ -400,6 +401,7 @@ async function renderQuickbooksAccountingPage(searchParams: Promise<{ tab?: stri
           </table>
         </section>
       ) : null}
+      <QboOutsidePayments />
     </div>
   );
 }

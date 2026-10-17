@@ -20,6 +20,7 @@ import { QboSendHold } from "@/components/qbo-send-hold";
 import { invoiceIssuerProblems, invoiceIssuerWarning } from "@/lib/carrier-identity";
 import { qboInvoiceSendEnabled } from "@/lib/env";
 import { QBO_INVOICE_SEND_DISABLED_MESSAGE } from "@/lib/qbo-send-lock";
+import { outsidePaymentSuggestionLines } from "@/lib/integrations/qbo-payments";
 import { ReimbursementQueue } from "@/components/reimbursement-queue";
 import { SettlementWeekList } from "@/components/settlement-week-list";
 import { canWrite } from "@/lib/settings-shared";
@@ -202,6 +203,7 @@ function stopLabel(stop: { name: string; street: string; city: string; state: st
 function toInvoiceAcctRow(
   row: ReturnType<typeof listReceivables>[number],
   qboConnected: boolean,
+  suggestion = "",
 ): InvoiceAcctRow {
   const settings = getCompanySettings();
   const total = receivableInvoiceTotal(row);
@@ -236,7 +238,7 @@ function toInvoiceAcctRow(
           ? "Payment recorded"
           : "No payments recorded",
     qboInvoiceLine: qbo.invoiceLine,
-    qboPaymentsLine: qbo.paymentsLine,
+    qboPaymentsLine: [qbo.paymentsLine, suggestion].filter(Boolean).join(" "),
     alreadySent: qbo.sent,
     sendLabel: qbo.sent ? "Send again to QuickBooks" : qboConnected ? "Send to QuickBooks" : "Record demo invoice",
     paid: settled.balance <= 0.009 && (Boolean(row.paid) || settled.paid > 0),
@@ -276,9 +278,10 @@ function InvoicesTab({ q, branch, branches }: { q: string; branch: string; branc
   const qboConnected = hasQuickbooksSession();
   const sendEnabled = qboInvoiceSendEnabled();
   const issuerWarning = invoiceIssuerWarning(invoiceIssuerProblems(getCompanySettings()));
+  const suggestions = outsidePaymentSuggestionLines();
   const rows = listReceivables()
     .filter((row) => matchesQuery(row, q) && matchesBranch(row, branch))
-    .map((row) => toInvoiceAcctRow(row, qboConnected));
+    .map((row) => toInvoiceAcctRow(row, qboConnected, suggestions.get(row.id) ?? ""));
   return (
     <div className="space-y-3">
       <QboSendOffNotice />

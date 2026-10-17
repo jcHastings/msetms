@@ -12,16 +12,20 @@ import {
   connectedQuickbooksRealmId,
   hasQuickbooksSession,
   qboPaymentBasisTotal,
+  readQboInvoiceDocNumber,
   readQboPayment,
   readQboPaymentCdc,
 } from "./quickbooks";
 
 /**
  * QuickBooks Payment → TMS load. Read-only toward QuickBooks: the webhook and the
- * feed-refresh CDC poll only GET a Payment or the Payment change feed.
+ * feed-refresh CDC poll only GET a Payment, an Invoice DocNumber, or the Payment change feed.
  * One payment can cover several invoices. Each linked invoice is applied on its own.
- * Demo invoices are ignored. An invoice id with no QuickBooks load is an Exception
- * Inbox item — it is not matched by amount, customer, or document number.
+ * A QuickBooks invoice id stored on exactly one load is applied and can mark that load paid.
+ * An invoice the TMS created that does not match one load stays a Requires-attention card.
+ * An invoice id no load has is an outside invoice: recorded quietly, no attention card.
+ * Its DocNumber links a load only when exactly one load number matches, and only as a suggestion.
+ * That suggestion never marks the load paid.
  */
 
 export const QBO_PAYMENT_WEBHOOK_PATH = "/api/integrations/quickbooks/webhook";
@@ -56,9 +60,30 @@ export type QboPaymentApplyResult = {
   status: QboPaymentSnapshot["status"];
   loadIds: number[];
   unmatchedInvoiceIds: string[];
+  /** Invoice ids no TMS load has. Quiet records, not attention cards. */
+  outsideInvoiceIds: string[];
+  /** Loads linked by an exact DocNumber match. Display only; not marked paid. */
+  suggestedLoadIds: number[];
   unappliedAmt: number;
   notified: boolean;
   emails: OutgoingMail[];
+};
+
+type OutsideDraft = {
+  invoiceId: string;
+  amount: number;
+  docNumber: string;
+  suggestedLoadId: number | null;
+};
+
+export type OutsideQboPayment = {
+  qboPaymentId: string;
+  qboInvoiceId: string;
+  docNumber: string;
+  amount: number;
+  txnDate: string;
+  suggestedLoadId: number | null;
+  suggestedLoadNumber: string;
 };
 
 export type QboWebhookIngestResult = {
@@ -242,13 +267,21 @@ function paymentFingerprint(input: {
   unapplied: number;
   applications: Array<{ loadId: number; applied: number }>;
   unmatched: string[];
+  outside?: OutsideDraft[];
 }): string {
   const apps = input.applications
     .map((row) => `${row.loadId}:${row.applied.toFixed(2)}`)
     .sort()
     .join(",");
   const unmatched = [...input.unmatched].sort().join(",");
-  return [input.status, input.txnDate, input.unapplied.toFixed(2), apps, unmatched].join("|");
+  const base = [input.status, input.txnDate, input.unapplied.toFixed(2), apps, unmatched].join("|");
+  const outside = input.outside ?? [];
+  if (outside.length === 0) return base;
+  const extra = outside
+    .map((row) => `${row.invoiceId}:${row.suggestedLoadId ?? ""}:${row.docNumber}`)
+    .sort()
+    .join(",");
+  return `${base}|out:${extra}`;
 }
 
 function readPaymentRow(id: string): PaymentRow | null {
@@ -275,6 +308,44 @@ function quickbooksLoadsForInvoice(invoiceId: string): number[] {
     )
     .all(invoiceId) as Array<{ id: number }>;
   return rows.map((row) => row.id);
+}
+
+/** True when any load stores this QuickBooks invoice id, whatever the source. */
+function tmsCreatedInvoice(invoiceId: string): boolean {
+  const id = invoiceId.trim();
+  if (!id) return false;
+  const row = getDb()
+    .prepare("SELECT id FROM loads WHERE qbo_invoice_id = ? LIMIT 1")
+    .get(id) as { id: number } | undefined;
+  return Boolean(row);
+}
+
+/** Exact trimmed load number. Blank numbers never match. */
+function loadsForExactLoadNumber(loadNumber: string): number[] {
+  const key = loadNumber.trim();
+  if (!key) return [];
+  const rows = getDb()
+    .prepare(
+      `SELECT id FROM loads
+       WHERE TRIM(load_number) = ?
+       ORDER BY id`,
+    )
+    .all(key) as Array<{ id: number }>;
+  return rows.map((row) => row.id);
+}
+
+function docNumberFor(
+  docNumbers: Map<string, string> | Record<string, string> | undefined,
+  invoiceId: string,
+): string {
+  if (!docNumbers) return "";
+  const raw = docNumbers instanceof Map ? docNumbers.get(invoiceId) : docNumbers[invoiceId];
+  return String(raw ?? "").trim();
+}
+
+function outsideSuggestion(docNumber: string): number | null {
+  const matches = loadsForExactLoadNumber(docNumber);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function appliedByOthers(loadId: number, paymentId: string): number {
@@ -427,7 +498,10 @@ function dateLabel(txnDate: string): string {
   return label === "—" ? txnDate : label;
 }
 
-export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyResult {
+export function applyQboPayment(
+  snapshot: QboPaymentSnapshot,
+  docNumbers?: Map<string, string> | Record<string, string>,
+): QboPaymentApplyResult {
   const db = getDb();
   const at = nowIso();
   const existing = readPaymentRow(snapshot.id);
@@ -435,6 +509,7 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
   const hadUnmatched = openExceptionCount(snapshot.id) > 0;
   const planned: PlannedApplication[] = [];
   const unmatched: string[] = [];
+  const outside: OutsideDraft[] = [];
   let unapplied = snapshot.status === "applied" ? snapshot.unappliedAmt : 0;
 
   if (snapshot.status === "applied") {
@@ -444,26 +519,36 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
     }
     for (const line of snapshot.lines) {
       const loads = quickbooksLoadsForInvoice(line.invoiceId);
-      if (loads.length !== 1) {
+      if (loads.length === 1) {
+        const load = getLoad(loads[0]);
+        const total = load ? paymentCapTotal(load) : 0;
+        const room = roundMoney(Math.max(0, total - appliedByOthers(loads[0], snapshot.id)));
+        const applied = roundMoney(Math.min(line.amount, room));
+        const excess = roundMoney(line.amount - applied);
+        unapplied = roundMoney(unapplied + excess);
+        if (applied > 0) {
+          planned.push({
+            invoiceId: line.invoiceId,
+            loadId: loads[0],
+            lineAmount: line.amount,
+            applied,
+            unapplied: excess,
+          });
+        }
+        continue;
+      }
+      if (loads.length > 1 || tmsCreatedInvoice(line.invoiceId)) {
         unmatched.push(line.invoiceId);
         unapplied = roundMoney(unapplied + line.amount);
         continue;
       }
-      const load = getLoad(loads[0]);
-      const total = load ? paymentCapTotal(load) : 0;
-      const room = roundMoney(Math.max(0, total - appliedByOthers(loads[0], snapshot.id)));
-      const applied = roundMoney(Math.min(line.amount, room));
-      const excess = roundMoney(line.amount - applied);
-      unapplied = roundMoney(unapplied + excess);
-      if (applied > 0) {
-        planned.push({
-          invoiceId: line.invoiceId,
-          loadId: loads[0],
-          lineAmount: line.amount,
-          applied,
-          unapplied: excess,
-        });
-      }
+      const docNumber = docNumberFor(docNumbers, line.invoiceId);
+      outside.push({
+        invoiceId: line.invoiceId,
+        amount: line.amount,
+        docNumber,
+        suggestedLoadId: outsideSuggestion(docNumber),
+      });
     }
   }
 
@@ -473,6 +558,7 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
     unapplied,
     applications: planned.map((row) => ({ loadId: row.loadId, applied: row.applied })),
     unmatched,
+    outside,
   });
 
   const base: QboPaymentApplyResult = {
@@ -480,6 +566,8 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
     status: snapshot.status,
     loadIds: planned.map((row) => row.loadId),
     unmatchedInvoiceIds: unmatched.filter((id) => id !== "*"),
+    outsideInvoiceIds: outside.map((row) => row.invoiceId),
+    suggestedLoadIds: outside.flatMap((row) => (row.suggestedLoadId == null ? [] : [row.suggestedLoadId])),
     unappliedAmt: unapplied,
     notified: false,
     emails: [],
@@ -532,14 +620,23 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
     for (const line of planned) {
       insertLine.run(snapshot.id, line.invoiceId, line.loadId, line.lineAmount, line.applied, line.unapplied);
     }
+    db.prepare("DELETE FROM qbo_payment_outside WHERE qbo_payment_id = ?").run(snapshot.id);
     if (snapshot.status === "applied") {
+      const insertOutside = db.prepare(
+        `INSERT INTO qbo_payment_outside (
+           qbo_payment_id, qbo_invoice_id, doc_number, amount, suggested_load_id, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      for (const row of outside) {
+        insertOutside.run(snapshot.id, row.invoiceId, row.docNumber, row.amount, row.suggestedLoadId, at);
+      }
       for (const invoiceId of unmatched) {
         const detail =
           invoiceId === "*"
             ? `Payment ${snapshot.id} has a line linked to more than one invoice. That amount was not applied.`
             : quickbooksLoadsForInvoice(invoiceId).length > 1
               ? `Payment ${snapshot.id} links invoice ${invoiceId}, and more than one load has that QuickBooks invoice. Nothing was applied.`
-              : `Payment ${snapshot.id} links invoice ${invoiceId}. No TMS load has that QuickBooks invoice. Nothing was applied.`;
+              : `Payment ${snapshot.id} links invoice ${invoiceId}. The TMS created that invoice, but it does not match one QuickBooks load. Nothing was applied.`;
         upsertException(snapshot.id, invoiceId, detail, at);
       }
       resolveExceptions(snapshot.id, unmatched, at);
@@ -613,6 +710,31 @@ export function applyQboPayment(snapshot: QboPaymentSnapshot): QboPaymentApplyRe
     }
   }
   return { ...base, notified: true, emails };
+}
+
+/**
+ * Apply a payment from the webhook or the change feed.
+ * DocNumber is read only for invoices no TMS load has. A failed read stays an outside invoice.
+ */
+export async function applyQboPaymentFromFeed(
+  snapshot: QboPaymentSnapshot,
+  readDocNumber: (invoiceId: string) => Promise<string | null> = readQboInvoiceDocNumber,
+): Promise<QboPaymentApplyResult> {
+  const docNumbers = new Map<string, string>();
+  if (snapshot.status === "applied") {
+    for (const line of snapshot.lines) {
+      if (quickbooksLoadsForInvoice(line.invoiceId).length > 0) continue;
+      if (tmsCreatedInvoice(line.invoiceId)) continue;
+      let doc = "";
+      try {
+        doc = String((await readDocNumber(line.invoiceId)) ?? "").trim();
+      } catch {
+        doc = "";
+      }
+      if (doc) docNumbers.set(line.invoiceId, doc);
+    }
+  }
+  return applyQboPayment(snapshot, docNumbers);
 }
 
 export function applyDeletedPayment(id: string): QboPaymentApplyResult {
@@ -696,17 +818,19 @@ export async function ingestQboWebhook(input: {
     const snapshot = read as QboPaymentSnapshot;
     if (operation === "void") {
       emails.push(
-        ...applyQboPayment({
-          ...snapshot,
-          status: "voided",
-          lines: [],
-          ambiguousAmt: 0,
-          totalAmt: 0,
-          unappliedAmt: 0,
-        }).emails,
+        ...(
+          await applyQboPaymentFromFeed({
+            ...snapshot,
+            status: "voided",
+            lines: [],
+            ambiguousAmt: 0,
+            totalAmt: 0,
+            unappliedAmt: 0,
+          })
+        ).emails,
       );
     } else {
-      emails.push(...applyQboPayment(snapshot).emails);
+      emails.push(...(await applyQboPaymentFromFeed(snapshot)).emails);
     }
     applied += 1;
   }
@@ -763,7 +887,7 @@ export async function syncQboPaymentsFromCdc(): Promise<{ saved: number; error?:
       saved += 1;
     }
     for (const payment of parsed.payments) {
-      applyQboPayment(payment);
+      await applyQboPaymentFromFeed(payment);
       saved += 1;
     }
     if (parsed.time) writeCdcCursor(parsed.time);
@@ -788,4 +912,51 @@ export function listOpenQboPaymentExceptions(): QboPaymentExceptionRow[] {
        ORDER BY id`,
     )
     .all() as QboPaymentExceptionRow[];
+}
+
+export function listOutsideQboPayments(): OutsideQboPayment[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT o.qbo_payment_id, o.qbo_invoice_id, o.doc_number, o.amount,
+              o.suggested_load_id, p.txn_date, IFNULL(l.load_number, '') AS load_number
+       FROM qbo_payment_outside o
+       JOIN qbo_payments p ON p.qbo_payment_id = o.qbo_payment_id
+       LEFT JOIN loads l ON l.id = o.suggested_load_id
+       WHERE p.status = 'applied'
+       ORDER BY p.txn_date DESC, o.id DESC`,
+    )
+    .all() as Array<{
+    qbo_payment_id: string;
+    qbo_invoice_id: string;
+    doc_number: string;
+    amount: number;
+    suggested_load_id: number | null;
+    txn_date: string;
+    load_number: string;
+  }>;
+  return rows.map((row) => ({
+    qboPaymentId: row.qbo_payment_id,
+    qboInvoiceId: row.qbo_invoice_id,
+    docNumber: row.doc_number,
+    amount: roundMoney(Number(row.amount) || 0),
+    txnDate: row.txn_date,
+    suggestedLoadId: row.suggested_load_id,
+    suggestedLoadNumber: row.load_number,
+  }));
+}
+
+/** Suggestion text for a load. Empty when this payment was not linked by DocNumber. */
+export function outsidePaymentSuggestionLines(): Map<number, string> {
+  const grouped = new Map<number, string[]>();
+  for (const row of listOutsideQboPayments()) {
+    if (row.suggestedLoadId == null) continue;
+    const when = row.txnDate ? ` on ${row.txnDate}` : "";
+    const line = `Suggested QuickBooks payment ${row.qboPaymentId}${when} for ${money(row.amount)}. Confirm before marking paid.`;
+    const lines = grouped.get(row.suggestedLoadId) ?? [];
+    lines.push(line);
+    grouped.set(row.suggestedLoadId, lines);
+  }
+  const out = new Map<number, string>();
+  for (const [loadId, lines] of grouped) out.set(loadId, lines.join(" "));
+  return out;
 }
