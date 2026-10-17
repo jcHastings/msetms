@@ -376,6 +376,18 @@ export function migrate(db: Database): void {
       updated_at TEXT NOT NULL,
       UNIQUE (qbo_payment_id, qbo_invoice_id)
     );
+    CREATE TABLE IF NOT EXISTS qbo_payment_outside (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      qbo_payment_id TEXT NOT NULL,
+      qbo_invoice_id TEXT NOT NULL,
+      doc_number TEXT NOT NULL DEFAULT '',
+      amount REAL NOT NULL DEFAULT 0,
+      suggested_load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (qbo_payment_id, qbo_invoice_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_qbo_payment_outside_payment
+      ON qbo_payment_outside(qbo_payment_id);
     CREATE TABLE IF NOT EXISTS qbo_sync_cursors (
       entity TEXT PRIMARY KEY,
       changed_since TEXT NOT NULL,
