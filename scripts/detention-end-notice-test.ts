@@ -258,6 +258,7 @@ async function storeFlow() {
   const store = await import("../lib/detention-store");
   const noticeStore = await import("../lib/detention-notice-store");
   const signals = await import("../lib/detention-signals");
+  const contracts = await import("../lib/customer-contracts");
   const { getDb } = await import("../lib/db");
   const db = getDb();
 
@@ -267,9 +268,9 @@ async function storeFlow() {
     main_email: "desk@example.test",
     contacts: [],
   });
-  signals.saveCustomerDetentionTerms(customerId, { leadMinutes: "60", contractFreeMinutes: "90" });
-  assert.deepEqual(signals.readCustomerDetentionTerms(customerId), { leadMinutes: 60, contractFreeMinutes: 90 });
-  assert.throws(() => signals.saveCustomerDetentionTerms(customerId, { leadMinutes: 0, contractFreeMinutes: "-5" }), /minutes/);
+  contracts.saveCustomerDetentionTerms(customerId, { freeHours: 1.5, noticeLeadMinutes: 60 });
+  assert.equal(contracts.contractFreeMinutesForCustomer(customerId), 90);
+  assert.throws(() => contracts.saveCustomerDetentionTerms(customerId, { freeHours: -5 }), /negative/);
 
   const now = new Date().toISOString();
   db.prepare(
@@ -318,6 +319,11 @@ async function storeFlow() {
   });
   const load = queries.getLoad(loadA)!;
   const stopRow = stops.getStop(stopA)!;
+  assert.deepEqual(contracts.detentionNoticeLeadForLoad(loadA), { minutes: 60, source: "contract" });
+  db.prepare("UPDATE loads SET detention_free_minutes = 60 WHERE id = ?").run(loadA);
+  const rateConFirst = noticeStore.detentionNoticeAlertsForLoad(load, [stopRow], new Date(at(APPT, 12)));
+  assert.equal(rateConFirst[0]?.startAt, at(APPT, 60), "rate con free time wins over the contract");
+  db.prepare("UPDATE loads SET detention_free_minutes = NULL WHERE id = ?").run(loadA);
   assert.deepEqual(noticeStore.detentionNoticeAlertsForLoad(load, [stopRow], new Date(at(APPT, 5))), []);
   const alerts = noticeStore.detentionNoticeAlertsForLoad(load, [stopRow], new Date(at(APPT, 12)));
   assert.equal(alerts.length, 1);

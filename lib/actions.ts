@@ -282,13 +282,6 @@ export async function updateCustomerAction(
       billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
-    if (formData.has("detention_notice_lead_min")) {
-      const { saveCustomerDetentionTerms } = await import("./detention-signals");
-      saveCustomerDetentionTerms(id, {
-        leadMinutes: formData.get("detention_notice_lead_min"),
-        contractFreeMinutes: formData.get("detention_free_minutes"),
-      });
-    }
     refresh();
     return { ok: true, id };
   } catch (error) {

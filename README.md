@@ -127,6 +127,43 @@ Live confirmations are generated from the load record. Company name / dispatcher
 
 The parser looks for labeled lines (`Customer:`, `Origin:`, `Pickup Window:`, `Rate:`, and so on) plus a `SPECIAL INSTRUCTIONS` block. If the customer name is new, saving creates that customer.
 
+## Customer contracts
+
+A customer page has a **Contracts** tab: the signed PDF, detention terms, and requirements. PDFs are stored under `data/uploads/customer-contracts/`. Each file keeps a signed date and a source: Highway, MyCarrierPackets, RMIS, Assure, or other.
+
+Detention on a load uses the rate confirmation first. A blank rate-confirmation field falls back to that customer's contract. If both are blank the field reads **Missing, enter from rate con**. The load's detention block shows the source beside each value (rate per hour, free time, billing increment, cap per stop, cap per day, notice lead, conditions). The rate confirmation has one cap; that cap fills **cap per stop**. Cap per day comes from the contract only.
+
+`detentionNoticeLeadForLoad(loadId)` in `lib/customer-contracts.ts` returns `{ minutes, source }` where source is `contract` or `missing`. The detention-starting-soon notice reads that lead, and it uses the contract free hours when the rate confirmation leaves free time blank. The notice still sends only after a dispatcher taps Approve.
+
+Requirements use a trigger: `after_pickup`, `after_delivery`, `daily_time`, `before_detention`, `on_ratecon`, or `invoice_cutoff`, plus deadline hours or a time of day, the requirement text, a quoted clause, and a page. They show as reminders on the load and on the desk, with a due time, overdue styling, and Done / Snooze (4 hours). They only flag. Nothing is emailed or texted.
+
+### Import
+
+Dry-run is the default. `--apply` is the only write. Paths are required at runtime. The script does not read `.env`. It matches customers by name, and by the slug of that name (`Heartland Foods Co.` matches `heartland-foods-co`). Unmatched names are printed and skipped. Sample rows below are fake. Do not point the script at a real packet folder in a public commit.
+
+```bash
+npx tsx scripts/import-customer-contracts.ts \
+  --terms scripts/fixtures/customer-contracts/terms.csv \
+  --requirements scripts/fixtures/customer-contracts/requirements.csv \
+  --pdfs scripts/fixtures/customer-contracts/pdfs
+```
+
+Add `--apply` to write. Optional `--db path/to.db` chooses the SQLite file (default `data/tms.db`).
+
+**Terms CSV** columns:
+
+`customer_name`, `rate_per_hour`, `free_hours`, `billing_increment_minutes`, `cap_per_day`, `cap_per_stop`, `notice_lead_minutes`, `conditions`, `signed_on`, `source`, `pdf_file`
+
+`signed_on` is `YYYY-MM-DD`. `source` is `highway`, `mycarrierpackets`, `rmis`, `assure`, or `other`. `pdf_file` is a file name inside the PDF folder.
+
+**Requirements CSV** columns (this is the header row the importer expects):
+
+`customer_slug`, `type`, `trigger`, `deadline_hours`, `what_to_send`, `where`, `page`, `clause_quote`, `confidence`
+
+Optional extra column: `time_of_day` (`HH:MM`), required when the trigger is `daily_time`.
+
+Trigger aliases: `at_pickup` / `on_pickup` / `on_pickup_depart` → `after_pickup`; `at_delivery` / `on_delivery` → `after_delivery`; `on_dispatch` / `on_rate_con` → `on_ratecon`; `on_invoice` → `invoice_cutoff`. A row with trigger `other`, type `detention_notice`, and a negative `deadline_hours` becomes `before_detention` using the absolute hours. Any other `other` row is reported and skipped. `type` and `confidence` are reported and not stored. `where` is appended to the requirement text so the flag names a destination. The importer never sends it.
+
 ## Integrations (hard split)
 
 Both integrations are required. They do not share data:

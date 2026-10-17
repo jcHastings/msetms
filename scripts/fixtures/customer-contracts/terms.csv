@@ -1,0 +1,4 @@
+customer_name,rate_per_hour,free_hours,billing_increment_minutes,cap_per_day,cap_per_stop,notice_lead_minutes,conditions,signed_on,source,pdf_file
+Heartland Foods Co.,48,2,15,500,250,45,"Demo detention conditions for a sample customer. Not a signed agreement.",2024-04-02,highway,heartland-foods-co.pdf
+Summit Building Supply,,,30,600,,60,"Demo conditions for a second sample customer.",2024-07-19,rmis,summit-building-supply.pdf
+Unknown Pantry Co.,40,3,15,,,30,"This sample name is not in the database.",2024-01-08,other,unknown-pantry.pdf

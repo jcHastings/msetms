@@ -471,10 +471,21 @@ export function DetentionRequestDialog({
               )}
             </div>
             <aside className="rounded-md border border-slate-200 bg-slate-50 p-3" data-detention-clause="">
-              <h3 className="text-sm font-semibold text-slate-900">Rate confirmation</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Detention terms</h3>
               <p className="mt-2 text-sm text-slate-800" data-detention-rate="">
                 {draft.rateLabel}
               </p>
+              <dl className="mt-3 space-y-2">
+                {draft.termsLines.map((line) => (
+                  <div key={line.key}>
+                    <dt className="text-sm text-slate-600">{line.label}</dt>
+                    <dd className="text-sm text-slate-900" data-detention-term={line.key} data-detention-source={line.source}>
+                      {line.text}
+                      {line.sourceLabel ? ` · ${line.sourceLabel}` : ""}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
               {draft.clause ? (
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{draft.clause}</p>
               ) : (

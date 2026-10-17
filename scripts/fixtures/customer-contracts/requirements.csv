@@ -1,0 +1,7 @@
+customer_slug,type,trigger,deadline_hours,what_to_send,where,page,clause_quote,confidence,time_of_day
+heartland-foods-co,pod,after_delivery,24,Send the signed delivery receipt to the desk,desk,p2,Sample clause for the demo packet. Not from a customer contract.,high,
+heartland-foods-co,notice,before_detention,0.75,Flag the desk before free time ends,desk,p1,Sample notice clause for the demo packet.,high,
+heartland-foods-co,check,daily_time,,Daily desk check while the load is open,desk,,Sample daily clause for the demo packet.,low,08:00
+summit-building-supply,invoice,invoice_cutoff,72,Invoice packet is due on the desk,desk,p4,Sample invoice clause for the demo packet.,medium,
+no-such-pantry,pod,after_delivery,12,This customer is not in the database,desk,p1,Unmatched sample row.,high,
+heartland-foods-co,misc,other,,This trigger is not mapped,desk,,,

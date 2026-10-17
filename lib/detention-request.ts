@@ -279,6 +279,7 @@ export type DetentionDraftView = {
   billableMinutes: number;
   cap: number | null;
   roundMinutes: number | null;
+  termsLines: Array<{ key: string; label: string; text: string; source: string; sourceLabel: string }>;
   attachments: DetentionAttachmentChoice[];
   request: DetentionRequestView | null;
   invoiceWarning: string;

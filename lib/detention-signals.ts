@@ -1,40 +1,9 @@
-/** Read-only lookups for the detention end clock and customer detention terms. */
+/** Read-only lookups for the detention end clock. */
 
 import { getDb } from "./db";
 import { resolveDetentionEnd, type DetentionEnd } from "./detention-end";
-import { normalizeNoticeLead } from "./detention-notice";
 import { classifyOrbcommReeferMode } from "./fleet-map-shared";
 import type { LoadStop } from "./stops";
-
-export type CustomerDetentionTerms = { leadMinutes: number; contractFreeMinutes: number | null };
-
-export function readCustomerDetentionTerms(customerId: number | null | undefined): CustomerDetentionTerms {
-  if (!customerId) return { leadMinutes: 0, contractFreeMinutes: null };
-  const row = getDb()
-    .prepare("SELECT detention_notice_lead_min, detention_free_minutes FROM customers WHERE id = ?")
-    .get(customerId) as { detention_notice_lead_min?: number; detention_free_minutes?: number | null } | undefined;
-  const free = row?.detention_free_minutes;
-  return {
-    leadMinutes: normalizeNoticeLead(row?.detention_notice_lead_min),
-    contractFreeMinutes: free == null || !Number.isFinite(Number(free)) || Number(free) < 0 ? null : Math.round(Number(free)),
-  };
-}
-
-export function saveCustomerDetentionTerms(
-  customerId: number,
-  input: { leadMinutes: unknown; contractFreeMinutes: unknown },
-): CustomerDetentionTerms {
-  const lead = normalizeNoticeLead(input.leadMinutes);
-  const rawFree = String(input.contractFreeMinutes ?? "").trim();
-  const free = rawFree === "" ? null : Math.round(Number(rawFree));
-  if (free != null && (!Number.isFinite(free) || free < 0 || free > 24 * 60)) {
-    throw new Error("Contract free time is minutes, 0 to 1440.");
-  }
-  getDb()
-    .prepare("UPDATE customers SET detention_notice_lead_min = ?, detention_free_minutes = ? WHERE id = ?")
-    .run(lead, free, customerId);
-  return readCustomerDetentionTerms(customerId);
-}
 
 /** Earliest POD on file at or after arrival. Upload time stands in for the signed time. */
 export function podTimeForStop(loadId: number, arrivedAt: string): string {
