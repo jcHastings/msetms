@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { DriverUpload } from "@/components/driver-upload";
 import { driverStopCheckAction } from "@/lib/driver-actions";
 import { driverStopButtons, type DriverStopButton } from "@/lib/driver-stops";
 import { POD_DELIVERY_REASONS, type PodDeliveryReason } from "@/lib/pod-delivery-shared";
 import type { LoadStop } from "@/lib/stops";
 import { labelForDriverProgress } from "@/lib/types";
+
+function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
 
 function marksDelivered(button: DriverStopButton): boolean {
   return button.stopLabel === "Delivery" && button.kind === "depart";
@@ -49,6 +55,11 @@ export function DriverLoadActions({
     setPodOnFile(hasPod);
   }
   const buttons = driverStopButtons(stops);
+  const deliveryStop = stops.find((stop) => stop.kind === "delivery") ?? null;
+  const emptiedAt = String(deliveryStop?.emptied_at ?? "").trim();
+  const emptyEnabled = Boolean(
+    deliveryStop && deliveryStop.arrived_at?.trim() && !deliveryStop.departed_at?.trim() && !emptiedAt,
+  );
 
   useEffect(() => {
     if (!podStop) return;
@@ -88,6 +99,19 @@ export function DriverLoadActions({
     return true;
   }
 
+  async function submitEmpty() {
+    if (!deliveryStop || !emptyEnabled || pending || closed) return;
+    setPending(true);
+    setError(null);
+    const form = new FormData();
+    form.set("load_id", String(loadId));
+    form.set("stop_id", String(deliveryStop.id));
+    form.set("kind", "empty");
+    const result = await driverStopCheckAction(form);
+    setPending(false);
+    if (!result.ok) setError(result.error);
+  }
+
   function onButton(button: DriverStopButton) {
     if (!button.enabled || pending || closed) return;
     if (marksDelivered(button)) {
@@ -109,8 +133,22 @@ export function DriverLoadActions({
     <section className="mt-5 space-y-3">
       <h2 className="text-base font-semibold text-white">Check in / check out</h2>
       {buttons.map((button) => (
+        <Fragment key={`${button.stopId}-${button.kind}`}>
+        {button.stopLabel === "Delivery" && button.kind === "depart" && deliveryStop ? (
+          <button
+            type="button"
+            data-driver-empty=""
+            disabled={pending || closed || !emptyEnabled}
+            aria-disabled={pending || closed || !emptyEnabled}
+            onClick={() => void submitEmpty()}
+            className={`min-h-14 w-full rounded-2xl px-4 text-left text-lg font-semibold shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+              emptyEnabled && !closed ? "bg-navy text-white" : "bg-slate-200 text-slate-500"
+            }`}
+          >
+            {emptiedAt ? `Empty at ${formatTime(emptiedAt)}` : "Empty / Unloaded"}
+          </button>
+        ) : null}
         <button
-          key={`${button.stopId}-${button.kind}`}
           type="button"
           disabled={pending || closed || !button.enabled}
           aria-disabled={pending || closed || !button.enabled}
@@ -121,6 +159,7 @@ export function DriverLoadActions({
         >
           {buttonText(button)}
         </button>
+        </Fragment>
       ))}
 
       <DriverUpload loadId={loadId} loadNumber={loadNumber} />

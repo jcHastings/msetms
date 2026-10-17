@@ -131,6 +131,7 @@ export type DriverApiStop = {
   notes: string;
   arrived_at: string;
   departed_at: string;
+  emptied_at: string;
   delivered: number;
 };
 
@@ -392,6 +393,7 @@ function toStopDto(stop: LoadStop): DriverApiStop {
     notes: stop.notes,
     arrived_at: toDriverApiDateTime(stop.arrived_at),
     departed_at: toDriverApiDateTime(stop.departed_at),
+    emptied_at: toDriverApiDateTime(stop.emptied_at ?? ""),
     delivered: stop.delivered,
   };
 }

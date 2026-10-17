@@ -2060,6 +2060,39 @@ function migrateDetentionRequests(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_detention_requests_load ON detention_requests(load_id, id);
     CREATE INDEX IF NOT EXISTS idx_detention_requests_stop ON detention_requests(stop_id, id);
   `);
+  ensureColumn(db, "load_stops", "emptied_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "load_stops", "detention_end_pick", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "detention_requests", "end_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "detention_requests", "end_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "detention_requests", "end_flag", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "detention_requests", "notice_id", "INTEGER");
+  ensureColumn(db, "detention_requests", "notice_sent_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "detention_requests", "notice_start_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "customers", "detention_notice_lead_min", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "customers", "detention_free_minutes", "INTEGER");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS detention_notices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      stop_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      start_at TEXT NOT NULL DEFAULT '',
+      due_at TEXT NOT NULL DEFAULT '',
+      lead_min INTEGER NOT NULL DEFAULT 0,
+      free_min INTEGER,
+      free_source TEXT NOT NULL DEFAULT '',
+      to_email TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      sent_at TEXT NOT NULL DEFAULT '',
+      sent_mail_id INTEGER,
+      message_id TEXT NOT NULL DEFAULT '',
+      acted_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_detention_notices_stop ON detention_notices(stop_id, id);
+  `);
 }
 
 function migrateFacilityAndCompanyDocs(db: Database): void {

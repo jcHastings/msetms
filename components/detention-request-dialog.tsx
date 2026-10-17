@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   addDetentionLineAction,
   loadDetentionDraftAction,
   sendDetentionRequestAction,
+  setDetentionEndPickAction,
   setDetentionStatusAction,
 } from "@/lib/detention-actions";
+import { formatDateTime } from "@/lib/format";
 import {
   computeDetentionAmount,
   DETENTION_RATE_MISSING,
@@ -19,6 +22,63 @@ import {
  * Dispatcher review for one stop. Matches the existing TMS fields and buttons.
  * Mail leaves only when Send is clicked.
  */
+
+function DetentionEndPanel({
+  draft,
+  pending,
+  onPick,
+}: {
+  draft: DetentionDraftView;
+  pending: boolean;
+  onPick: (source: string) => void;
+}) {
+  const end = draft.end;
+  const pickName = useId();
+  if (!end.endAt) return null;
+  return (
+    <section className="detention-end" data-detention-end="" data-hos-flag={end.hosFlag ? "" : undefined} aria-label="Detention end">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Detention ends</p>
+      <p className="text-sm">
+        <span className="detention-end-time">{formatDateTime(end.endAt)} ET</span>
+        <span className="detention-end-source" data-detention-end-source={end.source}>
+          {end.deskPicked ? `${end.label}, desk pick` : end.label}
+        </span>
+      </p>
+      {end.hosFlag ? (
+        <>
+          <p className="text-sm font-medium text-amber-900" role="status" data-detention-hos-flag="">
+            {end.flagText}
+          </p>
+          <fieldset className="grid gap-1" disabled={pending}>
+            <legend className="sr-only">Pick the end time</legend>
+            {end.candidates.map((item) => (
+              <label key={item.source} className="detention-end-choice">
+                <input
+                  type="radio"
+                  name={pickName}
+                  value={item.source}
+                  checked={end.deskPicked && end.source === item.source}
+                  onChange={() => onPick(item.source)}
+                />
+                <span className="w-36 text-slate-900">{formatDateTime(item.at)} ET</span>
+                <span className="text-slate-600">{item.label}</span>
+              </label>
+            ))}
+          </fieldset>
+          {end.needsDeskPick ? (
+            <p className="text-xs text-amber-900">Pick one before sending. The earliest time is shown until you do.</p>
+          ) : null}
+        </>
+      ) : null}
+      {draft.notice ? (
+        <p className="text-xs text-slate-600" data-detention-notice-log="">
+          Broker told {formatDateTime(draft.notice.sentAt)} ET that detention started {formatDateTime(draft.notice.startAt)} ET
+          {draft.notice.leadMinutes ? ` (${draft.notice.leadMinutes} min notice)` : ""}.
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
 export function DetentionRequestDialog({
   loadId,
@@ -115,6 +175,22 @@ export function DetentionRequestDialog({
     if (!amountEdited && computed != null) setAmount(computed.toFixed(2));
   }
 
+  async function pickEnd(source: string) {
+    setPending(true);
+    setError("");
+    const formData = new FormData();
+    formData.set("load_id", String(loadId));
+    formData.set("stop_id", String(stopId));
+    formData.set("source", source);
+    const result = await setDetentionEndPickAction(formData);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await reload();
+  }
+
   async function send() {
     if (!draft) return;
     setPending(true);
@@ -180,7 +256,7 @@ export function DetentionRequestDialog({
   const request = draft?.request ?? null;
   const composing = !request || request.status === "denied";
 
-  return (
+  const dialog = (
     <div className="detention-dialog-backdrop" role="presentation" onClick={onClose}>
       <div
         ref={panelRef}
@@ -214,6 +290,7 @@ export function DetentionRequestDialog({
         {draft ? (
           <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(14rem,0.8fr)]">
             <div className="space-y-3">
+              <DetentionEndPanel draft={draft} pending={pending} onPick={(source) => void pickEnd(source)} />
               {composing ? (
                 <>
                   <div className="field">
@@ -260,7 +337,7 @@ export function DetentionRequestDialog({
                     <p className="text-sm text-slate-600">No POD or BOL is on this load.</p>
                   )}
                   <div className="flex justify-end">
-                    <button type="button" className="btn btn-primary" data-detention-send="" disabled={pending} onClick={() => void send()}>
+                    <button type="button" className="btn btn-primary" data-detention-send="" disabled={pending || draft.end.needsDeskPick} onClick={() => void send()}>
                       {pending ? "Sending" : "Send"}
                     </button>
                   </div>
@@ -409,4 +486,6 @@ export function DetentionRequestDialog({
       </div>
     </div>
   );
+  // Portal to <body>: the stops card is a glass panel, and a fixed overlay inside it is clipped to the card.
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }

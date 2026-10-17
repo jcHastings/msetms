@@ -1,6 +1,8 @@
 import { collectAssignmentAlerts } from "./compliance";
 import { getDb } from "./db";
 import { dispatchAckRules, shouldFlagMissingDispatchAck, type DispatchAckRules } from "./dispatch-ack";
+import { noticeClock } from "./detention-notice";
+import { detentionNoticeAlertsForLoad } from "./detention-notice-store";
 import { detentionStillInsideAtMark, detentionTwoHourMark, detentionVisitPhrase } from "./detention-clock";
 import { missingPodAlert } from "./pod-delivery";
 import { coordsForStop, stillInsideGeofenceAt } from "./geofence";
@@ -49,6 +51,7 @@ export const EXCEPTION_KINDS = [
   "its_import",
   "qbo_payment",
   "left_receiver",
+  "detention_notice",
 ] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
@@ -145,6 +148,7 @@ const KIND_RANK: Record<ExceptionKind, number> = {
   its_import: 11,
   qbo_payment: 12,
   left_receiver: 13,
+  detention_notice: 14,
 };
 
 function hoursUntil(iso: string, now: Date): number | null {
@@ -299,7 +303,7 @@ export function isMaterialReeferReading(load: LoadView, reading: ReeferReading |
 export function isOutOfToleranceException(item: Pick<InboxException, "kind" | "severity">): boolean {
   if (item.severity === "CRITICAL") return true;
   if (item.kind === "detention" || item.kind === "reefer" || item.kind === "missing_contact") return true;
-  if (item.kind === "left_receiver") return true;
+  if (item.kind === "left_receiver" || item.kind === "detention_notice") return true;
   if (item.kind === "late" && item.severity === "HIGH") return true;
   return false;
 }
@@ -365,6 +369,7 @@ export function attentionLabel(item: Pick<InboxException, "kind" | "severity" | 
   if (item.kind === "dispatch_ack") return "No ack";
   if (item.kind === "detention") return "Detention";
   if (item.kind === "left_receiver") return "Left receiver";
+  if (item.kind === "detention_notice") return "Detention notice";
   if (item.kind === "late" && (item.severity === "CRITICAL" || item.severity === "HIGH")) return "Running late";
   if (item.severity === "CRITICAL") return "Critical";
   if (item.severity === "HIGH") return "Important";
@@ -481,6 +486,7 @@ type InboxStop = Pick<
   | "arrived_at"
   | "departed_at"
   | "schedule_type"
+  | "emptied_at"
 >;
 
 type InboxContext = {
@@ -510,7 +516,7 @@ function buildInboxContext(loads: LoadView[]): InboxContext {
     const rows = getDb()
       .prepare(
         `SELECT id, load_id, kind, location_id, name, street, city, state, zip,
-                window_start, window_end, arrived_at, departed_at, schedule_type
+                window_start, window_end, arrived_at, departed_at, schedule_type, emptied_at
          FROM load_stops
          WHERE load_id IN (${chunk.map(() => "?").join(", ")})
          ORDER BY sequence, id`,
@@ -687,6 +693,7 @@ function computeExceptionInbox(now: Date): ExceptionInbox {
     items.push(...unassignedExceptions(load, now));
     items.push(...dispatchAckExceptions(load, ackRules));
     items.push(...detentionExceptions(load, now, ctx));
+    items.push(...detentionNoticeExceptions(load, now, ctx));
     items.push(...leftReceiverExceptions(load, ctx.stops.get(load.id) ?? []));
     items.push(...missingContactExceptions(load, rateCons.has(load.id)));
     items.push(...samsaraFlagExceptions(load, samsaraByLoad.get(load.id) ?? []));
@@ -768,6 +775,8 @@ export function labelForExceptionKind(kind: ExceptionKind): string {
       return "QBO payment";
     case "left_receiver":
       return "Left receiver";
+    case "detention_notice":
+      return "Detention notice";
   }
 }
 
@@ -904,6 +913,27 @@ function detentionExceptions(load: LoadView, now: Date, ctx: InboxContext): Inbo
     );
   }
   return items;
+}
+
+function detentionNoticeExceptions(load: LoadView, now: Date, ctx: InboxContext): InboxException[] {
+  if (isClosedStatus(load.status)) return [];
+  const atStop = (ctx.stops.get(load.id) ?? []).filter(
+    (stop) => String(stop.arrived_at ?? "").trim() && !String(stop.departed_at ?? "").trim(),
+  );
+  if (!atStop.length) return [];
+  return detentionNoticeAlertsForLoad(load, atStop, now).map((alert) => {
+    const starts = noticeClock(alert.startAt, alert.timeZone);
+    const due = alert.leadMinutes > 0 ? `${alert.leadMinutes} min notice` : "notice at start";
+    return withLoad(
+      load,
+      "detention_notice",
+      alert.overdue ? "CRITICAL" : "HIGH",
+      `Detention starts ${starts} at ${alert.stopName}`,
+      `${load.customer_name || "Broker"} wants ${due}. Approve to email the broker, or Dismiss.`,
+      false,
+      String(alert.stopId),
+    );
+  });
 }
 
 function leftReceiverExceptions(load: LoadView, stops: InboxStop[]): InboxException[] {

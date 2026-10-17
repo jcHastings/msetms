@@ -25,6 +25,10 @@ export type LoadStop = {
   schedule_type: string;
   /** its | manual | blank. manual means a dispatcher edited this stop's window. */
   schedule_source?: string;
+  /** Driver tapped Empty / Unloaded in the driver app. */
+  emptied_at?: string;
+  /** Desk's detention end choice after the HOS flag. */
+  detention_end_pick?: string;
 };
 
 export type StopInput = {

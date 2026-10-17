@@ -12,7 +12,7 @@ export const DETENTION_LINE_LOCKED = "This detention line is on a sent invoice o
 export const DETENTION_STATUSES = ["requested", "approved", "denied", "paid"] as const;
 export type DetentionStatus = (typeof DETENTION_STATUSES)[number];
 
-export type DetentionFreeSource = "rate_con" | "desk_clock";
+export type DetentionFreeSource = "rate_con" | "contract" | "desk_clock";
 
 export type DetentionTriggerInput = {
   loadStatus: string;
@@ -23,8 +23,12 @@ export type DetentionTriggerInput = {
   windowStart?: string | null;
   windowEnd?: string | null;
   freeMinutes?: number | null;
+  /** Customer contract free time, used when the rate con states none. */
+  contractFreeMinutes?: number | null;
   roundMinutes?: number | null;
   pickupsEnabled: boolean;
+  /** Detention end from resolveDetentionEnd. Falls back to departedAt. */
+  endAt?: string | null;
 };
 
 export type DetentionTrigger = {
@@ -34,6 +38,7 @@ export type DetentionTrigger = {
   freeSource: DetentionFreeSource;
   billableMinutes: number;
   clockStart: string;
+  endAt: string;
 };
 
 export type DetentionEmailInput = {
@@ -49,6 +54,11 @@ export type DetentionEmailInput = {
   departedAt: string;
   arrivedGeofence: boolean;
   departedGeofence: boolean;
+  /** Detention end and its source label, when it is not the depart time. */
+  endAt?: string;
+  endLabel?: string;
+  /** Advance notice the broker was sent before detention started. */
+  noticeSentAt?: string;
   dwellMinutes: number;
   freeMinutes: number;
   freeSource: DetentionFreeSource;
@@ -83,11 +93,25 @@ export function applyDetentionRounding(minutes: number, roundMinutes: number | n
   return Math.ceil(minutes / step) * step;
 }
 
+export function resolveDetentionFree(
+  rateConMinutes: number | null | undefined,
+  contractMinutes: number | null | undefined,
+): { freeMinutes: number; freeSource: DetentionFreeSource } {
+  if (rateConMinutes != null && Number.isFinite(Number(rateConMinutes)) && Number(rateConMinutes) >= 0) {
+    return { freeMinutes: Math.round(Number(rateConMinutes)), freeSource: "rate_con" };
+  }
+  if (contractMinutes != null && Number.isFinite(Number(contractMinutes)) && Number(contractMinutes) >= 0) {
+    return { freeMinutes: Math.round(Number(contractMinutes)), freeSource: "contract" };
+  }
+  return { freeMinutes: detentionDeskFreeMinutes(), freeSource: "desk_clock" };
+}
+
 export function detentionRequestTrigger(input: DetentionTriggerInput): DetentionTrigger {
   const arrived = asDetentionDate(input.arrivedAt);
-  const departed = asDetentionDate(input.departedAt);
-  const freeSource: DetentionFreeSource = input.freeMinutes != null && input.freeMinutes >= 0 ? "rate_con" : "desk_clock";
-  const freeMinutes = freeSource === "rate_con" ? Math.round(Number(input.freeMinutes)) : detentionDeskFreeMinutes();
+  const departedStop = asDetentionDate(input.departedAt);
+  const ended = asDetentionDate(input.endAt);
+  const departed = departedStop && ended && arrived && ended.getTime() >= arrived.getTime() ? ended : departedStop;
+  const { freeMinutes, freeSource } = resolveDetentionFree(input.freeMinutes, input.contractFreeMinutes);
   const clock = detentionClockStart({
     scheduleType: input.scheduleType,
     arrivedAt: input.arrivedAt,
@@ -104,7 +128,7 @@ export function detentionRequestTrigger(input: DetentionTriggerInput): Detention
   const pickupAllowed = kind === "pickup" && input.pickupsEnabled;
   const delivery = kind === "delivery";
   const cancelled = String(input.loadStatus ?? "").trim().toLowerCase() === "cancelled";
-  const timesDiffer = Boolean(arrived && departed && arrived.getTime() !== departed.getTime());
+  const timesDiffer = Boolean(arrived && departedStop && arrived.getTime() !== departedStop.getTime());
   const show = !cancelled && (delivery || pickupAllowed) && timesDiffer && dwellMinutes > 0 && billableMinutes > 0;
   return {
     show,
@@ -113,6 +137,7 @@ export function detentionRequestTrigger(input: DetentionTriggerInput): Detention
     freeSource,
     billableMinutes: show ? billableMinutes : Math.max(0, billableMinutes),
     clockStart: clock ? clock.toISOString() : "",
+    endAt: departed ? departed.toISOString() : "",
   };
 }
 
@@ -169,7 +194,14 @@ export function composeDetentionApprovalEmail(input: DetentionEmailInput): { sub
   const freeLine =
     input.freeSource === "rate_con"
       ? `Free time: ${formatDetentionMinutes(input.freeMinutes)} (rate confirmation)`
-      : `Free time: ${formatDetentionMinutes(input.freeMinutes)} (desk clock; not stated on the rate confirmation)`;
+      : input.freeSource === "contract"
+        ? `Free time: ${formatDetentionMinutes(input.freeMinutes)} (carrier agreement)`
+        : `Free time: ${formatDetentionMinutes(input.freeMinutes)} (desk clock; not stated on the rate confirmation)`;
+  const endShown = displayTime(input.endAt);
+  const endLine =
+    endShown && input.endLabel && input.endAt !== input.departedAt ? `Detention ended: ${endShown} (${input.endLabel})` : "";
+  const noticeShown = displayTime(input.noticeSentAt);
+  const noticeLine = noticeShown ? `Detention notice sent: ${noticeShown}` : "";
   const text = [
     "Detention request for written approval.",
     "",
@@ -179,6 +211,8 @@ export function composeDetentionApprovalEmail(input: DetentionEmailInput): { sub
     `Appointment: ${appointmentLabel(input)}`,
     timeLine("Arrived", input.arrivedAt, input.arrivedGeofence),
     timeLine("Departed", input.departedAt, input.departedGeofence),
+    ...(endLine ? [endLine] : []),
+    ...(noticeLine ? [noticeLine] : []),
     `Dwell: ${formatDetentionMinutes(input.dwellMinutes)}`,
     freeLine,
     `Billable time: ${formatDetentionMinutes(input.billableMinutes)}`,
@@ -250,4 +284,15 @@ export type DetentionDraftView = {
   invoiceWarning: string;
   qboHint: string;
   computedAmount: number | null;
+  end: {
+    endAt: string;
+    source: string;
+    label: string;
+    hosFlag: boolean;
+    flagText: string;
+    needsDeskPick: boolean;
+    deskPicked: boolean;
+    candidates: Array<{ source: string; label: string; at: string }>;
+  };
+  notice: { sentAt: string; startAt: string; leadMinutes: number } | null;
 };

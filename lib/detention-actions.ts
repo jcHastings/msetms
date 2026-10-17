@@ -5,10 +5,12 @@ import { currentAuditActor, withRequestAuditActor } from "./audit";
 import {
   addDetentionLine,
   buildDetentionDraft,
+  setDetentionEndPick,
   saveDetentionSettings,
   sendDetentionRequest,
   setDetentionStatus,
 } from "./detention-store";
+import { dismissDetentionNotice, sendDetentionNotice } from "./detention-notice-store";
 import type { DetentionDraftView } from "./detention-request";
 import { sendMail } from "./integrations/mail";
 import { requireLoadEditor } from "./dispatcher-session";
@@ -141,3 +143,52 @@ export async function saveDetentionSettingsAction(
     return fail(error);
   }
 }
+
+export type DetentionNoticeActionResult = { ok: true; message: string } | { ok: false; error: string } | null;
+
+/** Desk taps Approve (send the notice) or Dismiss. Never runs on its own. */
+export async function detentionNoticeAction(
+  _prev: DetentionNoticeActionResult,
+  formData: FormData,
+): Promise<DetentionNoticeActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const stopId = parseOptionalInt(formData.get("stop_id"));
+      const decision = String(formData.get("decision") ?? "");
+      if (!loadId || !stopId) throw new Error("Load or stop is missing.");
+      const actor = currentAuditActor().name;
+      if (decision === "approve") {
+        const row = await sendDetentionNotice({ loadId, stopId, actor, send: sendMail });
+        refresh(loadId);
+        return { ok: true, message: `Notice sent to ${row.toEmail}.` };
+      }
+      if (decision === "dismiss") {
+        dismissDetentionNotice({ loadId, stopId, actor });
+        refresh(loadId);
+        return { ok: true, message: "Dismissed. Nothing was sent." };
+      }
+      throw new Error("Pick Approve or Dismiss.");
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Could not update the notice." };
+    }
+  });
+}
+
+export async function setDetentionEndPickAction(formData: FormData): Promise<DetentionActionResult> {
+  return withRequestAuditActor(async () => {
+    try {
+      await requireLoadEditor();
+      const loadId = parseOptionalInt(formData.get("load_id"));
+      const stopId = parseOptionalInt(formData.get("stop_id"));
+      if (!loadId || !stopId) throw new Error("Load or stop is missing.");
+      setDetentionEndPick({ loadId, stopId, source: String(formData.get("source") ?? "") });
+      refresh(loadId);
+      return { ok: true };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+

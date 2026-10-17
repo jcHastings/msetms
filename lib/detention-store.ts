@@ -17,6 +17,9 @@ import {
   type DetentionRequestView,
   type DetentionStatus,
 } from "./detention-request";
+import { DETENTION_HOS_FLAG, detentionEndSourceLabel, isDetentionEndSource } from "./detention-end";
+import { latestNoticeForStop } from "./detention-notice-store";
+import { detentionEndForStop, readCustomerDetentionTerms } from "./detention-signals";
 import { parseDetentionTerms } from "./detention-terms";
 import { getAttachment, getAttachmentPath, listAttachments } from "./files";
 import { type OutgoingMail } from "./mail-shared";
@@ -163,6 +166,8 @@ export function detentionDraftHref(loadId: number, stopId: number): string {
     windowStart: stop.window_start,
     windowEnd: stop.window_end,
     freeMinutes: terms.freeMinutes,
+    contractFreeMinutes: readCustomerDetentionTerms(load.customer_id).contractFreeMinutes,
+    endAt: detentionEndForStop(stop).endAt,
     roundMinutes: terms.roundMinutes,
     pickupsEnabled: settings.pickupsEnabled,
   });
@@ -192,6 +197,8 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
     windowStart: loaded.stop.window_start,
     windowEnd: loaded.stop.window_end,
     freeMinutes: terms.freeMinutes,
+    contractFreeMinutes: readCustomerDetentionTerms(loaded.load.customer_id).contractFreeMinutes,
+    endAt: detentionEndForStop(loaded.stop).endAt,
     roundMinutes: terms.roundMinutes,
     pickupsEnabled: settings.pickupsEnabled,
   });
@@ -202,6 +209,9 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
   const arrivedGeofence = timesMatchGeofence(loaded.stop.arrived_at, stamps);
   const departedGeofence = timesMatchGeofence(loaded.stop.departed_at, stamps);
   const po = firstText(loaded.load.po_number, loaded.load.customer_reference, loaded.stop.reference);
+  const end = detentionEndForStop(loaded.stop);
+  const notice = latestNoticeForStop(stopId);
+  const noticeSent = notice && notice.status === "sent" ? notice : null;
   const email = composeDetentionApprovalEmail({
     loadNumber: loaded.load.load_number,
     po,
@@ -215,6 +225,9 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
     departedAt: loaded.stop.departed_at,
     arrivedGeofence,
     departedGeofence,
+    endAt: end.endAt,
+    endLabel: end.label,
+    noticeSentAt: noticeSent?.sentAt ?? "",
     dwellMinutes: trigger.dwellMinutes,
     freeMinutes: trigger.freeMinutes,
     freeSource: trigger.freeSource,
@@ -246,7 +259,45 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
     invoiceWarning: invoiceAlreadySentWarning(loadId),
     qboHint: detentionQboHint(loadId),
     computedAmount: computeDetentionAmount(terms.rate, trigger.billableMinutes, terms.cap),
+    end: {
+      endAt: end.endAt,
+      source: end.source,
+      label: end.label,
+      hosFlag: end.hosFlag,
+      flagText: end.hosFlag ? DETENTION_HOS_FLAG : "",
+      needsDeskPick: end.needsDeskPick,
+      deskPicked: end.deskPicked,
+      candidates: end.candidates.map((item) => ({
+        source: item.source,
+        label: detentionEndSourceLabel(item.source),
+        at: item.at,
+      })),
+    },
+    notice: noticeSent
+      ? { sentAt: noticeSent.sentAt, startAt: noticeSent.startAt, leadMinutes: noticeSent.leadMinutes }
+      : null,
   };
+}
+
+/** Desk picks which time ends detention after the HOS flag. Blank clears the pick. */
+export function setDetentionEndPick(input: { loadId: number; stopId: number; source: string }): void {
+  const loaded = loadContext(input.loadId, input.stopId);
+  const source = input.source.trim();
+  if (source && !isDetentionEndSource(source)) throw new Error("Pick an end time from the list.");
+  if (source) {
+    const end = detentionEndForStop(loaded.stop);
+    if (!end.candidates.some((item) => item.source === source)) throw new Error("That time is not on this stop.");
+  }
+  const old = String(loaded.stop.detention_end_pick ?? "");
+  if (old === source) return;
+  getDb().prepare("UPDATE load_stops SET detention_end_pick = ? WHERE id = ?").run(source, input.stopId);
+  recordLoadAudit({
+    loadId: input.loadId,
+    action: "detention_end_pick",
+    field: "detention_end_pick",
+    oldValue: detentionEndSourceLabel(old) || old,
+    newValue: detentionEndSourceLabel(source) || "cleared",
+  });
 }
 
 export async function sendDetentionRequest(input: {
@@ -274,7 +325,11 @@ export async function sendDetentionRequest(input: {
   if (approvalEmailHasDollarAmount(body)) {
     throw new Error("The first detention email asks for approval only. Remove the dollar amount.");
   }
+  if (draft.end.needsDeskPick) {
+    throw new Error("Pick the detention end time first. The driver may have stayed for an HOS reset.");
+  }
   const settings = getDetentionSettings();
+  const noticeRow = draft.notice ? latestNoticeForStop(input.stopId) : null;
   const files = mailFiles(input.loadId, input.attachmentIds);
   const sent = await input.send({
     to,
@@ -304,12 +359,14 @@ export async function sendDetentionRequest(input: {
         load_id, stop_id, status, arrived_at, departed_at, clock_start, time_source,
         rate_source, rate, free_min, billable_min, round_min, cap, amount, clause,
         to_email, cc, recipients, subject, body, sent_at, sent_by, message_id, sent_mail_id,
-        note, created_by, status_by, created_at, updated_at
+        note, created_by, status_by, created_at, updated_at,
+        end_at, end_source, end_flag, notice_id, notice_sent_at, notice_start_at
       ) VALUES (
         ?, ?, 'requested', ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, NULL, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        '', ?, '', ?, ?
+        '', ?, '', ?, ?,
+        ?, ?, ?, ?, ?, ?
       )`,
     )
     .run(
@@ -338,6 +395,12 @@ export async function sendDetentionRequest(input: {
       input.actor,
       now,
       now,
+      draft.end.endAt,
+      draft.end.deskPicked ? `desk:${draft.end.source}` : draft.end.source,
+      draft.end.flagText,
+      noticeRow?.id ?? null,
+      noticeRow?.sentAt ?? "",
+      noticeRow?.startAt ?? "",
     );
   recordLoadAudit({
     loadId: input.loadId,
@@ -477,6 +540,8 @@ function triggerClock(loadId: number, stopId: number): string {
     windowStart: loaded.stop.window_start,
     windowEnd: loaded.stop.window_end,
     freeMinutes: terms.freeMinutes,
+    contractFreeMinutes: readCustomerDetentionTerms(loaded.load.customer_id).contractFreeMinutes,
+    endAt: detentionEndForStop(loaded.stop).endAt,
     roundMinutes: terms.roundMinutes,
     pickupsEnabled: true,
   });

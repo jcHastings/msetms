@@ -23,6 +23,14 @@ import { formatRouteMiles, milesForStopGap, type LoadRouteGuide } from "@/lib/ro
 import { stopIsDelivered, stopTypeLabel, stopTypeNumber, type LoadStop } from "@/lib/stops-shared";
 import type { Location } from "@/lib/types";
 
+export type StopDetentionEnd = {
+  endAt: string;
+  source: string;
+  label: string;
+  hosFlag: boolean;
+  flagText: string;
+};
+
 export function LoadStopsPanel({
   loadId,
   stops,
@@ -34,6 +42,8 @@ export function LoadStopsPanel({
   detentionFreeMinutes = null,
   detentionRoundMinutes = null,
   detentionPickups = false,
+  detentionContractFreeMinutes = null,
+  detentionEnds = {},
 }: {
   loadId: number;
   stops: LoadStop[];
@@ -45,6 +55,9 @@ export function LoadStopsPanel({
   detentionFreeMinutes?: number | null;
   detentionRoundMinutes?: number | null;
   detentionPickups?: boolean;
+  detentionContractFreeMinutes?: number | null;
+  /** Server-resolved detention end per stop id: driver tap, POD, reefer off, or GPS depart. */
+  detentionEnds?: Record<number, StopDetentionEnd>;
 }) {
   const router = useRouter();
   const [draftStopId, setDraftStopId] = useState<number | null>(null);
@@ -73,10 +86,12 @@ export function LoadStopsPanel({
         windowStart: stop.window_start,
         windowEnd: stop.window_end,
         freeMinutes: detentionFreeMinutes,
+        contractFreeMinutes: detentionContractFreeMinutes,
         roundMinutes: detentionRoundMinutes,
         pickupsEnabled: detentionPickups,
+        endAt: detentionEnds[stop.id]?.endAt ?? null,
       }).show,
-    [loadStatus, detentionFreeMinutes, detentionRoundMinutes, detentionPickups],
+    [loadStatus, detentionFreeMinutes, detentionContractFreeMinutes, detentionRoundMinutes, detentionPickups, detentionEnds],
   );
 
   useEffect(() => {
@@ -192,6 +207,7 @@ export function LoadStopsPanel({
                   }
                   onEdit={() => setDialog({ mode: "edit", kind: stop.kind, stop })}
                   showDetentionDraft={stopReadyForDraft(stop)}
+                  detentionEnd={detentionEnds[stop.id] ?? null}
                   onDraftDetention={() => {
                     setDetentionNotice("");
                     setDraftStopId(stop.id);
@@ -612,6 +628,7 @@ function StopGridBlock({
   dragging,
   onEdit,
   showDetentionDraft = false,
+  detentionEnd = null,
   onDraftDetention,
   onDragStart,
   onDragOver,
@@ -624,6 +641,7 @@ function StopGridBlock({
   dragging: boolean;
   onEdit: () => void;
   showDetentionDraft?: boolean;
+  detentionEnd?: StopDetentionEnd | null;
   onDraftDetention?: () => void;
   onDragStart: () => void;
   onDragOver: (overId: number) => void;
@@ -824,6 +842,21 @@ function StopGridBlock({
             onChange={(event) => setDraft((current) => ({ ...current, departedAt: event.target.value }))}
             onBlur={(event) => commitTime("departedAt", event.target.value)}
           />
+          {detentionEnd?.endAt ? (
+            <p
+              className="mt-1 text-[11px] leading-tight text-slate-600"
+              data-stop-detention-end={detentionEnd.source}
+              title={detentionEnd.hosFlag ? detentionEnd.flagText : undefined}
+            >
+              Ends <span className="detention-end-time">{formatDateTime(detentionEnd.endAt)}</span>
+              <span className="detention-end-source">{detentionEnd.label}</span>
+              {detentionEnd.hosFlag ? (
+                <span className="mt-0.5 block font-medium text-amber-800" data-stop-hos-flag="">
+                  {detentionEnd.flagText}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           {showDetentionDraft ? (
             <button
               type="button"

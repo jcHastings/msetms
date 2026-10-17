@@ -35,6 +35,8 @@ import { RateConApply } from "@/components/rate-con-apply";
 import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
 import { lockedDetentionPayItemIds } from "@/lib/detention-lock";
 import { getDetentionSettings, readLoadDetentionTerms } from "@/lib/detention-store";
+import { DETENTION_HOS_FLAG } from "@/lib/detention-end";
+import { detentionEndForStop, readCustomerDetentionTerms } from "@/lib/detention-signals";
 import { laneAverageSnapshot } from "@/lib/lane-average";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
@@ -132,6 +134,25 @@ export async function LoadEditor({
   const stops = ensureDefaultStops(load.id);
   const detentionTerms = readLoadDetentionTerms(load.id);
   const detentionSettings = getDetentionSettings();
+  const detentionCustomer = readCustomerDetentionTerms(load.customer_id);
+  const detentionEnds = Object.fromEntries(
+    stops
+      .filter((stop) => stop.kind === "delivery" || detentionSettings.pickupsEnabled)
+      .filter((stop) => stop.arrived_at.trim() && (stop.departed_at.trim() || String(stop.emptied_at ?? "").trim()))
+      .map((stop) => {
+        const end = detentionEndForStop(stop);
+        return [
+          stop.id,
+          {
+            endAt: end.endAt,
+            source: end.deskPicked ? `desk:${end.source}` : end.source,
+            label: end.deskPicked ? `${end.label}, desk pick` : end.label,
+            hosFlag: end.hosFlag,
+            flagText: end.hosFlag ? DETENTION_HOS_FLAG : "",
+          },
+        ];
+      }),
+  );
   const locations = locationsForIds(
     [load.shipper_location_id, load.consignee_location_id, ...stops.map((stop) => stop.location_id)].filter(
       (id): id is number => id != null,
@@ -400,6 +421,8 @@ export async function LoadEditor({
             detentionFreeMinutes={detentionTerms.freeMinutes}
             detentionRoundMinutes={detentionTerms.roundMinutes}
             detentionPickups={detentionSettings.pickupsEnabled}
+            detentionContractFreeMinutes={detentionCustomer.contractFreeMinutes}
+            detentionEnds={detentionEnds}
           />
           <LoadRoutingGuide
             loadId={load.id}

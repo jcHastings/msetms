@@ -2205,6 +2205,68 @@ html:has([data-load-embed]) body {
   }
 }
 
+.detention-notice-preview {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border-left: 2px solid var(--accent);
+  background: rgba(11, 31, 58, 0.04);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.detention-notice-to {
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+
+.detention-notice-body {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.detention-end {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.detention-end[data-hos-flag] {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.detention-end-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.detention-end-source {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.detention-end-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .pay-item-dialog {
   width: min(520px, 100%);
   max-height: calc(100vh - 2.5rem);

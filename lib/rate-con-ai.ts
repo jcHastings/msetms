@@ -19,6 +19,7 @@ import {
   type RateConFieldFlag,
 } from "./rate-con-shared";
 import { enrichParsedRateConFromText } from "./rate-con-paperwork";
+import { rateConWindowToOfficeInput } from "./rate-con-time";
 import { isReeferMode } from "./reefer-shared";
 import { DEFAULT_LOAD_EQUIPMENT } from "./types";
 import type { Customer } from "./types";
@@ -95,6 +96,7 @@ Rate is the billed / agreed / total freight pay to the carrier — Carrier Freig
 If no freight dollar amount is printed, leave rate null and confidence low. Do not invent one.
 Load number is the customer's rate-con / load # / PO# / Order # (store as customer reference). Never invent an MSE trip number.
 Stops may be labeled Pickup At / Deliver To, PICKUPS / DROPS, PU 1 / SO 2, Shipper / Consignee. Read every one.
+window_start and window_end are the stop's date and time exactly as printed, plus the time zone printed beside the time (for example "2026-10-14T14:00 CDT"). Do not convert the time to another zone. If no zone is printed, give the time with no zone.
 schedule_type is "appointment" or "fcfs". "AWG IS BY SET APPT" / set appointment / appointment required means appointment.
 reference (also called po / PU#) is the unique purchase order or PU# for THAT stop only. Example: PU# N25504 or PO# 000250476. Never put the customer/broker load number (Load No 106361) in reference or confirmation.
 confirmation is the appointment confirmation for that stop only (CONF#). Do not copy CONF# into reference. Do not copy the PO into confirmation.
@@ -289,7 +291,7 @@ export function applyAiRateCon(
   const rateConfidence = asConfidence(draft.rate_confidence);
   const rate = rateConfidence === "low" ? null : parseOptionalNumber(draft.rate);
 
-  const aiStops = (Array.isArray(draft.stops) ? draft.stops : []).flatMap(stopFromAi);
+  const aiStops = (Array.isArray(draft.stops) ? draft.stops : []).flatMap((row) => stopFromAi(row, raw));
   const pickups = aiStops.filter((item) => item.kind === "pickup");
   const deliveries = aiStops.filter((item) => item.kind === "delivery");
   const usedHintStops = !pickups.length && !deliveries.length;
@@ -390,7 +392,7 @@ export function decorateHintRateCon(hint: ParsedRateCon): ParsedRateCon {
   };
 }
 
-function stopFromAi(row: RateConAiStop): ParsedExtraStop[] {
+function stopFromAi(row: RateConAiStop, rawText = ""): ParsedExtraStop[] {
   const kind = /deliver|drop|consignee/i.test(String(row.kind ?? "")) ? "delivery" : "pickup";
   const stop = normalizeParsedStop({
     name: row.name,
@@ -404,8 +406,8 @@ function stopFromAi(row: RateConAiStop): ParsedExtraStop[] {
       : /appoint/i.test(String(row.schedule_type ?? ""))
         ? "appointment"
         : "",
-    window_start: normalizeWindow(row.window_start),
-    window_end: normalizeWindow(row.window_end),
+    window_start: normalizeWindow(row.window_start, rawText),
+    window_end: normalizeWindow(row.window_end, rawText),
     reference: row.reference ?? row.po,
     confirmation: row.confirmation,
     quantity: row.quantity == null ? "" : String(row.quantity),
@@ -439,17 +441,20 @@ function mapEquipment(value: string | undefined): string {
   return "";
 }
 
-function normalizeWindow(value: string | undefined): string {
+export function normalizeWindow(value: string | undefined, rawText = ""): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
+  const zoned = rateConWindowToOfficeInput(raw, rawText);
+  if (zoned != null) return zoned;
   const us = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}:\d{2})(?:\s*(am|pm))?)?/i);
   if (us) {
     const year = Number(us[3]) < 100 ? 2000 + Number(us[3]) : Number(us[3]);
     const clock = normalizeClock(us[4] ?? "08:00", us[5]);
     const date = new Date(year, Number(us[1]) - 1, Number(us[2]), ...clock);
     if (Number.isNaN(date.getTime())) return "";
-    return toInputDateTime(date.toISOString());
+    const wall = toInputDateTime(date.toISOString());
+    const zone = raw.slice(us[0].length).trim().match(/^\(?([A-Za-z]{2,8})\)?/)?.[1] ?? "";
+    return rateConWindowToOfficeInput(zone ? `${wall} ${zone}` : wall, rawText) ?? wall;
   }
   try {
     if (raw.includes("T") && raw.length <= 16) return toInputDateTime(fromInputDateTime(raw));
