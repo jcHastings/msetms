@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { OpenAttachmentLink } from "@/components/open-attachment-link";
 import { refreshIftaAction } from "@/lib/actions";
 import { formatDateTime } from "@/lib/format";
 import type { ActionResult, IftaReport } from "@/lib/types";
@@ -9,14 +10,10 @@ export function IftaPanel({
   loadId,
   report,
   canRefresh,
-  configured,
-  reason,
 }: {
   loadId: number;
   report: IftaReport | null;
   canRefresh: boolean;
-  configured: boolean;
-  reason: string;
 }) {
   const [state, formAction, pending] = useActionState(
     refreshIftaAction as (prev: ActionResult | null, formData: FormData) => Promise<ActionResult>,
@@ -25,18 +22,7 @@ export function IftaPanel({
 
   return (
     <section className="card mb-4 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">IFTA mileage</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Jurisdiction miles for this load
-            {configured ? " from Samsara IFTA reports." : " — labeled demo from origin / destination."}
-          </p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-          {report?.source === "samsara" ? "Samsara" : "Demo"}
-        </span>
-      </div>
+      <h2 className="text-sm font-semibold">IFTA mileage</h2>
 
       {report ? (
         <>
@@ -57,7 +43,6 @@ export function IftaPanel({
           <p className="mt-2 text-xs text-slate-500">
             Window {formatDateTime(report.window_start)} – {formatDateTime(report.window_end)}
           </p>
-          {report.note ? <p className="mt-2 text-sm text-slate-600">{report.note}</p> : null}
           <table className="table-grid mt-4">
             <thead>
               <tr>
@@ -92,19 +77,15 @@ export function IftaPanel({
           </table>
           {report.attachment_id ? (
             <p className="mt-3 text-sm">
-              <a className="font-medium underline" href={`/api/attachments/${report.attachment_id}`}>
+              <OpenAttachmentLink className="font-medium underline" href={`/api/attachments/${report.attachment_id}`} download>
                 Download IFTA report
-              </a>
+              </OpenAttachmentLink>
             </p>
           ) : null}
         </>
       ) : (
-        <p className="mt-4 text-sm text-slate-600">
-          {reason || "No IFTA report on this load yet."}
-        </p>
+        <p className="mt-4 text-sm text-slate-600">No IFTA report on this load yet.</p>
       )}
-
-      {reason && report ? <p className="mt-3 text-sm text-slate-600">{reason}</p> : null}
 
       <form action={formAction} className="mt-4 space-y-3">
         {state?.ok ? (
