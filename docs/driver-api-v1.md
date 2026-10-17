@@ -31,7 +31,7 @@ Rules:
 | Name | Values |
 | --- | --- |
 | `DriverProgress` | `en_route_pickup` \| `loaded` \| `en_route_delivery` \| `delivered` |
-| `StopCheckKind` | `arrive` \| `depart` |
+| `StopCheckKind` | `arrive` \| `depart` \| `empty` |
 | `AttachmentKind` | See [AttachmentKind](#attachmentkind) below. |
 | `ScheduleType` | `APPT` \| `FCFS` (mapped from existing `appointment` / `fcfs` helpers) |
 
@@ -207,9 +207,11 @@ Success: `{ "load": LoadSummary }`. Duplicate `client_request_id` returns the sa
 
 ### `POST /loads/{id}/stops/{stopId}/check`
 
-Body: `{ "kind": "arrive" | "depart", "client_request_id": "uuid" }`
+Body: `{ "kind": "arrive" | "depart" | "empty", "client_request_id": "uuid" }`
 
 Same rules as `driverStopCheckAction`: pickup depart before delivery arrive; check-in before check-out. Violations are `409`.
+
+`empty` is the driver's Empty / Unloaded tap at the delivery stop, after check-in and before check-out. It stamps the stop's `emptied_at` and ends the detention clock. It does not mark the stop or load delivered and does not change progress. A second tap keeps the first time.
 
 ### `POST /loads/{id}/attachments`
 

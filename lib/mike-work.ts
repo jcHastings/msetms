@@ -1,7 +1,7 @@
 import { recordLoadAudit } from "./audit";
+import { detentionDraftHref } from "./detention-store";
 import { isDriverUploadKind, UNCLASSIFIED_UPLOAD_KIND } from "./driver-docs";
 import { listAttachments, updateAttachmentKind } from "./files";
-import { resolveLoadCustomerEmail } from "./load-mail";
 import { formatLoadSummary } from "./load-summary";
 import { placeholderLane } from "./load-page-shared";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeProposal, type MikeProposalKind } from "./mike-shared";
@@ -30,15 +30,17 @@ export function proposeMikeWork(question: string): { reply: string; proposals: M
   const lower = q.toLowerCase();
 
   if (/detention/.test(lower) && load) {
-    const subject = `Detention request — ${load.load_number}`;
-    const body = `Please confirm detention on ${load.load_number} for ${load.customer_name}.\n${load.origin} → ${load.destination}\n`;
+    const href =
+      listStops(load.id)
+        .map((stop) => detentionDraftHref(load.id, stop.id))
+        .find((value) => value) || `/loads/${load.id}?tab=stops&detention=open`;
     proposals.push(
-      makeProposal("detention_email", "Draft detention email", body, {
-        load_id: String(load.id),
-        to: resolveLoadCustomerEmail(load),
-        subject,
-        body,
-      }),
+      makeProposal(
+        "detention_email",
+        "Draft detention request",
+        "Open the detention draft on the stop. Nothing sends until you click Send.",
+        { load_id: String(load.id), href },
+      ),
     );
   }
 
@@ -136,15 +138,11 @@ export function applyMikeProposal(payload: Record<string, string>, kind: MikePro
   id?: number;
 } {
   if (kind === "detention_email") {
-    const to = payload.to?.trim();
-    const subject = payload.subject || "Detention request";
-    const body = payload.body || "";
-    const mailto = to
-      ? `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      : "";
+    const loadId = Number(payload.load_id);
+    const href = payload.href || (loadId ? `/loads/${loadId}?tab=stops&detention=open` : "/");
     return {
-      message: to ? "Draft ready. Confirm opens your mail." : "Add a customer email on the load first.",
-      mailto,
+      message: "Open the draft on the load. Nothing sends until you click Send.",
+      href,
     };
   }
   if (kind === "classify_document") {

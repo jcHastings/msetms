@@ -10,13 +10,14 @@ export function recordSentMail(input: {
   kind: LoadMailKind;
   to: string;
   subject: string;
-}): void {
-  getDb()
+}): number {
+  const result = getDb()
     .prepare(
       `INSERT INTO sent_mail (load_id, kind, to_email, subject, created_at)
        VALUES (?, ?, ?, ?, ?)`,
     )
     .run(input.loadId, input.kind, input.to, input.subject, now());
+  return Number(result.lastInsertRowid);
 }
 
 export function listSentMail(loadId: number): SentMailRow[] {

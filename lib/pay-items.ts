@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { detentionLineLockReason } from "./detention-lock";
 import { isPayItemCategory, type PayItemBillTo, type PayItemSide } from "./load-page-shared";
 import { computeOwnerOperatorPay, isAutoOwnerOperatorPay } from "./settlement";
 
@@ -88,6 +89,8 @@ export function deletePayItem(id: number): void {
     | { load_id: number }
     | undefined;
   if (!row) throw new Error("Pay item not found.");
+  const locked = detentionLineLockReason(id);
+  if (locked) throw new Error(locked);
   getDb().prepare("DELETE FROM load_pay_items WHERE id = ?").run(id);
   syncCustomerRateFromPayItems(row.load_id);
 }

@@ -37,6 +37,8 @@ function asStop(row: Record<string, unknown>): LoadStop {
     delivered: stopDeliveredFlag(row.delivered),
     schedule_type: String(row.schedule_type ?? ""),
     schedule_source: String(row.schedule_source ?? ""),
+    emptied_at: String(row.emptied_at ?? ""),
+    detention_end_pick: String(row.detention_end_pick ?? ""),
   };
 }
 
@@ -269,7 +271,7 @@ export function addStop(loadId: number, input: StopInput): number {
   return Number(result.lastInsertRowid);
 }
 
-export function stampStopTime(stopId: number, field: "arrived_at" | "departed_at", iso: string): void {
+export function stampStopTime(stopId: number, field: "arrived_at" | "departed_at" | "emptied_at", iso: string): void {
   const stop = getDb().prepare("SELECT id FROM load_stops WHERE id = ?").get(stopId) as { id: number } | undefined;
   if (!stop) throw new Error("Stop not found.");
   getDb().prepare(`UPDATE load_stops SET ${field} = ? WHERE id = ?`).run(iso, stopId);

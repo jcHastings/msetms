@@ -56,7 +56,6 @@ export function LoadWorkspace({
   create = false,
   readOnly = false,
   loadNumber = "",
-  customerName = "",
   contactEmail = "",
   driverEmail = "",
   header,
@@ -450,16 +449,24 @@ export function LoadWorkspace({
               return requestPodAction(formData);
             }}
           />
-          {contactEmail.trim() ? (
-            <a
-              className="menu-item"
-              href={`mailto:${encodeURIComponent(contactEmail.trim())}?subject=${encodeURIComponent(`Detention request — ${loadNumber}`)}&body=${encodeURIComponent(`Please confirm detention on ${loadNumber} for ${customerName}.\n\n`)}`}
-            >
-              Request Detention email
-            </a>
-          ) : (
-            <span className="menu-item text-slate-400">Request Detention email (add customer email)</span>
-          )}
+          <button
+            type="button"
+            className="menu-item w-full text-left"
+            data-detention-menu=""
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("detention", "open");
+              window.history.replaceState(
+                window.history.state,
+                "",
+                `${url.pathname}?${url.searchParams.toString()}${url.hash ? `#${url.hash}` : ""}`,
+              );
+              setTab("stops");
+              window.dispatchEvent(new Event("detention-draft-open"));
+            }}
+          >
+            Draft detention request
+          </button>
           {loadId && canSendSms(role) ? (
             <LoadMailMenuItems
               loadId={loadId}

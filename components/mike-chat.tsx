@@ -198,10 +198,6 @@ function ProposalCard({
           return;
         }
         onDone(result.message ?? "Done.");
-        if (proposal.kind === "detention_email" && proposal.payload.to) {
-          const mailto = `mailto:${encodeURIComponent(proposal.payload.to)}?subject=${encodeURIComponent(proposal.payload.subject || "")}&body=${encodeURIComponent(proposal.payload.body || "")}`;
-          window.location.href = mailto;
-        }
         if (proposal.payload.href) {
           window.location.href = proposal.payload.href;
         }

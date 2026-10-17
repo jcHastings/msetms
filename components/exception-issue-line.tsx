@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { DetentionNoticeActions } from "@/components/detention-notice-actions";
+import { buildDetentionNoticeDraft } from "@/lib/detention-notice-store";
+import { detentionDraftHref } from "@/lib/detention-store";
 import { exceptionAction, markLeftReceiverDeliveredAction } from "@/lib/dispatcher-actions";
 import {
   attentionLabel,
@@ -17,6 +21,33 @@ const SEVERITY_CLASS: Record<ExceptionSeverity, string> = {
 };
 
 const VIEW_ONLY = "View-only access";
+
+function DetentionDraftLink({ item }: { item: InboxException }) {
+  if (item.kind !== "detention" || item.demo || !item.loadId) return null;
+  const stopId = Number(item.id.split(":")[2]);
+  if (!Number.isFinite(stopId) || stopId <= 0) return null;
+  const href = detentionDraftHref(item.loadId, stopId);
+  if (!href) return null;
+  return (
+    <Link href={href} className="btn btn-ghost mt-1 inline-flex text-xs" data-detention-draft="">
+      Draft detention request
+    </Link>
+  );
+}
+
+function DetentionNoticeLine({ item, readOnly }: { item: InboxException; readOnly: boolean }) {
+  if (item.kind !== "detention_notice" || item.demo || !item.loadId) return null;
+  const stopId = Number(item.id.split(":")[2]);
+  if (!Number.isFinite(stopId) || stopId <= 0) return null;
+  let draft: ReturnType<typeof buildDetentionNoticeDraft> | null = null;
+  try {
+    draft = buildDetentionNoticeDraft(item.loadId, stopId);
+  } catch {
+    return null;
+  }
+  const preview = draft.body.split("\n").find((line) => line.startsWith("Detention will begin")) ?? draft.subject;
+  return <DetentionNoticeActions loadId={item.loadId} stopId={stopId} to={draft.to} preview={preview} readOnly={readOnly} />;
+}
 
 function MarkDeliveredButton({ item, readOnly }: { item: InboxException; readOnly: boolean }) {
   if (item.kind !== "left_receiver") return null;
@@ -62,6 +93,8 @@ export function ExceptionIssueLine({
           </span>
         </div>
         <MarkDeliveredButton item={item} readOnly={readOnly} />
+        <DetentionDraftLink item={item} />
+        <DetentionNoticeLine item={item} readOnly={readOnly} />
       </li>
     );
   }
@@ -84,6 +117,8 @@ export function ExceptionIssueLine({
       <div className="mt-1 text-sm text-slate-700">{item.title}</div>
       <div className="mt-0.5 text-xs text-slate-600">{item.detail}</div>
       <MarkDeliveredButton item={item} readOnly={readOnly} />
+      <DetentionDraftLink item={item} />
+      <DetentionNoticeLine item={item} readOnly={readOnly} />
       <form action={exceptionAction} className="mt-2 flex flex-wrap items-center gap-2" data-exception-actions="">
         <input type="hidden" name="exception_key" value={item.id} />
         <input

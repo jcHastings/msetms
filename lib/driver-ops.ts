@@ -1,3 +1,4 @@
+import { recordLoadAudit } from "./audit";
 import { isDriverUploadKind } from "./driver-docs";
 import { progressForStopEvent, type DriverStopActionKind } from "./driver-stops";
 import { addAttachment, fileToBuffer, isPdfOrImage } from "./files";
@@ -71,6 +72,9 @@ export function performDriverStopCheck(input: {
   kind: string;
   pod?: DriverPodDeliveryInput | null;
 }): { loadId: number } {
+  if (input.kind === "empty") {
+    return performDriverEmpty(input);
+  }
   if (!isStopCheckKind(input.kind)) {
     throw new DriverOpsError("conflict", "Pick Check In or Check Out.");
   }
@@ -92,6 +96,31 @@ export function performDriverStopCheck(input: {
   applyWorkflowAfterGeofence(input.loadId);
   updateDriverProgress(input.loadId, input.driver.id, progress);
   rememberDeliveredPod(input.loadId, progress, input.pod);
+  return { loadId: input.loadId };
+}
+
+/**
+ * Driver tapped Empty / Unloaded at a delivery stop. Stamps the time that ends detention.
+ * It does not mark the stop or load delivered and does not change driver progress.
+ */
+function performDriverEmpty(input: { driver: DriverWithTruck; loadId: number; stopId: number }): { loadId: number } {
+  requireAssignedLoad(input.loadId, input.driver.id);
+  const stop = getStop(input.stopId);
+  if (!stop || stop.load_id !== input.loadId) {
+    throw new DriverOpsError("not_found", "Stop is missing.");
+  }
+  if (stop.kind !== "delivery") throw new DriverOpsError("conflict", "Empty is for the delivery stop.");
+  if (!stop.arrived_at.trim()) throw new DriverOpsError("conflict", "Check in first.");
+  if (stop.departed_at.trim()) throw new DriverOpsError("conflict", "You already checked out.");
+  if (String(stop.emptied_at ?? "").trim()) return { loadId: input.loadId };
+  const at = new Date().toISOString();
+  stampStopTime(input.stopId, "emptied_at", at);
+  recordLoadAudit({
+    loadId: input.loadId,
+    action: "driver_empty",
+    field: "emptied_at",
+    newValue: `${stop.name || "delivery"} ${at}`,
+  });
   return { loadId: input.loadId };
 }
 

@@ -282,6 +282,13 @@ export async function updateCustomerAction(
       billing_email: String(formData.get("billing_email") ?? "").trim(),
       contacts: parseContacts(formData),
     });
+    if (formData.has("detention_notice_lead_min")) {
+      const { saveCustomerDetentionTerms } = await import("./detention-signals");
+      saveCustomerDetentionTerms(id, {
+        leadMinutes: formData.get("detention_notice_lead_min"),
+        contractFreeMinutes: formData.get("detention_free_minutes"),
+      });
+    }
     refresh();
     return { ok: true, id };
   } catch (error) {
@@ -534,8 +541,12 @@ export async function createLoadAction(
         const attached = attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
         const { redactStoredRateCon } = await import("./rate-con-redact");
         await redactStoredRateCon(attached.id);
-        const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
+        const parsed = readInboxParse<{ rate?: number | null; raw_text?: string }>(inboxId);
         if (parsed) captureRateConAmount(id, parsed.rate ?? null);
+        if (parsed?.raw_text) {
+          const { saveDetentionTermsFromText } = await import("./detention-store");
+          saveDetentionTermsFromText(id, parsed.raw_text);
+        }
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
@@ -609,8 +620,12 @@ export async function updateLoadAction(
         const attached = attachInboxToLoad(id, inboxId, "rate_con", "dispatcher");
         const { redactStoredRateCon } = await import("./rate-con-redact");
         await redactStoredRateCon(attached.id);
-        const parsed = readInboxParse<{ rate?: number | null }>(inboxId);
+        const parsed = readInboxParse<{ rate?: number | null; raw_text?: string }>(inboxId);
         if (parsed) captureRateConAmount(id, parsed.rate ?? null);
+        if (parsed?.raw_text) {
+          const { saveDetentionTermsFromText } = await import("./detention-store");
+          saveDetentionTermsFromText(id, parsed.raw_text);
+        }
       }
       const { applyRateConStopsToLoad, formHasRateConStops } = await import("./rate-con-stops");
       if (formHasRateConStops(formData)) applyRateConStopsToLoad(id, formData);
@@ -1037,6 +1052,8 @@ export async function scanAttachedRateConAction(
       attachment.mime_type || "",
       attachment.original_name,
     );
+    const { saveDetentionTermsFromText } = await import("./detention-store");
+    saveDetentionTermsFromText(loadId, text);
     return {
       ok: true,
       hits: scanRateConFinePrint(text),
@@ -1110,6 +1127,8 @@ export async function attachFileAction(formData: FormData): Promise<ActionResult
       if (attachment.kind === "rate_con") {
         const { redactStoredRateCon } = await import("./rate-con-redact");
         await redactStoredRateCon(attachment.id);
+        const { markDetentionTermsUnscanned } = await import("./detention-store");
+        markDetentionTermsUnscanned(loadId);
       }
       if (kind === "pod") {
         const { maybeAutoInvoiceLoad } = await import("./auto-invoice");
@@ -1150,6 +1169,8 @@ export async function replaceAttachmentAction(formData: FormData): Promise<Actio
       if (replaced.kind === "rate_con") {
         const { redactStoredRateCon } = await import("./rate-con-redact");
         await redactStoredRateCon(replaced.id);
+        const { markDetentionTermsUnscanned } = await import("./detention-store");
+        markDetentionTermsUnscanned(replaced.load_id);
       }
       refresh();
       return { ok: true, id: attachmentId };
