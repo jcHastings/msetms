@@ -16,6 +16,8 @@ import { LoadRelaysPanel } from "@/components/load-relays-panel";
 import { LoadSwapPanel } from "@/components/load-swap-panel";
 import { LoadRoutingGuide } from "@/components/load-routing-guide";
 import { LoadStopsMap } from "@/components/load-stops-map";
+import { DetentionTermsBlock } from "@/components/detention-terms-block";
+import { LoadContractReminders } from "@/components/load-contract-reminders";
 import { LoadStopsPanel } from "@/components/load-stops-panel";
 import { LoadTabPanel } from "@/components/load-tab-panel";
 import { LoadWorkspace } from "@/components/load-workspace";
@@ -34,9 +36,11 @@ import { RateConRedactionPanel } from "@/components/rate-con-redaction-panel";
 import { RateConApply } from "@/components/rate-con-apply";
 import { RateConFinePrintScan } from "@/components/rate-con-fine-print-scan";
 import { lockedDetentionPayItemIds } from "@/lib/detention-lock";
+import { detentionTermLines, resolveDetentionTerms } from "@/lib/customer-contract-shared";
+import { contractFreeMinutesForCustomer, listRemindersForLoad, readCustomerDetentionTerms } from "@/lib/customer-contracts";
 import { getDetentionSettings, readLoadDetentionTerms } from "@/lib/detention-store";
 import { DETENTION_HOS_FLAG } from "@/lib/detention-end";
-import { detentionEndForStop, readCustomerDetentionTerms } from "@/lib/detention-signals";
+import { detentionEndForStop } from "@/lib/detention-signals";
 import { laneAverageSnapshot } from "@/lib/lane-average";
 import { ReeferBadge } from "@/components/reefer-badge";
 import { CriticalTag, LoadStatusBadge } from "@/components/status-badge";
@@ -133,8 +137,10 @@ export async function LoadEditor({
   const relays = listRelays(load.id);
   const stops = ensureDefaultStops(load.id);
   const detentionTerms = readLoadDetentionTerms(load.id);
+  const resolvedDetention = resolveDetentionTerms(detentionTerms, readCustomerDetentionTerms(load.customer_id));
+  const detentionLines = detentionTermLines(resolvedDetention);
+  const detentionRoundForClock = resolvedDetention.billingIncrementMinutes.value;
   const detentionSettings = getDetentionSettings();
-  const detentionCustomer = readCustomerDetentionTerms(load.customer_id);
   const detentionEnds = Object.fromEntries(
     stops
       .filter((stop) => stop.kind === "delivery" || detentionSettings.pickupsEnabled)
@@ -153,6 +159,7 @@ export async function LoadEditor({
         ];
       }),
   );
+  const contractReminders = listRemindersForLoad(load.id);
   const locations = locationsForIds(
     [load.shipper_location_id, load.consignee_location_id, ...stops.map((stop) => stop.location_id)].filter(
       (id): id is number => id != null,
@@ -329,6 +336,7 @@ export async function LoadEditor({
             )}
           </div>
         ) : null}
+        {contractReminders.length ? <LoadContractReminders reminders={contractReminders} canEdit={!readOnly} /> : null}
         <LoadTabPanel when={["basics", "customer", "assets"]} keepMounted>
           {loadIsOnAccountingDesk(load) && !canAccessAccounting(role) ? (
             <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -410,6 +418,7 @@ export async function LoadEditor({
           <Suspense fallback={<section className="card mb-4 px-5 py-10 text-sm text-slate-500">Opening route…</section>}>
             <LoadStopsMap loadId={load.id} />
           </Suspense>
+          <DetentionTermsBlock lines={detentionLines} />
           <LoadStopsPanel
             loadId={load.id}
             stops={stops}
@@ -419,9 +428,9 @@ export async function LoadEditor({
             placesEnabled={formSettings.placesEnabled}
             loadStatus={load.status}
             detentionFreeMinutes={detentionTerms.freeMinutes}
-            detentionRoundMinutes={detentionTerms.roundMinutes}
+            detentionRoundMinutes={detentionRoundForClock}
             detentionPickups={detentionSettings.pickupsEnabled}
-            detentionContractFreeMinutes={detentionCustomer.contractFreeMinutes}
+            detentionContractFreeMinutes={contractFreeMinutesForCustomer(load.customer_id)}
             detentionEnds={detentionEnds}
           />
           <LoadRoutingGuide

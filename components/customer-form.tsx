@@ -86,40 +86,6 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
           Credit hold
         </label>
       </div>
-      {customer ? (
-        <fieldset className="grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2" data-customer-detention="">
-          <legend className="text-sm font-semibold text-slate-800">Detention</legend>
-          <div className="field">
-            <label htmlFor="detention_notice_lead_min">Notice before detention starts (minutes)</label>
-            <input
-              id="detention_notice_lead_min"
-              name="detention_notice_lead_min"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={1440}
-              step={5}
-              defaultValue={customer.detention_notice_lead_min ?? 0}
-            />
-            <p className="mt-1 text-xs text-slate-500">0 means notify when detention starts. The desk is alerted 20 minutes before notice is due.</p>
-          </div>
-          <div className="field">
-            <label htmlFor="detention_free_minutes">Contract free time (minutes)</label>
-            <input
-              id="detention_free_minutes"
-              name="detention_free_minutes"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={1440}
-              step={15}
-              defaultValue={customer.detention_free_minutes ?? ""}
-              placeholder="Rate con, then 120"
-            />
-            <p className="mt-1 text-xs text-slate-500">Used only when the rate con does not state free time.</p>
-          </div>
-        </fieldset>
-      ) : null}
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-800">Contacts</h2>

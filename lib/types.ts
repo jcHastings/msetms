@@ -213,10 +213,6 @@ export type Customer = {
   billing_email: string;
   created_at: string;
   updated_at: string;
-  /** Minutes before detention starts that the broker wants notice. 0 = at the start. */
-  detention_notice_lead_min?: number;
-  /** Contract free time when the rate con does not state one. */
-  detention_free_minutes?: number | null;
 };
 
 export type Contact = {

@@ -19,7 +19,13 @@ import {
 } from "./detention-request";
 import { DETENTION_HOS_FLAG, detentionEndSourceLabel, isDetentionEndSource } from "./detention-end";
 import { latestNoticeForStop } from "./detention-notice-store";
-import { detentionEndForStop, readCustomerDetentionTerms } from "./detention-signals";
+import { detentionEndForStop } from "./detention-signals";
+import {
+  detentionAmountCap,
+  detentionTermLines,
+  resolveDetentionTerms,
+} from "./customer-contract-shared";
+import { contractFreeMinutesForCustomer, readCustomerDetentionTerms } from "./customer-contracts";
 import { parseDetentionTerms } from "./detention-terms";
 import { getAttachment, getAttachmentPath, listAttachments } from "./files";
 import { type OutgoingMail } from "./mail-shared";
@@ -155,7 +161,7 @@ export function detentionDraftHref(loadId: number, stopId: number): string {
   const load = getLoad(loadId);
   const stop = getStop(stopId);
   if (!load || !stop || stop.load_id !== loadId) return "";
-  const terms = readLoadDetentionTerms(loadId);
+  const resolved = resolveLoadDetention(loadId);
   const settings = getDetentionSettings();
   const trigger = detentionRequestTrigger({
     loadStatus: load.status,
@@ -165,10 +171,10 @@ export function detentionDraftHref(loadId: number, stopId: number): string {
     scheduleType: stop.schedule_type,
     windowStart: stop.window_start,
     windowEnd: stop.window_end,
-    freeMinutes: terms.freeMinutes,
-    contractFreeMinutes: readCustomerDetentionTerms(load.customer_id).contractFreeMinutes,
+    freeMinutes: readLoadDetentionTerms(loadId).freeMinutes,
+    contractFreeMinutes: contractFreeMinutesForCustomer(load.customer_id),
     endAt: detentionEndForStop(stop).endAt,
-    roundMinutes: terms.roundMinutes,
+    roundMinutes: resolved.billingIncrementMinutes.value,
     pickupsEnabled: settings.pickupsEnabled,
   });
   if (!trigger.show) return "";
@@ -186,7 +192,8 @@ export function detentionQboHint(loadId: number): string {
 
 export async function buildDetentionDraft(loadId: number, stopId: number): Promise<DetentionDraftView> {
   const loaded = loadContext(loadId, stopId);
-  const terms = await ensureDetentionTerms(loadId);
+  await ensureDetentionTerms(loadId);
+  const resolved = resolveLoadDetention(loadId);
   const settings = getDetentionSettings();
   const trigger = detentionRequestTrigger({
     loadStatus: loaded.load.status,
@@ -196,10 +203,10 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
     scheduleType: loaded.stop.schedule_type,
     windowStart: loaded.stop.window_start,
     windowEnd: loaded.stop.window_end,
-    freeMinutes: terms.freeMinutes,
-    contractFreeMinutes: readCustomerDetentionTerms(loaded.load.customer_id).contractFreeMinutes,
+    freeMinutes: readLoadDetentionTerms(loadId).freeMinutes,
+    contractFreeMinutes: contractFreeMinutesForCustomer(loaded.load.customer_id),
     endAt: detentionEndForStop(loaded.stop).endAt,
-    roundMinutes: terms.roundMinutes,
+    roundMinutes: resolved.billingIncrementMinutes.value,
     pickupsEnabled: settings.pickupsEnabled,
   });
   if (!trigger.show) {
@@ -246,19 +253,20 @@ export async function buildDetentionDraft(loadId: number, stopId: number): Promi
     replyTo: settings.replyTo,
     subject: email.subject,
     body: email.text,
-    clause: terms.clause,
-    rate: terms.rate,
-    rateLabel: detentionRateLabel(terms.rate),
+    clause: resolved.conditions.value ?? "",
+    rate: resolved.rate.value,
+    rateLabel: rateLabelFor(resolved),
     freeMinutes: trigger.freeMinutes,
     freeSource: trigger.freeSource,
     billableMinutes: trigger.billableMinutes,
-    cap: terms.cap,
-    roundMinutes: terms.roundMinutes,
+    cap: detentionAmountCap(resolved),
+    roundMinutes: resolved.billingIncrementMinutes.value,
+    termsLines: detentionTermLines(resolved),
     attachments: paperworkChoices(loadId),
     request: active ? toView(active) : null,
     invoiceWarning: invoiceAlreadySentWarning(loadId),
     qboHint: detentionQboHint(loadId),
-    computedAmount: computeDetentionAmount(terms.rate, trigger.billableMinutes, terms.cap),
+    computedAmount: computeDetentionAmount(resolved.rate.value, trigger.billableMinutes, detentionAmountCap(resolved)),
     end: {
       endAt: end.endAt,
       source: end.source,
@@ -352,7 +360,7 @@ export async function sendDetentionRequest(input: {
   });
   const messageId = String(sent?.messageId ?? "").trim() || String(sentMailId);
   const now = new Date().toISOString();
-  const terms = readLoadDetentionTerms(input.loadId);
+  const resolved = resolveLoadDetention(input.loadId);
   const result = getDb()
     .prepare(
       `INSERT INTO detention_requests (
@@ -376,13 +384,13 @@ export async function sendDetentionRequest(input: {
       draftStop(input.stopId).departed_at,
       triggerClock(input.loadId, input.stopId),
       timeSource(input.loadId, input.stopId),
-      terms.rate != null ? "rate_con" : "missing",
-      terms.rate,
+      resolved.rate.source === "missing" ? "missing" : resolved.rate.source,
+      resolved.rate.value,
       draft.freeMinutes,
       draft.billableMinutes,
-      terms.roundMinutes,
-      terms.cap,
-      terms.clause,
+      resolved.billingIncrementMinutes.value,
+      detentionAmountCap(resolved),
+      resolved.conditions.value ?? "",
       to,
       cc,
       JSON.stringify({ to, cc, replyTo: settings.replyTo }),
@@ -429,11 +437,14 @@ export function setDetentionStatus(input: {
     if (rate == null || !Number.isFinite(rate) || rate <= 0) {
       throw new Error(detentionRateLabel(null));
     }
-    const terms = readLoadDetentionTerms(row.load_id);
-    const computed = computeDetentionAmount(rate, Number(row.billable_min ?? 0), terms.cap);
+    const resolved = resolveLoadDetention(row.load_id);
+    const computed = computeDetentionAmount(rate, Number(row.billable_min ?? 0), detentionAmountCap(resolved));
     const amount = input.amount != null ? Number(input.amount) : computed;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) throw new Error("Enter the detention amount.");
-    const rateSource = terms.rate != null && Math.abs(terms.rate - rate) < 0.001 ? "rate_con" : "entered";
+    const rateSource =
+      resolved.rate.value != null && Math.abs(resolved.rate.value - rate) < 0.001 && resolved.rate.source !== "missing"
+        ? resolved.rate.source
+        : "entered";
     getDb()
       .prepare(
         `UPDATE detention_requests
@@ -515,6 +526,20 @@ export function addDetentionLine(input: { requestId: number; actor: string }): {
   return { payItemId, warning };
 }
 
+function resolveLoadDetention(loadId: number) {
+  const load = getLoad(loadId);
+  const rateCon = readLoadDetentionTerms(loadId);
+  const contract = load ? readCustomerDetentionTerms(load.customer_id) : null;
+  return resolveDetentionTerms(rateCon, contract);
+}
+
+function rateLabelFor(resolved: ReturnType<typeof resolveDetentionTerms>): string {
+  if (resolved.rate.source === "contract" && resolved.rate.value != null) {
+    return `$${resolved.rate.value.toFixed(2)} per hour from the customer contract`;
+  }
+  return detentionRateLabel(resolved.rate.source === "missing" ? null : resolved.rate.value);
+}
+
 function loadContext(loadId: number, stopId: number) {
   const load = getLoad(loadId);
   const stop = getStop(stopId);
@@ -540,7 +565,7 @@ function triggerClock(loadId: number, stopId: number): string {
     windowStart: loaded.stop.window_start,
     windowEnd: loaded.stop.window_end,
     freeMinutes: terms.freeMinutes,
-    contractFreeMinutes: readCustomerDetentionTerms(loaded.load.customer_id).contractFreeMinutes,
+    contractFreeMinutes: contractFreeMinutesForCustomer(loaded.load.customer_id),
     endAt: detentionEndForStop(loaded.stop).endAt,
     roundMinutes: terms.roundMinutes,
     pickupsEnabled: true,

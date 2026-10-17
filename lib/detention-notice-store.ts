@@ -10,7 +10,7 @@ import {
   type DetentionNoticeSchedule,
 } from "./detention-notice";
 import { approvalEmailHasDollarAmount, detentionSignature, DETENTION_REPLY_TO_DEFAULT } from "./detention-request";
-import { readCustomerDetentionTerms } from "./detention-signals";
+import { contractFreeMinutesForCustomer, detentionNoticeLeadForLoad } from "./customer-contracts";
 import { resolveLoadCustomerEmail } from "./load-mail";
 import { isUsableEmail, MAIL_FROM_DEFAULT, type OutgoingMail } from "./mail-shared";
 import { recordSentMail } from "./mail-store";
@@ -101,15 +101,15 @@ export function noticeScheduleForStop(
   const terms = getDb()
     .prepare("SELECT detention_free_minutes FROM loads WHERE id = ?")
     .get(load.id) as { detention_free_minutes?: number | null } | undefined;
-  const customer = readCustomerDetentionTerms(load.customer_id);
+  const lead = detentionNoticeLeadForLoad(load.id);
   return detentionNoticeSchedule({
     scheduleType: stop.schedule_type,
     arrivedAt: stop.arrived_at,
     windowStart: stop.window_start,
     windowEnd: stop.window_end,
     rateConFreeMinutes: terms?.detention_free_minutes ?? null,
-    contractFreeMinutes: customer.contractFreeMinutes,
-    leadMinutes: customer.leadMinutes,
+    contractFreeMinutes: contractFreeMinutesForCustomer(load.customer_id),
+    leadMinutes: lead.minutes,
   });
 }
 

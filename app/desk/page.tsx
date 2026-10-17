@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { deskMetadata } from "@/lib/desk-metadata";
 
 export const metadata = deskMetadata("Desk");
+import { LoadContractReminders } from "@/components/load-contract-reminders";
 import { ExceptionInboxCard } from "@/components/exception-inbox";
 import { PageHeader } from "@/components/page-header";
 import { LoadStatusBadge } from "@/components/status-badge";
@@ -39,6 +40,7 @@ import { RateConImport } from "@/components/rate-con-import";
 import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, canWrite, getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { listDeskReminders } from "@/lib/customer-contracts";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { loadStatusRowClass, loadStatusTextClass } from "@/lib/load-status-style";
 
@@ -78,6 +80,7 @@ export default async function DashboardPage({
   const watched = listWatchedLoads().filter((load) => load.status !== "accounting");
   const handoff = getHandoffNote();
   const needCover = listNeedCover(fleet.locations);
+  const contractReminders = listDeskReminders();
 
   return (
     <PageOverlayHost returnTo={overlayReturnTo("/desk", current)} serverOpenId={openId}>
@@ -91,6 +94,17 @@ export default async function DashboardPage({
       />
 
       <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} readOnly={!canWrite(dispatcher.role)} />
+
+      {contractReminders.length ? (
+        <div data-desk-reminders="">
+          <LoadContractReminders
+            reminders={contractReminders}
+            canEdit={canWrite(dispatcher.role)}
+            heading="Contract reminders"
+            showLoad
+          />
+        </div>
+      ) : null}
 
       {driverTrailerFlags.length > 0 ? (
         <section className="card mb-6 p-5" data-desk-trailer-flags="">

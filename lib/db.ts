@@ -1469,6 +1469,7 @@ export function migrate(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_paystubs_status ON paystubs(status, id);
   `);
   migrateDetentionRequests(db);
+  migrateCustomerContracts(db);
 }
 
 function seedExampleDeductionTemplates(db: Database): void {
@@ -2011,6 +2012,58 @@ function migrateRateConRedactions(db: Database): void {
   `);
 }
 
+function migrateCustomerContracts(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_contracts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      signed_on TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_customer_contracts_customer ON customer_contracts(customer_id, id);
+
+    CREATE TABLE IF NOT EXISTS customer_detention_terms (
+      customer_id INTEGER PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
+      rate_per_hour REAL,
+      free_hours REAL,
+      billing_increment_minutes INTEGER,
+      cap_per_day REAL,
+      cap_per_stop REAL,
+      notice_lead_minutes INTEGER,
+      conditions TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_requirements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      trigger TEXT NOT NULL,
+      deadline_hours REAL,
+      time_of_day TEXT NOT NULL DEFAULT '',
+      requirement TEXT NOT NULL,
+      quoted_clause TEXT NOT NULL DEFAULT '',
+      page TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_customer_requirements_customer ON customer_requirements(customer_id, id);
+
+    CREATE TABLE IF NOT EXISTS load_requirement_reminders (
+      load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
+      requirement_id INTEGER NOT NULL REFERENCES customer_requirements(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'open',
+      snooze_until TEXT NOT NULL DEFAULT '',
+      done_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (load_id, requirement_id)
+    );
+  `);
+}
+
 function migrateDetentionRequests(db: Database): void {
   ensureColumn(db, "loads", "detention_rate", "REAL");
   ensureColumn(db, "loads", "detention_free_minutes", "INTEGER");
@@ -2068,8 +2121,6 @@ function migrateDetentionRequests(db: Database): void {
   ensureColumn(db, "detention_requests", "notice_id", "INTEGER");
   ensureColumn(db, "detention_requests", "notice_sent_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "detention_requests", "notice_start_at", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "customers", "detention_notice_lead_min", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "customers", "detention_free_minutes", "INTEGER");
   db.exec(`
     CREATE TABLE IF NOT EXISTS detention_notices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
