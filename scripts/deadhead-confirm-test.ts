@@ -2,6 +2,8 @@
  * Deadhead is a suggestion until a dispatcher confirms it.
  * Unconfirmed miles stay out of IFTA, empty-mile reports, and settlement empty labels.
  * A driver's loads order by actual arrival, then departure, when those times exist.
+ * The suggested start is that driver's last real delivery, not another truck's.
+ * at_delivery and a GPS arrival count. A load with no driver uses its truck.
  */
 import assert from "node:assert/strict";
 import os from "node:os";
@@ -43,6 +45,7 @@ async function main() {
   const {
     buildDeadheadSuggestion,
     confirmLoadDeadhead,
+    previousLoadForEmptyMiles,
     refreshLoadEmptyMiles,
   } = await import("../lib/empty-miles");
 
@@ -255,9 +258,10 @@ async function main() {
   try {
     const warned = await buildDeadheadSuggestion(queries.getLoad(warnId)!);
     assert.ok(warned);
-    assert.match(warned.place, /Omaha/i);
+    assert.match(warned.place, /Kansas City/i);
+    assert.doesNotMatch(warned.place, /Omaha/i);
     assert.ok(warned.warnings.includes("gap"));
-    assert.ok(warned.warnings.includes("between"));
+    assert.equal(warned.warnings.includes("between"), false);
     assert.ok(warned.warnings.includes("gps"));
     assert.ok(warned.warnings.includes("distance"));
     assert.ok((warned.miles ?? 0) > 600);
@@ -439,10 +443,10 @@ async function main() {
   ).run(oldOnlyId, dallasId, tonight, tonight);
   const oldOnly = await buildDeadheadSuggestion(queries.getLoad(oldOnlyId)!);
   assert.ok(oldOnly);
-  assert.equal(oldOnly.basis, "gps");
-  assert.match(oldOnly.place, /Dallas/i);
-  assert.doesNotMatch(oldOnly.place, /El Paso/i);
-  assert.equal(oldOnly.alternativePlace, "");
+  assert.equal(oldOnly.basis, "previous_delivery");
+  assert.match(oldOnly.place, /El Paso/i);
+  assert.doesNotMatch(oldOnly.place, /Dallas/i);
+  assert.match(oldOnly.alternativePlace, /Dallas/i);
   assert.equal(queries.getLoad(oldOnlyId)?.empty_confirmed ?? 0, 0);
 
   const farTruckId = queries.createTruck({
@@ -494,9 +498,9 @@ async function main() {
   ).run(farTruckId);
   const farSuggestion = await buildDeadheadSuggestion(queries.getLoad(farPickupId)!);
   assert.ok(farSuggestion);
-  assert.equal(farSuggestion.basis, "gps");
-  assert.match(farSuggestion.place, /Dallas/i);
-  assert.match(farSuggestion.alternativePlace, /El Paso/i);
+  assert.equal(farSuggestion.basis, "previous_delivery");
+  assert.match(farSuggestion.place, /El Paso/i);
+  assert.match(farSuggestion.alternativePlace, /Dallas/i);
   const farSaved = await refreshLoadEmptyMiles(farPickupId);
   assert.equal(farSaved.pending, true);
   assert.equal(queries.getLoad(farPickupId)?.empty_confirmed, 0);
@@ -657,6 +661,882 @@ async function main() {
     (db.prepare("SELECT arrived_at AS at FROM load_stops WHERE id = ?").get(orderDelivery) as { at: string }).at,
     "2026-10-14T20:00:00.000Z",
   );
+
+  const unit27 = queries.createTruck({
+    unit_number: "27",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const unit28 = queries.createTruck({
+    unit_number: "28",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  const caseyId = queries.createDriver({
+    name: "Casey",
+    phone: "555-2828",
+    license: "NE-KELVIN",
+    pin: "2828",
+    truck_id: unit28,
+    status: "available",
+  });
+  const patId = queries.createDriver({
+    name: "Pat Other",
+    phone: "555-2827",
+    license: "VA-PAT",
+    pin: "2827",
+    truck_id: unit27,
+    status: "available",
+  });
+  const caseyPickup = "2026-12-01T18:00:00.000Z";
+  const olderOmaha = load({
+    number: "DH-CASEY-OLD",
+    origin: "Lincoln, NE",
+    destination: "Omaha, NE",
+    pickup: "2026-11-25T18:00:00.000Z",
+    delivery: "2026-11-26T18:00:00.000Z",
+    driver: caseyId,
+    truck: unit28,
+  });
+  stop(olderOmaha, 2, "delivery", "Omaha", "Omaha", "NE", "2026-11-26T18:00:00.000Z", "", "2026-11-26T18:00:00.000Z");
+  const billed = load({
+    number: "DH-CASEY-BILLED",
+    origin: "Omaha, NE",
+    destination: "Billed Yard, NE",
+    pickup: "2026-11-30T12:00:00.000Z",
+    delivery: "2026-11-30T23:00:00.000Z",
+    driver: caseyId,
+    truck: unit28,
+    status: "accounting",
+  });
+  stop(billed, 2, "delivery", "Billed Yard", "Billed Yard", "NE", "2026-11-30T23:00:00.000Z", "", "2026-10-01T12:00:00.000Z");
+  const rolling = load({
+    number: "DH-CASEY-ROLLING",
+    origin: "Omaha, NE",
+    destination: "Rolling Yard, NE",
+    pickup: "2026-11-30T12:00:00.000Z",
+    delivery: "2026-11-30T21:00:00.000Z",
+    driver: caseyId,
+    truck: unit28,
+    status: "in_transit",
+  });
+  stop(rolling, 2, "delivery", "Rolling Yard", "Rolling Yard", "NE", "2026-11-30T21:00:00.000Z", "", "2026-10-01T12:00:00.000Z");
+  const cancelled = load({
+    number: "DH-CASEY-CANCEL",
+    origin: "Omaha, NE",
+    destination: "Cancelled Yard, NE",
+    pickup: "2026-11-30T12:00:00.000Z",
+    delivery: "2026-11-30T22:00:00.000Z",
+    driver: caseyId,
+    truck: unit28,
+    status: "cancelled",
+  });
+  stop(cancelled, 2, "delivery", "Cancelled Yard", "Cancelled Yard", "NE", "2026-11-30T22:00:00.000Z", "", "2026-10-01T12:00:00.000Z");
+  const hastingsPrior = load({
+    number: "DH-CASEY-HASTINGS",
+    origin: "Lincoln, NE",
+    destination: "Hastings, NE",
+    pickup: "2026-11-29T18:00:00.000Z",
+    delivery: "2026-11-30T16:00:00.000Z",
+    driver: caseyId,
+    truck: unit28,
+  });
+  db.prepare("UPDATE loads SET created_at = '2026-10-01T12:00:00.000Z' WHERE id = ?").run(hastingsPrior);
+  stop(
+    hastingsPrior,
+    2,
+    "delivery",
+    "Hastings",
+    "Hastings",
+    "NE",
+    "2026-11-30T16:00:00.000Z",
+    "2026-08-20T15:00:00.000Z",
+    "2026-10-05T15:00:00.000Z",
+  );
+  const wrongTruckPrior = load({
+    number: "DH-UNIT27-PRIOR",
+    origin: "Richmond, VA",
+    destination: "Ruther Glen, VA",
+    pickup: "2026-11-30T12:00:00.000Z",
+    delivery: "2026-11-30T20:00:00.000Z",
+    driver: patId,
+    truck: unit27,
+  });
+  stop(wrongTruckPrior, 2, "delivery", "Ruther Glen", "Ruther Glen", "VA", "2026-11-30T20:00:00.000Z", "", "2026-11-30T20:00:00.000Z");
+  const caseyLoad = load({
+    number: "DH-CASEY",
+    origin: "York, NE",
+    destination: "Kansas City, MO",
+    pickup: caseyPickup,
+    delivery: "2026-12-02T18:00:00.000Z",
+    driver: caseyId,
+    truck: unit27,
+    status: "assigned",
+  });
+  stop(caseyLoad, 1, "pickup", "York", "York", "NE", caseyPickup);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-12-01T12:00:00.000Z', 37.944, -77.597, 'Ruther Glen, VA', 'samsara')`,
+  ).run(unit27);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-12-01T12:00:00.000Z', 40.926, -98.342, 'Grand Island, NE', 'samsara')`,
+  ).run(unit28);
+
+  const { choosePrior, deliveryKey, legacySuggestedPlace } = await import("../lib/empty-mile-start");
+  const rollingDelivery = {
+    kind: "delivery" as const,
+    city: "York",
+    state: "NE",
+    window_start: "2026-10-11T12:00:00.000Z",
+    window_end: "2026-10-11T12:00:00.000Z",
+    latitude: 40.86,
+    longitude: -97.59,
+  };
+  const deliveredWindow = {
+    kind: "delivery" as const,
+    city: "Omaha",
+    state: "NE",
+    window_start: "2026-10-12T12:00:00.000Z",
+    window_end: "2026-10-12T12:00:00.000Z",
+  };
+  const bareHere = {
+    id: 3,
+    status: "assigned",
+    driverId: 1,
+    truckId: 9,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    pickupStart: "2026-10-14T18:00:00.000Z",
+    pickupEnd: "2026-10-14T18:00:00.000Z",
+    deliveryStart: "2026-10-15T18:00:00.000Z",
+    deliveryEnd: "2026-10-15T18:00:00.000Z",
+  };
+  const rollingMile = {
+    id: 2,
+    status: "in_transit",
+    driverId: 1,
+    truckId: 9,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    pickupStart: "2026-10-10T12:00:00.000Z",
+    pickupEnd: "2026-10-10T12:00:00.000Z",
+    deliveryStart: "2026-10-11T12:00:00.000Z",
+    deliveryEnd: "2026-10-11T12:00:00.000Z",
+  };
+  const finishedMile = {
+    id: 1,
+    status: "delivered",
+    driverId: 1,
+    truckId: 8,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    pickupStart: "2026-10-01T12:00:00.000Z",
+    pickupEnd: "2026-10-01T12:00:00.000Z",
+    deliveryStart: "2026-10-12T12:00:00.000Z",
+    deliveryEnd: "2026-10-12T12:00:00.000Z",
+  };
+  const pureStops = new Map<number, Array<typeof rollingDelivery | typeof deliveredWindow>>([
+    [3, [{ kind: "pickup", city: "Lincoln", state: "NE", window_start: bareHere.pickupStart, window_end: bareHere.pickupEnd, latitude: null, longitude: null }]],
+    [2, [rollingDelivery]],
+    [1, [deliveredWindow]],
+  ]);
+  const arrivedByGps = choosePrior({
+    load: bareHere,
+    driverLoads: [rollingMile, finishedMile],
+    truckLoads: [],
+    stops: pureStops,
+    gpsByTruck: new Map([
+      [
+        9,
+        [
+          { address: "York, NE", recordedAt: "2026-08-01T18:00:00.000Z", latitude: 40.86, longitude: -97.59 },
+          { address: "York, NE", recordedAt: "2026-10-13T18:00:00.000Z", latitude: 40.86, longitude: -97.59 },
+        ],
+      ],
+    ]),
+    mode: "current",
+  });
+  assert.equal(arrivedByGps.load?.id, 2);
+  assert.equal(arrivedByGps.place, "York, NE");
+  assert.equal(arrivedByGps.at, "2026-10-13T18:00:00.000Z");
+  const stalePingOnly = choosePrior({
+    load: bareHere,
+    driverLoads: [rollingMile, finishedMile],
+    truckLoads: [],
+    stops: pureStops,
+    gpsByTruck: new Map([
+      [9, [{ address: "York, NE", recordedAt: "2026-08-01T18:00:00.000Z", latitude: 40.86, longitude: -97.59 }]],
+    ]),
+    mode: "current",
+  });
+  assert.equal(stalePingOnly.load?.id, 1);
+  const windowOnly = choosePrior({
+    load: bareHere,
+    driverLoads: [rollingMile, finishedMile],
+    truckLoads: [],
+    stops: pureStops,
+    mode: "current",
+  });
+  assert.equal(windowOnly.load?.id, 1);
+  const unloadingMile = { ...rollingMile, id: 4, status: "unloading", truckId: 4 };
+  const unloadingStops = new Map(pureStops);
+  unloadingStops.set(4, [
+    {
+      kind: "delivery",
+      city: "Crete",
+      state: "NE",
+      window_start: "2026-10-13T20:00:00.000Z",
+      window_end: "2026-10-13T20:00:00.000Z",
+      latitude: null,
+      longitude: null,
+    },
+  ]);
+  const atConsignee = choosePrior({
+    load: bareHere,
+    driverLoads: [unloadingMile, finishedMile],
+    truckLoads: [],
+    stops: unloadingStops,
+    mode: "current",
+  });
+  assert.equal(atConsignee.place, "Crete, NE");
+  const { deadheadPromptText } = await import("../lib/empty-miles-shared");
+  const hastingsView = queries.getLoad(hastingsPrior);
+  assert.ok(hastingsView);
+  const hastingsStops = [
+    {
+      kind: "delivery",
+      city: "Hastings",
+      state: "NE",
+      name: "Hastings",
+      window_start: "2026-11-30T16:00:00.000Z",
+      window_end: "2026-11-30T16:00:00.000Z",
+      arrived_at: "2026-08-20T15:00:00.000Z",
+      departed_at: "2026-10-05T15:00:00.000Z",
+    },
+  ];
+  const hastingsMile = {
+    id: hastingsView.id,
+    status: hastingsView.status,
+    driverId: hastingsView.driver_id,
+    truckId: hastingsView.truck_id,
+    createdAt: hastingsView.created_at,
+    pickupStart: hastingsView.pickup_start,
+    pickupEnd: hastingsView.pickup_end,
+    deliveryStart: hastingsView.delivery_start,
+    deliveryEnd: hastingsView.delivery_end,
+  };
+  assert.equal(deliveryKey(hastingsMile, hastingsStops, "legacy"), "2026-10-05T15:00:00.000Z");
+  assert.equal(deliveryKey(hastingsMile, hastingsStops, "current"), "2026-11-30T16:00:00.000Z");
+
+  const caseyView = queries.getLoad(caseyLoad);
+  assert.ok(caseyView);
+  assert.equal(previousLoadForEmptyMiles(caseyView)?.id, hastingsPrior);
+  const suggestion = await buildDeadheadSuggestion(caseyView);
+  assert.ok(suggestion);
+  const beforePrompt = "Did Casey start here? Ruther Glen, VA";
+  const afterPrompt = "Did Casey start here? Hastings, NE";
+  const stopRows = db
+    .prepare(
+      `SELECT load_id, kind, city, state, street, zip, name, window_start, window_end, arrived_at, departed_at
+       FROM load_stops WHERE load_id IN (
+         SELECT id FROM loads WHERE driver_id IN (?, ?) OR truck_id IN (?, ?)
+       ) OR load_id = ?
+       ORDER BY load_id, sequence, id`,
+    )
+    .all(caseyId, patId, unit28, unit27, caseyLoad) as Array<Record<string, string | number | null>>;
+  const stopMap = new Map<number, Array<Record<string, string | number | null>>>();
+  for (const row of stopRows) {
+    const list = stopMap.get(Number(row.load_id)) ?? [];
+    list.push(row);
+    stopMap.set(Number(row.load_id), list);
+  }
+  function mileOf(view: NonNullable<ReturnType<typeof queries.getLoad>>) {
+    return {
+      id: view.id,
+      status: view.status,
+      driverId: view.driver_id,
+      truckId: view.truck_id,
+      createdAt: view.created_at,
+      pickupStart: view.pickup_start,
+      pickupEnd: view.pickup_end,
+      deliveryStart: view.delivery_start,
+      deliveryEnd: view.delivery_end,
+    };
+  }
+  const driverHistory = queries
+    .listLoadsForDriver(caseyId)
+    .filter((row) => row.driver_id === caseyId)
+    .map(mileOf);
+  const truckHistory = queries
+    .listLoadsForTruck(unit27)
+    .map(mileOf);
+  const legacyChoice = choosePrior({
+    load: mileOf(caseyView),
+    driverLoads: driverHistory,
+    truckLoads: truckHistory,
+    stops: stopMap,
+    mode: "legacy",
+  });
+  const legacyPlace = legacySuggestedPlace({
+    deliveryPlace: legacyChoice.place,
+    deliveryPoint: null,
+    pickupMs: legacyChoice.pickupMs,
+    pickupPoint: null,
+    pings: [
+      {
+        address: "Ruther Glen, VA",
+        recordedAt: "2026-12-01T12:00:00.000Z",
+        latitude: 37.944,
+        longitude: -77.597,
+      },
+    ],
+  });
+  assert.equal(deadheadPromptText(suggestion.driverName, legacyPlace), beforePrompt);
+  assert.equal(deadheadPromptText(suggestion.driverName, suggestion.place), afterPrompt);
+  assert.equal(suggestion.basis, "previous_delivery");
+  assert.equal(
+    suggestion.notes.find((note) => note.includes("Unit")),
+    "This load's truck (Unit 27) isn't the truck Casey was on (Unit 28).",
+  );
+  assert.ok(suggestion.notes.some((note) => note.includes("Grand Island, NE")));
+  assert.equal(
+    suggestion.notes.some((note) => note.includes("Ruther Glen")),
+    false,
+  );
+  assert.equal(suggestion.notes.some((note) => note.includes(String(unit27)) && !note.includes("Unit 27")), false);
+  const savedCasey = await refreshLoadEmptyMiles(caseyLoad);
+  assert.equal(savedCasey.pending, true);
+  assert.match(savedCasey.from, /Hastings/i);
+  assert.equal(queries.getLoad(caseyLoad)?.empty_confirmed, 0);
+  assert.equal(queries.getLoad(caseyLoad)?.empty_miles ?? null, null);
+
+  const laneDriverId = queries.createDriver({
+    name: "Casey Lane",
+    phone: "555-1212",
+    license: "NE-CASEY",
+    pin: "1212",
+    truck_id: unit28,
+    status: "available",
+  });
+  const solisId = queries.createDriver({
+    name: "Andre Solis",
+    phone: "555-3636",
+    license: "NJ-ANDRE",
+    pin: "3636",
+    truck_id: null,
+    status: "available",
+  });
+  const unit36 = queries.createTruck({
+    unit_number: "36",
+    type: "reefer",
+    capacity_lbs: 44000,
+    status: "available",
+  });
+  db.prepare("UPDATE drivers SET truck_id = ? WHERE id = ?").run(unit36, solisId);
+  const samId = queries.createDriver({
+    name: "Sam Prior",
+    phone: "555-2829",
+    license: "NE-SAM",
+    pin: "2829",
+    truck_id: unit28,
+    status: "available",
+  });
+  function backdate(loadId: number, createdAt: string): void {
+    db.prepare("UPDATE loads SET created_at = ? WHERE id = ?").run(createdAt, loadId);
+  }
+  const hastingsLoc = queries.createLocation({
+    name: "400 Cold Storage Rd",
+    street: "",
+    city: "Hastings",
+    state: "NE",
+    zip: "",
+    phone: "",
+    notes: "",
+    role: "both",
+    scheduling_type: "fcfs",
+    hours: "",
+    scheduling_notes: "",
+    latitude: 40.5861,
+    longitude: -98.3884,
+  });
+  const prodHastings = load({
+    number: "FX-6201",
+    origin: "Holcomb, KS",
+    destination: "Hastings, NE",
+    pickup: "2026-10-10T13:00:00.000Z",
+    delivery: "2026-10-11T17:00:00",
+    driver: laneDriverId,
+    truck: unit28,
+    status: "at_delivery",
+  });
+  backdate(prodHastings, "2026-10-01T12:00:00.000Z");
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, location_id, name, street, city, state,
+       window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', ?, '400 Cold Storage Rd', '', 'Hastings', 'NE', ?, ?, ?, ?)`,
+  ).run(
+    prodHastings,
+    hastingsLoc,
+    "2026-10-11T08:00:00",
+    "2026-10-11T17:00:00",
+    "2026-08-27T12:00:00.000Z",
+    "2026-08-28T12:00:00.000Z",
+  );
+  const junction = load({
+    number: "FX-6209",
+    origin: "Crete, NE",
+    destination: "Junction City, KS",
+    pickup: "2026-10-12T13:00:00.000Z",
+    delivery: "2026-10-12T17:00:00",
+    driver: laneDriverId,
+    truck: unit28,
+  });
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, name, city, state, schedule_source, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', 'Junction City', 'Junction City', 'KS', 'its', ?, ?, '', '')`,
+  ).run(junction, "2026-10-12T08:00:00", "2026-10-12T17:00:00");
+  const prodCancelled = load({
+    number: "FX-6204",
+    origin: "Crete, NE",
+    destination: "Cancelled Yard, KS",
+    pickup: "2026-10-13T13:00:00.000Z",
+    delivery: "2026-10-14T17:00:00.000Z",
+    driver: laneDriverId,
+    truck: unit28,
+    status: "cancelled",
+  });
+  stop(prodCancelled, 2, "delivery", "Cancelled Yard", "Cancelled Yard", "KS", "2026-10-14T17:00:00.000Z", "", "2026-10-14T17:00:00.000Z");
+  const wrongYard = load({
+    number: "FX-6101",
+    origin: "Richmond, VA",
+    destination: "Wrong Yard, VA",
+    pickup: "2026-10-13T13:00:00.000Z",
+    delivery: "2026-10-14T17:30:00.000Z",
+    driver: patId,
+    truck: unit27,
+  });
+  backdate(wrongYard, "2026-10-01T12:00:00.000Z");
+  stop(wrongYard, 2, "delivery", "Wrong Yard", "Wrong Yard", "VA", "2026-10-14T17:30:00.000Z", "2026-08-01T12:00:00.000Z", "2026-08-01T12:00:00.000Z");
+  const laneLoad = load({
+    number: "FX-6283",
+    origin: "York, NE",
+    destination: "Kansas City, MO",
+    pickup: "2026-10-14T18:00:00.000Z",
+    delivery: "2026-10-15T18:00:00.000Z",
+    driver: laneDriverId,
+    truck: unit27,
+    status: "assigned",
+  });
+  stop(laneLoad, 1, "pickup", "York", "York", "NE", "2026-10-14T18:00:00.000Z");
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-08-27T18:00:00.000Z', 40.5861, -98.3884, 'Hastings, NE', 'samsara')`,
+  ).run(unit28);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T17:08:00.000Z', 40.5861, -98.3884, 'Hastings, NE', 'samsara')`,
+  ).run(unit28);
+  db.prepare(
+    `INSERT INTO truck_gps_readings (truck_id, recorded_at, latitude, longitude, address, source)
+     VALUES (?, '2026-10-14T16:00:00.000Z', 37.944, -77.597, 'Ruther Glen, VA', 'samsara')`,
+  ).run(unit27);
+  const keasbey = load({
+    number: "FX-6264",
+    origin: "Bronx, NY",
+    destination: "Keasbey, NJ",
+    pickup: "2026-10-13T12:00:00.000Z",
+    delivery: "2026-10-13T16:00:00.000Z",
+    driver: solisId,
+    truck: unit36,
+    status: "at_delivery",
+  });
+  backdate(keasbey, "2026-10-01T12:00:00.000Z");
+  stop(keasbey, 2, "delivery", "Keasbey", "Keasbey", "NJ", "2026-10-13T16:00:00.000Z", "2026-10-13T16:00:00.000Z", "2026-10-13T17:00:00.000Z");
+  const miami = load({
+    number: "FX-6240",
+    origin: "Edwardsville, KS",
+    destination: "Miami, FL",
+    pickup: "2026-10-11T12:00:00.000Z",
+    delivery: "2026-10-12T20:00:00.000Z",
+    driver: solisId,
+    truck: unit36,
+  });
+  backdate(miami, "2026-09-01T12:00:00.000Z");
+  db.prepare(
+    `INSERT INTO load_stops (
+       load_id, sequence, kind, name, street, city, state, window_start, window_end, arrived_at, departed_at
+     ) VALUES (?, 2, 'delivery', 'Miami', '1200 Harbor Ave', 'Miami', 'FL', ?, ?, ?, ?)`,
+  ).run(miami, "2026-10-12T20:00:00.000Z", "2026-10-12T20:00:00.000Z", "2026-08-20T12:00:00.000Z", "2026-08-20T18:00:00.000Z");
+  const solisLoad = load({
+    number: "FX-6275",
+    origin: "Keasbey, NJ",
+    destination: "Edwardsville, KS",
+    pickup: "2026-10-14T18:00:00.000Z",
+    delivery: "2026-10-16T18:00:00.000Z",
+    driver: solisId,
+    truck: unit36,
+    status: "assigned",
+  });
+  stop(solisLoad, 1, "pickup", "Keasbey", "Keasbey", "NJ", "2026-10-14T18:00:00.000Z");
+  const juniata = load({
+    number: "FX-0728",
+    origin: "Hastings, NE",
+    destination: "Juniata, NE",
+    pickup: "2026-10-08T12:00:00.000Z",
+    delivery: "2026-10-08T18:00:00.000Z",
+    driver: samId,
+    truck: unit28,
+  });
+  backdate(juniata, "2026-10-01T12:00:00.000Z");
+  stop(juniata, 2, "delivery", "Juniata", "Juniata", "NE", "2026-10-08T18:00:00.000Z", "2026-10-08T18:00:00.000Z", "2026-10-08T19:00:00.000Z");
+  const prodTruckOnly = queries.createLoad({
+    load_number: "FX-0730",
+    customer_id: customerId,
+    origin: "Juniata, NE",
+    destination: "Grand Island, NE",
+    pickup_start: "2026-10-09T18:00:00.000Z",
+    pickup_end: "2026-10-09T18:00:00.000Z",
+    delivery_start: "2026-10-10T18:00:00.000Z",
+    delivery_end: "2026-10-10T18:00:00.000Z",
+    weight: 40000,
+    commodity: "Beef",
+    rate: 1000,
+    notes: "",
+    special_instructions: "",
+    appointment_notes: "",
+    reference_number: "",
+    po_number: "",
+    reefer_setpoint_f: 34,
+    trailer_number: "",
+    status: "assigned",
+    truck_id: unit28,
+    driver_id: null,
+  });
+  stop(prodTruckOnly, 1, "pickup", "Juniata", "Juniata", "NE", "2026-10-09T18:00:00.000Z");
+
+  const laneView = queries.getLoad(laneLoad);
+  assert.ok(laneView);
+  assert.equal(previousLoadForEmptyMiles(laneView)?.load_number, "FX-6201");
+  const laneSuggestion = await buildDeadheadSuggestion(laneView);
+  assert.ok(laneSuggestion);
+  assert.equal(deadheadPromptText(laneSuggestion.driverName, "Junction City, KS"), "Did Casey Lane start here? Junction City, KS");
+  assert.equal(deadheadPromptText(laneSuggestion.driverName, laneSuggestion.place), "Did Casey Lane start here? Hastings, NE");
+  assert.equal(
+    laneSuggestion.notes.find((note) => note.includes("Unit")),
+    "This load's truck (Unit 27) isn't the truck Casey Lane was on (Unit 28).",
+  );
+  assert.equal(laneSuggestion.place.includes("Junction City"), false);
+  const savedLane = await refreshLoadEmptyMiles(laneLoad);
+  assert.equal(savedLane.pending, true);
+  assert.match(savedLane.from, /Hastings, NE/);
+  assert.equal(queries.getLoad(laneLoad)?.empty_confirmed, 0);
+  assert.equal(queries.getLoad(laneLoad)?.empty_miles ?? null, null);
+
+  const solisView = queries.getLoad(solisLoad);
+  assert.ok(solisView);
+  assert.equal(previousLoadForEmptyMiles(solisView)?.load_number, "FX-6264");
+  const solisSuggestion = await buildDeadheadSuggestion(solisView);
+  assert.ok(solisSuggestion);
+  assert.equal(solisSuggestion.place, "Keasbey, NJ");
+  assert.equal(solisSuggestion.place.includes("Miami"), false);
+  assert.equal(solisSuggestion.place.includes("1200"), false);
+
+  const truckOnlyView = queries.getLoad(prodTruckOnly);
+  assert.ok(truckOnlyView);
+  assert.equal(truckOnlyView.driver_id, null);
+  assert.equal(previousLoadForEmptyMiles(truckOnlyView)?.load_number, "FX-0728");
+  const truckSuggestion = await buildDeadheadSuggestion(truckOnlyView);
+  assert.ok(truckSuggestion);
+  assert.equal(truckSuggestion.place, "Juniata, NE");
+
+  const { spawnSync } = await import("node:child_process");
+  const { createHash } = await import("node:crypto");
+  const fs = await import("node:fs");
+  function fingerprint(file: string): string {
+    if (!fs.existsSync(file)) return "missing";
+    return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  }
+  const watched = [dbPath, `${dbPath}-wal`];
+  const beforeFiles = watched.map(fingerprint);
+  const suggestionBefore = queries.getLoad(caseyLoad)?.empty_suggestion ?? "";
+  const audit = spawnSync(
+    process.execPath,
+    [
+      path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+      path.join(process.cwd(), "scripts", "empty-mile-start-audit.ts"),
+      dbPath,
+      "80",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(audit.status, 0, audit.stderr || audit.stdout);
+  const auditRow = audit.stdout
+    .split("\n")
+    .find((line) => line.startsWith("DH-CASEY\t"));
+  assert.equal(auditRow, "DH-CASEY\tCasey\t27\tRuther Glen, VA\tHastings, NE");
+  const auditLines = new Map(
+    audit.stdout
+      .split("\n")
+      .filter((line) => line.includes("\t"))
+      .map((line) => [line.split("\t")[0], line] as const),
+  );
+  assert.equal(auditLines.get("FX-6283"), "FX-6283\tCasey Lane\t27\tJunction City, KS\tHastings, NE");
+  assert.equal(auditLines.get("FX-6275"), "FX-6275\tAndre Solis\t36\tKeasbey, NJ\tKeasbey, NJ");
+  assert.equal(auditLines.get("FX-0730"), "FX-0730\t\t28\tJuniata, NE\tJuniata, NE");
+  assert.equal(watched.map(fingerprint).join(), beforeFiles.join());
+  assert.equal(queries.getLoad(caseyLoad)?.empty_suggestion ?? "", suggestionBefore);
+  assert.equal(queries.getLoad(caseyLoad)?.empty_confirmed, 0);
+
+  const { DatabaseSync } = await import("node:sqlite");
+  const { auditEmptyMileStarts } = await import("../scripts/empty-mile-start-audit");
+  const countPath = path.join(os.tmpdir(), `tms-empty-mile-count-${Date.now()}-${process.pid}.db`);
+  const countDb = new DatabaseSync(countPath);
+  countDb.exec(`
+    CREATE TABLE drivers (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE trucks (
+      id INTEGER PRIMARY KEY, unit_number TEXT, gps_address TEXT, gps_recorded_at TEXT,
+      gps_latitude REAL, gps_longitude REAL, gps_source TEXT
+    );
+    CREATE TABLE loads (
+      id INTEGER PRIMARY KEY, load_number TEXT, status TEXT, driver_id INTEGER, truck_id INTEGER,
+      created_at TEXT, pickup_start TEXT, pickup_end TEXT, delivery_start TEXT, delivery_end TEXT
+    );
+    CREATE TABLE load_stops (
+      id INTEGER PRIMARY KEY, load_id INTEGER, sequence INTEGER, kind TEXT, city TEXT, state TEXT,
+      street TEXT, zip TEXT, name TEXT, schedule_source TEXT, window_start TEXT, window_end TEXT,
+      arrived_at TEXT, departed_at TEXT, location_id INTEGER
+    );
+    CREATE TABLE locations (id INTEGER PRIMARY KEY, latitude REAL, longitude REAL);
+    CREATE TABLE truck_gps_readings (
+      id INTEGER PRIMARY KEY, truck_id INTEGER, recorded_at TEXT, latitude REAL, longitude REAL,
+      address TEXT, source TEXT
+    );
+    INSERT INTO drivers (id, name) VALUES (1, 'Row Driver');
+    INSERT INTO trucks (id, unit_number, gps_address, gps_recorded_at, gps_source) VALUES (1, '1', '', '', '');
+  `);
+  const nowMs = Date.now();
+  const insertLoad = countDb.prepare(
+    `INSERT INTO loads (
+       load_number, status, driver_id, truck_id, created_at, pickup_start, pickup_end, delivery_start, delivery_end
+     ) VALUES (?, ?, 1, 1, ?, ?, ?, ?, ?)`,
+  );
+  for (let index = 0; index < 9; index += 1) {
+    const pickup = new Date(nowMs - index * 60 * 60 * 1000).toISOString();
+    insertLoad.run(`ROW-A-${index}`, "assigned", pickup, pickup, pickup, pickup, pickup);
+  }
+  for (let index = 0; index < 6; index += 1) {
+    const pickup = new Date(nowMs - (3 + index) * 24 * 60 * 60 * 1000).toISOString();
+    const delivery = new Date(nowMs - 2 * 24 * 60 * 60 * 1000).toISOString();
+    insertLoad.run(`ROW-R-${index}`, "delivered", pickup, pickup, pickup, delivery, delivery);
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const pickup = new Date(nowMs + (10 + index) * 24 * 60 * 60 * 1000).toISOString();
+    const delivery = new Date(nowMs - 200 * 24 * 60 * 60 * 1000).toISOString();
+    insertLoad.run(`ROW-X-${index}`, "delivered", pickup, pickup, pickup, delivery, delivery);
+  }
+  countDb.close();
+  const counted = auditEmptyMileStarts(countPath, 15);
+  const countedRows = counted.split("\n").filter((line) => line && !line.startsWith("load_number\t"));
+  assert.equal(countedRows.length, 15);
+  assert.equal(countedRows.some((line) => line.startsWith("ROW-X-")), false);
+  assert.equal(countedRows.filter((line) => line.startsWith("ROW-A-")).length, 9);
+  assert.equal(countedRows.filter((line) => line.startsWith("ROW-R-")).length, 6);
+
+  const openDelivery = {
+    id: 11,
+    status: "at_delivery",
+    driverId: 4,
+    truckId: 8,
+    createdAt: "2026-10-10T23:35:24.000Z",
+    pickupStart: "2026-10-09T08:00:00",
+    pickupEnd: "2026-10-09T17:00:00",
+    deliveryStart: "2026-10-11T08:00:00",
+    deliveryEnd: "2026-10-11T17:00:00",
+  };
+  const laterAppointment = {
+    id: 12,
+    status: "delivered",
+    driverId: 4,
+    truckId: 8,
+    createdAt: "2026-10-13T16:28:04.000Z",
+    pickupStart: "2026-10-12T08:00:00",
+    pickupEnd: "2026-10-12T17:00:00",
+    deliveryStart: "2026-10-12T08:00:00",
+    deliveryEnd: "2026-10-12T17:00:00",
+  };
+  const nextPickup = {
+    id: 13,
+    status: "available",
+    driverId: 4,
+    truckId: 7,
+    createdAt: "2026-10-14T18:52:22.714Z",
+    pickupStart: "2026-10-14T18:00:00.000Z",
+    pickupEnd: "2026-10-14T18:00:00.000Z",
+    deliveryStart: "2026-10-16T00:00:00.000Z",
+    deliveryEnd: "2026-10-16T00:00:00.000Z",
+  };
+  const shapedStops = new Map<number, Array<Record<string, string | number | null>>>([
+    [
+      11,
+      [
+        {
+          kind: "pickup",
+          city: "Oakley",
+          state: "KS",
+          window_start: "2026-10-09T08:00:00",
+          window_end: "2026-10-09T17:00:00",
+          arrived_at: "2026-10-13T20:30:05Z",
+          departed_at: "2026-10-13T20:39:28Z",
+        },
+        {
+          kind: "delivery",
+          city: "Plainview",
+          state: "NE",
+          window_start: "2026-10-11T08:00:00",
+          window_end: "2026-10-11T17:00:00",
+          arrived_at: "",
+          departed_at: "2026-08-28T21:01:03.393Z",
+        },
+      ],
+    ],
+    [
+      12,
+      [
+        {
+          kind: "delivery",
+          city: "Oakley",
+          state: "KS",
+          schedule_source: "its",
+          window_start: "2026-10-12T08:00:00",
+          window_end: "2026-10-12T17:00:00",
+          arrived_at: "",
+          departed_at: "",
+        },
+      ],
+    ],
+    [
+      13,
+      [
+        {
+          kind: "pickup",
+          city: "Grandview",
+          state: "NE",
+          window_start: "2026-10-14T18:00:00.000Z",
+          window_end: "2026-10-14T18:00:00.000Z",
+          arrived_at: "",
+          departed_at: "",
+        },
+      ],
+    ],
+  ]);
+  const shapedGps = new Map([
+    [
+      8,
+      [
+        { address: "100 Main Street, Plainview, NE", recordedAt: "2026-10-11T01:37:14Z", latitude: 40.5, longitude: -98.4 },
+        { address: "Highway 6, Plainview, NE", recordedAt: "2026-10-14T15:49:15Z", latitude: 40.56, longitude: -98.39 },
+        { address: "10 Dock Street, Plainview, NE", recordedAt: "2026-10-14T16:19:15Z", latitude: 40.62, longitude: -98.37 },
+        { address: "10 Dock Street, Plainview, NE", recordedAt: "2026-10-14T17:08:37Z", latitude: 40.62, longitude: -98.37 },
+      ],
+    ],
+  ]);
+  const shaped = choosePrior({
+    load: nextPickup,
+    driverLoads: [openDelivery, laterAppointment],
+    truckLoads: [],
+    stops: shapedStops,
+    gpsByTruck: shapedGps,
+    mode: "current",
+  });
+  assert.equal(shaped.load?.id, 11);
+  assert.equal(shaped.place, "Plainview, NE");
+  assert.equal(shaped.at, "2026-10-14T16:19:15Z");
+
+  const sameDayDelivery = {
+    id: 21,
+    status: "delivered",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-13T16:28:04.000Z",
+    pickupStart: "2026-10-13T08:00:00",
+    pickupEnd: "2026-10-13T17:00:00",
+    deliveryStart: "2026-10-13T08:00:00",
+    deliveryEnd: "2026-10-13T17:00:00",
+  };
+  const sameDayHere = {
+    id: 22,
+    status: "in_transit",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-10T23:35:24.000Z",
+    pickupStart: "2026-10-13T08:00:00",
+    pickupEnd: "2026-10-13T17:00:00",
+    deliveryStart: "2026-10-15T08:00:00",
+    deliveryEnd: "2026-10-15T17:00:00",
+  };
+  const olderCity = {
+    id: 20,
+    status: "completed",
+    driverId: 5,
+    truckId: 5,
+    createdAt: "2026-10-08T13:47:15.000Z",
+    pickupStart: "2026-10-02T08:00:00",
+    pickupEnd: "2026-10-02T17:00:00",
+    deliveryStart: "2026-10-05T08:00:00",
+    deliveryEnd: "2026-10-05T17:00:00",
+  };
+  const sameDayStops = new Map<number, Array<Record<string, string | null>>>([
+    [22, [{ kind: "pickup", city: "Riverdale", state: "NY", window_start: "2026-10-13T08:00:00", window_end: "2026-10-13T17:00:00", arrived_at: "", departed_at: "" }]],
+    [21, [{ kind: "delivery", city: "Riverdale", state: "NY", window_start: "2026-10-13T08:00:00", window_end: "2026-10-13T17:00:00", arrived_at: "", departed_at: "" }]],
+    [20, [{ kind: "delivery", city: "Oldport", state: "NY", window_start: "2026-10-05T08:00:00", window_end: "2026-10-05T17:00:00", arrived_at: "", departed_at: "" }]],
+  ]);
+  const sameDay = choosePrior({
+    load: sameDayHere,
+    driverLoads: [sameDayDelivery, olderCity],
+    truckLoads: [],
+    stops: sameDayStops,
+    mode: "current",
+  });
+  assert.equal(sameDay.load?.id, 21);
+  assert.equal(sameDay.place, "Riverdale, NY");
+
+  const truckDelivery = {
+    id: 31,
+    status: "completed",
+    driverId: 9,
+    truckId: 8,
+    createdAt: "2026-10-08T13:47:15.000Z",
+    pickupStart: "2026-10-06T08:00:00",
+    pickupEnd: "2026-10-06T17:00:00",
+    deliveryStart: "2026-10-08T08:00:00",
+    deliveryEnd: "2026-10-08T17:00:00",
+  };
+  const junkHold = {
+    id: 30,
+    status: "hold",
+    driverId: null,
+    truckId: 8,
+    createdAt: "2026-10-08T13:48:11.000Z",
+    pickupStart: "2020-08-03T08:00:00",
+    pickupEnd: "2020-08-03T17:00:00",
+    deliveryStart: "2020-08-04T08:00:00",
+    deliveryEnd: "2020-08-04T17:00:00",
+  };
+  const junkStops = new Map<number, Array<Record<string, string | null>>>([
+    [30, [{ kind: "pickup", city: "Dakota", state: "NE", window_start: "2020-08-03T08:00:00", window_end: "2020-08-03T17:00:00", arrived_at: "", departed_at: "" }]],
+    [31, [{ kind: "delivery", city: "Plainview", state: "NE", window_start: "2026-10-08T08:00:00", window_end: "2026-10-08T17:00:00", arrived_at: "", departed_at: "" }]],
+  ]);
+  const truckFallback = choosePrior({
+    load: junkHold,
+    driverLoads: [],
+    truckLoads: [truckDelivery],
+    stops: junkStops,
+    mode: "current",
+  });
+  assert.equal(truckFallback.load?.id, 31);
+  assert.equal(truckFallback.place, "Plainview, NE");
 
   closeDb();
   console.log("deadhead confirm ok");

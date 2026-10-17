@@ -13,6 +13,7 @@ import { compareLaneAverage, type LaneAverageSnapshot } from "@/lib/lane-average
 import { rateConApplyContactFields, type ParsedRateCon } from "@/lib/rate-con-shared";
 import type { FinePrintHit } from "@/lib/rate-con-fine-print-shared";
 import type { ComplianceWindows } from "@/lib/settings-shared";
+import { EMPTY_ASSIGNMENT_UNIT_FACTS, type AssignmentUnitFacts } from "@/lib/driver-unit";
 import type { Customer, DriverWithTruck, Location, Trailer, Truck } from "@/lib/types";
 
 type LoadFormSettings = {
@@ -35,6 +36,7 @@ export function RateConImport({
   drivers,
   formSettings,
   children,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: {
   customers: Customer[];
   trucks: Truck[];
@@ -43,6 +45,7 @@ export function RateConImport({
   drivers: DriverWithTruck[];
   formSettings?: LoadFormSettings;
   children?: ReactNode;
+  unitFacts?: AssignmentUnitFacts;
 }) {
   const [state, formAction, pending] = useActionState(parseRateConAction, null);
   const [localError, setLocalError] = useState("");
@@ -133,6 +136,7 @@ export function RateConImport({
           drivers={drivers}
           formSettings={formSettings}
           facilityMatches={"facilityMatches" in state ? state.facilityMatches : null}
+          unitFacts={unitFacts}
         />
       ) : (
         children
@@ -156,6 +160,7 @@ function RateConImportedLoad({
   drivers,
   formSettings,
   facilityMatches = null,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: {
   parsed: ParsedRateCon;
   inboxId: string;
@@ -171,6 +176,7 @@ function RateConImportedLoad({
   drivers: DriverWithTruck[];
   formSettings?: LoadFormSettings;
   facilityMatches?: { shipper: FacilityMatchPreview; consignee: FacilityMatchPreview } | null;
+  unitFacts?: AssignmentUnitFacts;
 }) {
   const [discarded, setDiscarded] = useState(false);
   const book = useRateConLocationBook(
@@ -226,6 +232,7 @@ function RateConImportedLoad({
         {...formSettings}
         action={createLoadAction}
         submitLabel="Confirm and save load"
+        unitFacts={unitFacts}
       />
       <div className="mt-3">
         <button className="btn btn-secondary" type="button" data-rate-con-discard="" onClick={() => setDiscarded(true)}>

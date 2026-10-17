@@ -164,6 +164,7 @@ function asLoadView(row: LoadView | undefined): LoadView | null {
     dispatch_ack_by: row.dispatch_ack_by || "",
     dispatch_ack_driver_id: row.dispatch_ack_driver_id ?? null,
     dispatch_ack_fingerprint: row.dispatch_ack_fingerprint || "",
+    driver_trailer_note: row.driver_trailer_note || "",
     samsara_route_id: row.samsara_route_id || "",
     samsara_route_status: row.samsara_route_status || "",
     samsara_route_eta: row.samsara_route_eta || "",

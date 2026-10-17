@@ -36,6 +36,7 @@ import { LoadOverlay } from "@/components/load-overlay";
 import { OverlayOpenLink } from "@/components/overlay-open-link";
 import { PageOverlayHost } from "@/components/page-overlay-host";
 import { RateConImport } from "@/components/rate-con-import";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { overlayHref, overlayReturnTo, parseOpenLoadId } from "@/lib/load-page-shared";
 import { canViewReports, canWrite, getSignedInDispatcher } from "@/lib/dispatcher-session";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
@@ -57,7 +58,9 @@ export default async function DashboardPage({
   const current = { kind: params.kind, q: params.q };
   const showReports = canViewReports(dispatcher.role);
   const stats = getDashboardStats();
-  const needsUnitAll = listLoads({ status: "active" }).filter((load) => !load.truck_id);
+  const activeLoads = listLoads({ status: "active" });
+  const needsUnitAll = activeLoads.filter((load) => !load.truck_id);
+  const driverTrailerFlags = activeLoads.filter((load) => load.driver_trailer_note.trim());
   const needsUnit = needsUnitAll.slice(0, 12);
   const moving = listMovingLoads();
   const movingRelayLabels = extraRelayLabelsByLoad(moving);
@@ -89,6 +92,25 @@ export default async function DashboardPage({
 
       <ExceptionInboxCard inbox={inbox} kind={params.kind} q={params.q} readOnly={!canWrite(dispatcher.role)} />
 
+      {driverTrailerFlags.length > 0 ? (
+        <section className="card mb-6 p-5" data-desk-trailer-flags="">
+          <h2 className="text-sm font-semibold">Driver trailer changes</h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {driverTrailerFlags.map((load) => (
+              <li key={load.id} data-desk-trailer-flag={load.load_number}>
+                <OverlayOpenLink
+                  href={overlayHref("/desk", load.id, current)}
+                  className="font-mono font-semibold text-slate-900 hover:underline"
+                >
+                  {load.load_number}
+                </OverlayOpenLink>
+                <span className="mt-1 block text-amber-950">{load.driver_trailer_note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <div className="mb-6" data-email-ingest="">
         <RateConImport
           customers={listCustomers()}
@@ -97,6 +119,7 @@ export default async function DashboardPage({
           locations={[]}
           drivers={drivers}
           formSettings={loadFormSettings()}
+          unitFacts={loadAssignmentUnitFacts()}
         />
       </div>
 

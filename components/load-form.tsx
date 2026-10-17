@@ -8,6 +8,7 @@ import { LoadCarrierScreen } from "@/components/load-carrier-screen";
 import { LoadCustomerScreen } from "@/components/load-customer-screen";
 import { LoadLaneFields } from "@/components/load-lane-fields";
 import { useLoadEdit } from "@/components/load-edit-context";
+import { EMPTY_ASSIGNMENT_UNIT_FACTS, type AssignmentUnitFacts } from "@/lib/driver-unit";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import type { LaneAverageSnapshot } from "@/lib/lane-average-shared";
 import { parsedStopHasDetails, type ParsedStop } from "@/lib/rate-con-shared";
@@ -43,6 +44,7 @@ type Props = {
   includeLane?: boolean;
   laneAverage?: LaneAverageSnapshot | null;
   laneMiles?: number | null;
+  unitFacts?: AssignmentUnitFacts;
 };
 
 export function LoadForm({
@@ -69,6 +71,7 @@ export function LoadForm({
   includeLane = false,
   laneAverage = null,
   laneMiles = null,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: Props) {
   const router = useRouter();
   const edit = useLoadEdit();
@@ -178,6 +181,7 @@ export function LoadForm({
           card={card}
           onExpiredChange={onExpiredChange}
           onDriverIdChange={onDriverIdChange}
+          unitFacts={unitFacts}
         />
       </div>
       {includeLane ? <LoadLaneFields load={load} defaults={extraDefaults} locations={locations} /> : null}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDismissable } from "@/components/use-dismissable";
 import { ComplianceList } from "@/components/compliance-badge";
+import { AssignmentUnitNote } from "@/components/assignment-unit-note";
 import { assignLoadAction } from "@/lib/actions";
 import {
   collectAssignmentAlerts,
@@ -12,6 +13,12 @@ import {
   trailerComplianceAlerts,
   truckComplianceAlerts,
 } from "@/lib/compliance";
+import {
+  driverUnitFromFacts,
+  EMPTY_ASSIGNMENT_UNIT_FACTS,
+  nextTruckSelection,
+  type AssignmentUnitFacts,
+} from "@/lib/driver-unit";
 import { DEFAULT_COMPLIANCE_WINDOWS, type ComplianceWindows } from "@/lib/settings-shared";
 import type { AssignSuggestion } from "@/lib/assign-suggestion-shared";
 import { fleetDivisionOf, isOwnerOperator, type DriverWithTruck, type Trailer, type Truck } from "@/lib/types";
@@ -31,6 +38,7 @@ type Props = {
   triggerClassName?: string;
   suggestions?: AssignSuggestion[];
   readOnly?: boolean;
+  unitFacts?: AssignmentUnitFacts;
 };
 
 export function AssignDialog({
@@ -48,6 +56,7 @@ export function AssignDialog({
   triggerClassName = "btn btn-secondary",
   suggestions = [],
   readOnly = false,
+  unitFacts = EMPTY_ASSIGNMENT_UNIT_FACTS,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +66,7 @@ export function AssignDialog({
   const [driverId, setDriverId] = useState("");
   const [ooPercent, setOoPercent] = useState(String(defaultOoPercent));
   const [confirmed, setConfirmed] = useState(false);
+  const [truckExplicit, setTruckExplicit] = useState(false);
   const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLFormElement>(null);
   useDismissable(open, () => setOpen(false), panelRef);
@@ -71,6 +81,7 @@ export function AssignDialog({
     setConfirmed(false);
     setDriverId(currentDriverId ? String(currentDriverId) : "");
     setTruckId(currentTruckId ? String(currentTruckId) : "");
+    setTruckExplicit(Boolean(currentTruckId));
     setTrailerId(currentTrailerId ? String(currentTrailerId) : "");
     const current = drivers.find((item) => item.id === currentDriverId);
     setOoPercent(String(current?.pay_percent ?? defaultOoPercent));
@@ -94,15 +105,23 @@ export function AssignDialog({
   );
   const expired = alerts.some((alert) => alert.severity === "expired");
 
-  function onDriverChange(value: string) {
+  function onDriverChange(value: string, options?: { keepTruck?: boolean }) {
     setDriverId(value);
     setConfirmed(false);
     const next = drivers.find((item) => String(item.id) === value);
     if (next && isOwnerOperator(next.driver_type)) {
       setOoPercent(String(next.pay_percent ?? defaultOoPercent));
     }
-    if (next?.truck_id && trucks.some((item) => item.id === next.truck_id)) {
-      setTruckId(String(next.truck_id));
+    if (!options?.keepTruck) {
+      const usual = driverUnitFromFacts(unitFacts, next);
+      setTruckId(
+        nextTruckSelection({
+          truckExplicit,
+          currentTruckId: truckId,
+          usualTruckId: usual?.truckId ?? null,
+          usualListed: usual != null && trucks.some((item) => item.id === usual.truckId),
+        }),
+      );
     }
     if (next?.last_trailer_id && trailers.some((item) => item.id === next.last_trailer_id)) {
       setTrailerId(String(next.last_trailer_id));
@@ -113,8 +132,9 @@ export function AssignDialog({
     if (readOnly || !suggestion.selectable) return;
     setConfirmed(false);
     setError(null);
+    setTruckExplicit(true);
     if (suggestion.driverId && drivers.some((item) => item.id === suggestion.driverId)) {
-      onDriverChange(String(suggestion.driverId));
+      onDriverChange(String(suggestion.driverId), { keepTruck: true });
     }
     if (trucks.some((item) => item.id === suggestion.truckId)) {
       setTruckId(String(suggestion.truckId));
@@ -171,6 +191,7 @@ export function AssignDialog({
           </button>
         </div>
         <input type="hidden" name="load_id" value={loadId} />
+        {truckExplicit ? <input type="hidden" name="truck_explicit" value="1" /> : null}
         {confirmed ? <input type="hidden" name="confirm_expired" value="1" /> : null}
         <SuggestionList
           loadId={loadId}
@@ -200,7 +221,7 @@ export function AssignDialog({
                   {item.name}
                   {` · ${fleetDivisionOf(item)}`}
                   {isOwnerOperator(item.driver_type) ? " · OO" : ""}
-                  {item.truck_unit ? ` · unit ${item.truck_unit}` : ""}
+                  {driverUnitLabel(item, unitFacts)}
                   {driverOptionNote(item, alertWindows)}
                 </option>
               ))}
@@ -216,8 +237,10 @@ export function AssignDialog({
               aria-disabled={readOnly || undefined}
               title={readOnly ? "View-only access" : undefined}
               value={truckId}
+              aria-describedby={truckId ? `assign-unit-note-${loadId}` : undefined}
               onChange={(event) => {
                 setTruckId(event.target.value);
+                setTruckExplicit(true);
                 setConfirmed(false);
               }}
             >
@@ -272,6 +295,14 @@ export function AssignDialog({
               />
             </div>
           ) : null}
+          <AssignmentUnitNote
+            id={`assign-unit-note-${loadId}`}
+            facts={unitFacts}
+            driver={driver ?? null}
+            truckId={truckId}
+            trucks={trucks}
+            thisLoadId={loadId}
+          />
           {alerts.length > 0 ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
               <ComplianceList alerts={alerts} />
@@ -396,6 +427,11 @@ function SuggestionList({
       )}
     </section>
   );
+}
+
+function driverUnitLabel(driver: DriverWithTruck, facts: AssignmentUnitFacts): string {
+  const unit = driverUnitFromFacts(facts, driver)?.unitNumber || driver.truck_unit || "";
+  return unit ? ` · unit ${unit}` : "";
 }
 
 function driverOptionNote(driver: DriverWithTruck, windows: ComplianceWindows): string {

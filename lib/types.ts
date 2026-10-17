@@ -587,6 +587,8 @@ export type Load = {
   dispatch_ack_by: string;
   dispatch_ack_driver_id: number | null;
   dispatch_ack_fingerprint: string;
+  /** Office note after a driver picks a different trailer. Empty until they do. */
+  driver_trailer_note: string;
   created_at: string;
   updated_at: string;
 };

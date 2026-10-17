@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { RateConImport } from "@/components/rate-con-import";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { listCustomers, listDrivers, listTrailers, listTrucks } from "@/lib/queries";
 import { loadFormSettings } from "@/lib/settings";
 
@@ -30,6 +31,7 @@ export default async function ImportRateConPage() {
         locations={[]}
         drivers={listDrivers()}
         formSettings={loadFormSettings()}
+        unitFacts={loadAssignmentUnitFacts()}
       />
     </>
   );

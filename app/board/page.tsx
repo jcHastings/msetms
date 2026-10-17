@@ -52,6 +52,7 @@ import {
 } from "@/lib/queries";
 import { ALL_LOADS_PAGE_SIZE, ARCHIVED_EMPTY_HINT } from "@/lib/working-loads-shared";
 import { suggestAssignmentsForBoard } from "@/lib/assign-suggestions";
+import { loadAssignmentUnitFacts } from "@/lib/driver-unit-db";
 import { extraRelayLabelsByLoad } from "@/lib/relay-store";
 import { listFiltersForBoardStatus, loadShowsOnDispatchBoard } from "@/lib/load-list-shared";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
@@ -97,6 +98,7 @@ export default async function BoardPage({
   const assignableTrucks = listAssignableTrucks();
   const assignableTrailers = listAssignableTrailers();
   const assignableDrivers = listAssignableDrivers();
+  const unitFacts = loadAssignmentUnitFacts();
   const relayLabels = extraRelayLabelsByLoad(loads);
   const write = canWrite(dispatcher.role);
 
@@ -140,6 +142,7 @@ export default async function BoardPage({
             assignableTrailers={assignableTrailers}
             assignableDrivers={assignableDrivers}
             relayLabels={relayLabels}
+            unitFacts={unitFacts}
             write={write}
             archivedHint={status === "all" && !includeArchived}
           />
@@ -163,6 +166,7 @@ function BoardAssignDialog({
   suggestions,
   readOnly = false,
   triggerClassName,
+  unitFacts,
 }: {
   load: ReturnType<typeof listLoads>[number];
   trucks: ReturnType<typeof listAssignableTrucks>;
@@ -173,6 +177,7 @@ function BoardAssignDialog({
   suggestions: AssignSuggestion[];
   readOnly?: boolean;
   triggerClassName?: string;
+  unitFacts: ReturnType<typeof loadAssignmentUnitFacts>;
 }) {
   return (
     <AssignDialog
@@ -190,6 +195,7 @@ function BoardAssignDialog({
       suggestions={suggestions}
       readOnly={readOnly}
       triggerClassName={triggerClassName}
+      unitFacts={unitFacts}
     />
   );
 }
@@ -224,6 +230,7 @@ async function BoardLiveSection({
   assignableTrailers,
   assignableDrivers,
   relayLabels,
+  unitFacts,
   write,
   archivedHint = false,
 }: {
@@ -233,6 +240,7 @@ async function BoardLiveSection({
   assignableTrailers: ReturnType<typeof listAssignableTrailers>;
   assignableDrivers: ReturnType<typeof listAssignableDrivers>;
   relayLabels: ReturnType<typeof extraRelayLabelsByLoad>;
+  unitFacts: ReturnType<typeof loadAssignmentUnitFacts>;
   write: boolean;
   archivedHint?: boolean;
 }) {
@@ -352,6 +360,16 @@ async function BoardLiveSection({
                           {lateByLoad.get(load.id)?.label}
                         </span>
                       ) : null}
+                      {load.driver_trailer_note ? (
+                        <span
+                          className="status-pill status-tone-warning mt-1"
+                          data-driver-trailer-flag=""
+                          title={load.driver_trailer_note}
+                        >
+                          Trailer change
+                          <span className="sr-only">. {load.driver_trailer_note}</span>
+                        </span>
+                      ) : null}
                       <DispatchAckStatus ack={presentDispatchAck(load, ackRules)} compact />
                     </td>
                     <BoardWhenCell kind="pickup" start={load.pickup_start} end={load.pickup_end} />
@@ -446,6 +464,7 @@ async function BoardLiveSection({
                                     windows={windows}
                                     suggestions={suggestions.get(load.id) ?? []}
                                     triggerClassName="menu-item w-full text-left"
+                                    unitFacts={unitFacts}
                                   />
                                 ) : null
                               }
@@ -460,6 +479,7 @@ async function BoardLiveSection({
                                 windows={windows}
                                 suggestions={suggestions.get(load.id) ?? []}
                                 readOnly={!write}
+                                unitFacts={unitFacts}
                               />
                             ) : null}
                             <OverlayOpenLink href={overlayHref("/board", load.id, current)} className="desk-link text-sm">

@@ -77,6 +77,8 @@ import {
   setSwapLegMiles,
 } from "./load-swap";
 import { refreshRelayLegMilesQuiet } from "./relay-routing";
+import { fillRelayAssignmentTrucks } from "./driver-unit-db";
+import { formRequestsExplicitTruck } from "./driver-unit";
 import { addRelay, deleteRelay, getRelay, moveRelay, updateRelay, updateRelayAssignment } from "./relay-store";
 import type { RelayAssignmentPatch } from "./relays";
 import { refreshLoadRoute, refreshLoadRouteQuiet, saveManualRouteMiles } from "./routing";
@@ -430,7 +432,16 @@ export async function updateRelayAssignmentAction(formData: FormData): Promise<A
       await requireLoadEditor();
       const id = parseOptionalInt(formData.get("relay_id"));
       if (!id) throw new Error("Relay is missing.");
-      updateRelayAssignment(id, parseAssignmentPatch(formData));
+      const existingRelay = getRelay(id);
+      if (!existingRelay) throw new Error("Relay is missing.");
+      updateRelayAssignment(
+        id,
+        fillRelayAssignmentTrucks(
+          existingRelay,
+          parseAssignmentPatch(formData),
+          formRequestsExplicitTruck(formData.get("truck_explicit")),
+        ),
+      );
       const relay = getRelay(id);
       if (relay) {
         const { mirrorSamsaraRouteQuiet } = await import("./integrations/samsara-routes");

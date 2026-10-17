@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { driverLogoutAction } from "@/lib/driver-actions";
 import { getSignedInDriver } from "@/lib/driver-session";
@@ -25,6 +26,8 @@ export default async function DriverHomePage() {
     (load) => (load.status === "delivered" || load.status === "completed") && !isArchivedLoad(load, cutoff),
   );
   const hos = hosForDriver(readStoredSamsaraFleet(), driver.id);
+  const current = pickDriverDestinationLoad(active, delivered);
+  const currentActive = current && isActiveLoadStatus(current.status) ? current : null;
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-16 pt-6">
@@ -67,8 +70,25 @@ export default async function DriverHomePage() {
           </section>
         ))}
 
+      {currentActive ? (
+        <section className="mb-4 rounded-2xl bg-slate-900 p-4 ring-1 ring-white/10" data-driver-current-trailer="">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Trailer</div>
+          <p className="mt-1 text-2xl font-semibold text-white">
+            {currentActive.trailer_unit || currentActive.trailer_number || "None yet"}
+          </p>
+          <p className="mt-1 font-mono text-sm text-slate-400">{currentActive.load_number}</p>
+          <Link
+            href={`/driver/loads/${currentActive.id}/trailer/change`}
+            className="btn btn-primary mt-3 w-full"
+            style={{ minHeight: "3.5rem", fontSize: "1.0625rem" }}
+            data-change-trailer=""
+          >
+            Change trailer
+          </Link>
+        </section>
+      ) : null}
+
       {(() => {
-        const current = pickDriverDestinationLoad(active, delivered);
         const loadHref = current ? `/driver/loads/${current.id}` : "";
         const trailerHref = driverTrailerPageHref(current);
         const items = [
