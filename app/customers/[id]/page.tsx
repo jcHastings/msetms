@@ -2,19 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CustomerContractsPanel } from "@/components/customer-contracts-panel";
+import { CustomerMergePanel } from "@/components/customer-merge-panel";
 import { deskMetadata } from "@/lib/desk-metadata";
 import { CustomerForm } from "@/components/customer-form";
 import { DeleteCustomerForm } from "@/components/delete-customer-form";
 import { PageHeader } from "@/components/page-header";
 import { updateCustomerAction } from "@/lib/actions";
+import { listOpenMergesTouching } from "@/lib/customer-merge";
 import {
   listCustomerContracts,
   listCustomerRequirements,
   readCustomerDetentionTerms,
 } from "@/lib/customer-contracts";
 import { getSignedInDispatcher } from "@/lib/dispatcher-session";
-import { countLoadsForCustomer, CUSTOMER_HAS_LOADS_DELETE, getCustomer } from "@/lib/queries";
-import { canEditLoads } from "@/lib/settings-shared";
+import { countLoadsForCustomer, CUSTOMER_HAS_LOADS_DELETE, getCustomer, listCustomers } from "@/lib/queries";
+import { canEditLoads, isAdminRole } from "@/lib/settings-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -36,18 +38,44 @@ export default async function EditCustomerPage({
   const boundAction = updateCustomerAction.bind(null, customer.id);
   const dispatcher = await getSignedInDispatcher();
   const canManage = canEditLoads(dispatcher?.role ?? "");
+  const admin = isAdminRole(dispatcher?.role ?? "");
   const hasLoads = countLoadsForCustomer(customer.id) > 0;
+  const keeper = customer.merged_into ? getCustomer(customer.merged_into) : null;
+  const identity = [customer.mc_number ? `MC ${customer.mc_number}` : "", customer.dot_number ? `DOT ${customer.dot_number}` : ""]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <>
       <PageHeader
         title={customer.name}
+        subtitle={identity || undefined}
         actions={
           <Link href="/customers" className="btn btn-secondary">
             Back to customers
           </Link>
         }
       />
+      {customer.archived_at ? (
+        <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-customer-archived="">
+          This customer was merged
+          {keeper ? (
+            <>
+              {" "}
+              into{" "}
+              <Link href={`/customers/${keeper.id}`} className="font-semibold underline">
+                {keeper.name}
+              </Link>
+            </>
+          ) : null}
+          . The record is archived.
+        </p>
+      ) : null}
+      {customer.alias_names?.length ? (
+        <p className="mb-4 text-sm text-slate-600" data-customer-aliases="">
+          Also known as {customer.alias_names.join(", ")}.
+        </p>
+      ) : null}
       <nav className="mb-6 flex gap-6 text-base">
         <Link
           href={`/customers/${customer.id}`}
@@ -74,6 +102,21 @@ export default async function EditCustomerPage({
       ) : (
       <CustomerForm customer={customer} action={boundAction} submitLabel="Save customer" />
       )}
+      {admin && tab === "profile" ? (
+        <CustomerMergePanel
+          keeper={{ id: customer.id, name: customer.name }}
+          canPick={!customer.archived_at}
+          candidates={listCustomers()
+            .filter((row) => row.id !== customer.id)
+            .map((row) => ({ id: row.id, name: row.name, mc_number: row.mc_number ?? "" }))}
+          merges={listOpenMergesTouching(customer.id).map((merge) => ({
+            id: merge.id,
+            keeperId: merge.keeperId,
+            loserIds: merge.loserIds,
+            createdAt: merge.createdAt,
+          }))}
+        />
+      ) : null}
       {canManage && tab === "profile" ? (
         <section className="card mt-4 p-6">
           <h2 className="text-sm font-semibold">Delete customer</h2>

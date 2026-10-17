@@ -33,7 +33,19 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
 
   return (
     <form action={formAction} className="card space-y-6 p-6">
-      <FormBanner result={state} />
+      {state && !state.ok && state.duplicate ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status" data-customer-mc-warning="">
+          {state.error}
+        </div>
+      ) : (
+        <FormBanner result={state} />
+      )}
+      {state && !state.ok && state.duplicate ? (
+        <>
+          <input type="hidden" name="confirm_duplicate_mc" value="1" />
+          <input type="hidden" name="confirm_duplicate_mc_value" value={state.duplicateMc ?? ""} />
+        </>
+      ) : null}
       <input type="hidden" name="contacts" value={JSON.stringify(contacts)} />
       <div className="grid gap-4 md:grid-cols-2">
         <div className="field md:col-span-2">
@@ -71,6 +83,22 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
             defaultValue={customer?.billing_notes}
             placeholder="Terms, special billing instructions"
           />
+        </div>
+        <div className="field">
+          <label htmlFor="mc_number">MC number</label>
+          <input
+            id="mc_number"
+            name="mc_number"
+            defaultValue={customer?.mc_number ?? ""}
+            data-customer-mc=""
+            autoComplete="off"
+          />
+          <p className="text-xs text-slate-600">Optional. A duplicate warns before the save sticks.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="dot_number">DOT number</label>
+          <input id="dot_number" name="dot_number" defaultValue={customer?.dot_number ?? ""} autoComplete="off" />
+          <p className="text-xs text-slate-600">Optional.</p>
         </div>
         <div className="field">
           <label htmlFor="payment_terms">Payment terms</label>
@@ -143,7 +171,7 @@ export function CustomerForm({ customer, action, submitLabel }: Props) {
       </div>
       <div className="flex justify-end">
         <button className="btn btn-primary" type="submit" disabled={pending}>
-          {pending ? "Saving…" : submitLabel}
+          {pending ? "Saving…" : state && !state.ok && state.duplicate ? "Save anyway" : submitLabel}
         </button>
       </div>
     </form>

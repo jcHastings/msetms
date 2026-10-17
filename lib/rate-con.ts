@@ -1,3 +1,4 @@
+import { listCustomerAliasRefs } from "./customer-alias";
 import { extractText } from "unpdf";
 import { fromInputDateTime, toInputDateTime } from "./format";
 import {
@@ -126,7 +127,7 @@ export function parseRateConText(rawText: string, customers: Customer[] = [], fi
     ascend.customer_name,
     printed.customer_name,
   ]);
-  const matched = matchCustomerName(customerName, customers, text);
+  const matched = matchCustomerName(customerName, customers, text, listCustomerAliasRefs());
 
   const special = stripLegalBoilerplate(
     section(text, /special instructions?/i) ||

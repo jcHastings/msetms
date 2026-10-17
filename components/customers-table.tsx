@@ -53,7 +53,7 @@ export function CustomersTable({
             id="customers-q"
             name="q"
             defaultValue={q}
-            placeholder="Name, contact, phone, email, or terms"
+            placeholder="Name, MC, contact, phone, email, or terms"
           />
         </div>
         <button className="btn btn-secondary" type="submit">
@@ -106,6 +106,9 @@ export function CustomersTable({
                       {customer.payment_terms ? ` · ${customer.payment_terms}` : ""}
                       {customer.credit_hold ? " · credit hold" : ""}
                     </div>
+                    {customer.mc_number ? (
+                      <div className="mt-1 text-xs text-slate-600">MC {customer.mc_number}</div>
+                    ) : null}
                     <div className="mt-1 text-xs text-slate-600">
                       {customer.primary ? (
                         <>

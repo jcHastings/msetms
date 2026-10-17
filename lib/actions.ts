@@ -1,5 +1,6 @@
 "use server";
 
+import { duplicateMcMessage, normalizeMcNumber } from "./customer-name";
 import { saveFacilityInfoFromForm } from "./location-facility";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -14,6 +15,7 @@ import { addPayItem, deletePayItem } from "./pay-items";
 import {
   assignLoad,
   createCustomer,
+  findCustomersWithSameMc,
   createDriver,
   createLoad,
   addLocationAlias,
@@ -243,12 +245,34 @@ function parseTruckStatus(value: FormDataEntryValue | null): TruckStatus {
   return status as TruckStatus;
 }
 
+function duplicateMcResult(mc: string, exceptId: number | undefined, formData: FormData): ActionResult | null {
+  const matches = findCustomersWithSameMc(mc, exceptId);
+  if (!matches.length) return null;
+  const confirmed = String(formData.get("confirm_duplicate_mc") ?? "") === "1";
+  const confirmedValue = String(formData.get("confirm_duplicate_mc_value") ?? "");
+  if (confirmed && normalizeMcNumber(confirmedValue) === normalizeMcNumber(mc)) return null;
+  return {
+    ok: false,
+    error: duplicateMcMessage(
+      matches.map((row) => row.name),
+      mc,
+    ),
+    duplicate: true,
+    duplicateMc: mc,
+    existingId: matches[0]?.id,
+    existingName: matches[0]?.name,
+  };
+}
+
 export async function createCustomerAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await requireLoadEditor();
+    const mcNumber = String(formData.get("mc_number") ?? "").trim();
+    const duplicate = duplicateMcResult(mcNumber, undefined, formData);
+    if (duplicate) return duplicate;
     const id = createCustomer({
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -256,6 +280,8 @@ export async function createCustomerAction(
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
       main_email: String(formData.get("main_email") ?? "").trim(),
       billing_email: String(formData.get("billing_email") ?? "").trim(),
+      mc_number: mcNumber,
+      dot_number: String(formData.get("dot_number") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();
@@ -273,6 +299,9 @@ export async function updateCustomerAction(
 ): Promise<ActionResult> {
   try {
     await requireLoadEditor();
+    const mcNumber = String(formData.get("mc_number") ?? "").trim();
+    const duplicate = duplicateMcResult(mcNumber, id, formData);
+    if (duplicate) return duplicate;
     updateCustomer(id, {
       name: requiredString(formData.get("name"), "Customer name"),
       billing_notes: String(formData.get("billing_notes") ?? "").trim(),
@@ -280,6 +309,8 @@ export async function updateCustomerAction(
       payment_terms: String(formData.get("payment_terms") ?? "").trim(),
       main_email: String(formData.get("main_email") ?? "").trim(),
       billing_email: String(formData.get("billing_email") ?? "").trim(),
+      mc_number: mcNumber,
+      dot_number: String(formData.get("dot_number") ?? "").trim(),
       contacts: parseContacts(formData),
     });
     refresh();

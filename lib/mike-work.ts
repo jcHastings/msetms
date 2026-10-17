@@ -5,7 +5,8 @@ import { listAttachments, updateAttachmentKind } from "./files";
 import { formatLoadSummary } from "./load-summary";
 import { placeholderLane } from "./load-page-shared";
 import { MIKE_MISSING_KEY_MESSAGE, type MikeProposal, type MikeProposalKind } from "./mike-shared";
-import { createLoad, getLoad, listCustomers, listLoads, updateLoadStatus } from "./queries";
+import { resolveLiveCustomerId } from "./customer-alias";
+import { createLoad, getLoad, listLoads, updateLoadStatus } from "./queries";
 import { decodeTieSheetDraft, saveTieSheetDraft } from "./tie-sheet";
 import { formatRelayLane } from "./relays";
 import { relayForDriver } from "./relay-store";
@@ -161,13 +162,11 @@ export function applyMikeProposal(payload: Record<string, string>, kind: MikePro
   }
   if (kind === "start_ratecon") {
     const customerName = (payload.customer_name || "").trim();
-    const customer = listCustomers().find(
-      (item) => customerName && item.name.toLowerCase() === customerName.toLowerCase(),
-    );
-    if (customer) {
+    const customerId = customerName ? resolveLiveCustomerId(customerName) : null;
+    if (customerId) {
       const lane = placeholderLane();
       const id = createLoad({
-        customer_id: customer.id,
+        customer_id: customerId,
         origin: payload.origin.trim() || lane.origin,
         destination: payload.destination.trim() || lane.destination,
         pickup_start: lane.pickup_start,

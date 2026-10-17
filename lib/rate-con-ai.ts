@@ -1,3 +1,4 @@
+import { listCustomerAliasRefs } from "./customer-alias";
 import { fromInputDateTime, toInputDateTime } from "./format";
 import { getOpenAiApiKey, getOpenAiBaseUrl, isOpenAiConfigured, loadRuntimeEnv, MIKE_OPENAI_MODEL } from "./env";
 import {
@@ -286,7 +287,7 @@ export function applyAiRateCon(
   ]);
   const customerConfidence = asConfidence(draft.customer_confidence);
   const useCustomer = Boolean(customerName) && customerConfidence !== "low";
-  const customerId = useCustomer ? matchCustomerName(customerName, customers, raw) : null;
+  const customerId = useCustomer ? matchCustomerName(customerName, customers, raw, listCustomerAliasRefs()) : null;
 
   const rateConfidence = asConfidence(draft.rate_confidence);
   const rate = rateConfidence === "low" ? null : parseOptionalNumber(draft.rate);

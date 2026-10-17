@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { recordLoadAudit, recordLoadChanges } from "./audit";
+import { resolveLiveCustomerId } from "./customer-alias";
 import { getDb } from "./db";
 import { guardFreeLoadNumber, LoadNumberCollision, reserveNumericLoadNumber } from "./load-numbers";
 import {
@@ -1470,8 +1471,13 @@ function ensureCustomer(name: string, customers: Array<{ id: number; name: strin
     customers.push({ id, name: "Imported customer" });
     return id;
   }
-  const match = customers.find((customer) => customer.name.trim().toLowerCase() === wanted.toLowerCase());
-  if (match) return match.id;
+  const resolved = resolveLiveCustomerId(wanted);
+  if (resolved) {
+    if (!customers.some((customer) => customer.id === resolved)) {
+      customers.push({ id: resolved, name: wanted });
+    }
+    return resolved;
+  }
   const id = createCustomer({ name: wanted, billing_notes: "", contacts: [] });
   customers.push({ id, name: wanted });
   return id;

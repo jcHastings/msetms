@@ -9,6 +9,8 @@
  * should call. This module does not send anything.
  */
 
+import { aliasCustomerId } from "./customer-name";
+
 export const DETENTION_TERMS_MISSING = "Missing, enter from rate con";
 
 export const CONTRACT_SOURCES = [
@@ -400,7 +402,15 @@ export function customerSlug(name: string): string {
 
 export type CustomerName = { id: number; name: string };
 
-export function matchCustomerByName(label: string, customers: CustomerName[]): CustomerName | null {
+export function matchCustomerByName(
+  label: string,
+  customers: CustomerName[],
+  aliases: Array<{ customerId: number; name: string; normalized: string }> = [],
+): CustomerName | null {
+  const aliasId = aliasCustomerId(label, aliases);
+  if (aliasId != null) {
+    return customers.find((customer) => customer.id === aliasId) ?? { id: aliasId, name: label.trim() };
+  }
   const needle = label.trim().toLowerCase();
   const slug = customerSlug(label);
   if (!needle && !slug) return null;

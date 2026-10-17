@@ -1,3 +1,4 @@
+import { aliasCustomerId, type CustomerAliasRef } from "./customer-name";
 import { resolveLocation, type LocationResolveRow } from "./location-resolve";
 import { isArchivedLocation, locationMatchesRole } from "./locations";
 import type { Customer, Location } from "./types";
@@ -192,10 +193,17 @@ export function normalizePartyName(name: string): string {
     .trim();
 }
 
-export function matchCustomerName(name: string, customers: Customer[], sourceText = ""): number | null {
+export function matchCustomerName(
+  name: string,
+  customers: Customer[],
+  sourceText = "",
+  aliases: CustomerAliasRef[] = [],
+): number | null {
   if (!name) return null;
   const needle = normalizePartyName(name);
   if (!needle || isOwnPaperworkName(name, sourceText)) return null;
+  const aliasId = aliasCustomerId(name, aliases);
+  if (aliasId != null) return aliasId;
   const exact = customers.find((customer) => normalizePartyName(customer.name) === needle);
   if (exact) return exact.id;
   const partial = customers.find((customer) => {
