@@ -218,10 +218,12 @@ async function main() {
   assert.equal(queries.getLoad(demoId)!.invoice_paid_amount, 0);
   assert.equal(queries.getLoad(demoId)!.invoice_paid, 0);
   assert.ok(unmatched.unmatchedInvoiceIds.includes("inv-demo"));
-  assert.ok(unmatched.unmatchedInvoiceIds.includes("inv-missing"));
+  assert.equal(unmatched.unmatchedInvoiceIds.includes("inv-missing"), false);
+  assert.ok(unmatched.outsideInvoiceIds.includes("inv-missing"));
   const inbox = listExceptionInbox().items.filter((item) => item.kind === "qbo_payment");
-  assert.ok(inbox.some((item) => item.detail.includes("inv-missing")));
+  assert.equal(inbox.some((item) => item.detail.includes("inv-missing")), false);
   assert.ok(inbox.some((item) => item.detail.includes("inv-demo")));
+  assert.ok(payments.listOutsideQboPayments().some((row) => row.qboInvoiceId === "inv-missing" && row.suggestedLoadId == null));
   assert.equal(queries.getLoad(dupA)!.invoice_paid_amount, 0);
   payments.applyQboPayment(
     payment({
@@ -535,13 +537,193 @@ async function main() {
   const feed = fs.readFileSync(path.join(process.cwd(), "lib/feed-refresh.ts"), "utf8");
   assert.match(feed, /syncQboPaymentsFromCdc/);
   const reader = fs.readFileSync(path.join(process.cwd(), "lib/integrations/quickbooks.ts"), "utf8");
+  const docRead = reader.slice(
+    reader.indexOf("export async function readQboInvoiceDocNumber"),
+    reader.indexOf("export async function readQboPayment"),
+  );
+  assert.match(docRead, /invoice read/);
+  assert.match(docRead, /qboGet/);
+  assert.doesNotMatch(docRead, /method:\s*"POST"|method:\s*"PUT"|qboPost/);
   const paymentRead = reader.slice(reader.indexOf("export async function readQboPayment"), reader.indexOf("export async function readQboPaymentCdc"));
   assert.match(paymentRead, /payment read/);
   assert.doesNotMatch(paymentRead, /method:\s*"POST"|method:\s*"PUT"/);
+  const outsideUi = fs.readFileSync(path.join(process.cwd(), "components/qbo-outside-payments.tsx"), "utf8");
+  assert.match(outsideUi, /QuickBooks payments/);
+  assert.match(outsideUi, /outside invoice/);
+  assert.match(outsideUi, /confirm before marking paid/);
+  const qboPage = fs.readFileSync(path.join(process.cwd(), "app/accounting/quickbooks/page.tsx"), "utf8");
+  assert.match(qboPage, /QboOutsidePayments/);
+  const invoicesUi = fs.readFileSync(path.join(process.cwd(), "components/accounting-hub.tsx"), "utf8");
+  assert.match(invoicesUi, /outsidePaymentSuggestionLines/);
   const checklist = fs.readFileSync(path.join(process.cwd(), "docs/intuit-production-checklist.md"), "utf8");
   const privacy = fs.readFileSync(path.join(process.cwd(), "docs/privacy-and-terms.md"), "utf8");
   assert.match(checklist, /webhook/);
   assert.match(privacy, /webhook/);
+
+  function bareLoad(number: string, rate: number): number {
+    const id = queries.createLoad({
+      customer_id: customerId,
+      origin: "Hastings, NE",
+      destination: "Omaha, NE",
+      pickup_start: day,
+      pickup_end: day,
+      delivery_start: day,
+      delivery_end: day,
+      weight: 1000,
+      commodity: "Frozen beef",
+      rate,
+      notes: "",
+      special_instructions: "",
+      appointment_notes: "",
+      reference_number: "",
+      po_number: "",
+      reefer_setpoint_f: null,
+      trailer_number: "",
+      status: "available",
+      truck_id: null,
+      driver_id: null,
+      trailer_id: null,
+      load_number: number,
+      oo_pay: null,
+    } as Parameters<typeof queries.createLoad>[0]);
+    db.prepare("UPDATE loads SET status = 'accounting', accounting_desk = 'accounting' WHERE id = ?").run(id);
+    return id;
+  }
+  function cardFor(invoiceId: string): boolean {
+    return listExceptionInbox().items.some(
+      (item) => item.kind === "qbo_payment" && item.detail.includes(invoiceId),
+    );
+  }
+
+  const outsideId = bareLoad("OUT4401", 410);
+  const outsidePay = payments.applyQboPayment(
+    payment({
+      id: "501",
+      totalAmt: 410,
+      lines: [{ invoiceId: "inv-out-4401", amount: 410 }],
+    }),
+    { "inv-out-4401": "NO-SUCH-LOAD" },
+  );
+  assert.deepEqual(outsidePay.loadIds, []);
+  assert.deepEqual(outsidePay.suggestedLoadIds, []);
+  assert.deepEqual(outsidePay.outsideInvoiceIds, ["inv-out-4401"]);
+  assert.equal(outsidePay.notified, false);
+  assert.equal(cardFor("inv-out-4401"), false);
+  assert.equal(queries.getLoad(outsideId)!.invoice_paid, 0);
+  assert.equal(queries.getLoad(outsideId)!.invoice_paid_amount, 0);
+  const outsideRow = payments.listOutsideQboPayments().find((row) => row.qboInvoiceId === "inv-out-4401");
+  assert.ok(outsideRow);
+  assert.equal(outsideRow?.suggestedLoadId, null);
+  assert.equal(outsideRow?.docNumber, "NO-SUCH-LOAD");
+
+  const singleId = bareLoad("OUT4402", 275);
+  const singlePay = payments.applyQboPayment(
+    payment({
+      id: "502",
+      totalAmt: 275,
+      lines: [{ invoiceId: "inv-doc-4402", amount: 275 }],
+    }),
+    { "inv-doc-4402": "  OUT4402  " },
+  );
+  assert.deepEqual(singlePay.suggestedLoadIds, [singleId]);
+  assert.deepEqual(singlePay.outsideInvoiceIds, ["inv-doc-4402"]);
+  assert.equal(cardFor("inv-doc-4402"), false);
+  assert.equal(appliedSum("502"), 0);
+  const singleLoad = queries.getLoad(singleId)!;
+  assert.equal(singleLoad.invoice_paid, 0);
+  assert.equal(singleLoad.invoice_paid_amount, 0);
+  assert.equal(singleLoad.qbo_payment_id, "");
+  const singleRow = payments.listOutsideQboPayments().find((row) => row.qboInvoiceId === "inv-doc-4402");
+  assert.equal(singleRow?.suggestedLoadId, singleId);
+  assert.equal(singleRow?.suggestedLoadNumber.trim(), "OUT4402");
+  const suggestion = payments.outsidePaymentSuggestionLines().get(singleId) ?? "";
+  assert.match(suggestion, /Suggested QuickBooks payment 502/);
+  assert.match(suggestion, /Confirm before marking paid/);
+  assert.doesNotMatch(suggestion, /Paid/);
+
+  const twinA = bareLoad("OUT4403", 180);
+  const twinB = bareLoad("OUT4403B", 180);
+  db.prepare("UPDATE loads SET load_number = ? WHERE id = ?").run("OUT4403 ", twinB);
+  const doublePay = payments.applyQboPayment(
+    payment({
+      id: "503",
+      totalAmt: 180,
+      lines: [{ invoiceId: "inv-doc-4403", amount: 180 }],
+    }),
+    { "inv-doc-4403": "OUT4403" },
+  );
+  assert.deepEqual(doublePay.suggestedLoadIds, []);
+  assert.deepEqual(doublePay.outsideInvoiceIds, ["inv-doc-4403"]);
+  assert.equal(cardFor("inv-doc-4403"), false);
+  assert.equal(queries.getLoad(twinA)!.invoice_paid, 0);
+  assert.equal(queries.getLoad(twinB)!.invoice_paid, 0);
+  assert.equal(queries.getLoad(twinA)!.qbo_payment_id, "");
+  assert.equal(queries.getLoad(twinB)!.qbo_payment_id, "");
+  const doubleRow = payments.listOutsideQboPayments().find((row) => row.qboInvoiceId === "inv-doc-4403");
+  assert.equal(doubleRow?.suggestedLoadId, null);
+
+  const tmsFailId = makeLoad("OUT4404", 300, "inv-tms-fail", "demo");
+  const tmsFail = payments.applyQboPayment(
+    payment({
+      id: "504",
+      totalAmt: 300,
+      lines: [{ invoiceId: "inv-tms-fail", amount: 300 }],
+    }),
+    { "inv-tms-fail": "OUT4404" },
+  );
+  assert.ok(tmsFail.unmatchedInvoiceIds.includes("inv-tms-fail"));
+  assert.equal(tmsFail.outsideInvoiceIds.includes("inv-tms-fail"), false);
+  assert.deepEqual(tmsFail.suggestedLoadIds, []);
+  assert.equal(cardFor("inv-tms-fail"), true);
+  assert.equal(queries.getLoad(tmsFailId)!.invoice_paid, 0);
+  assert.equal(queries.getLoad(tmsFailId)!.invoice_paid_amount, 0);
+  assert.equal(
+    payments.listOutsideQboPayments().some((row) => row.qboInvoiceId === "inv-tms-fail"),
+    false,
+  );
+
+  const readLoadId = bareLoad("OUT4405", 90);
+  const docCalls: Array<{ url: string; method: string }> = [];
+  const previousDocFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    docCalls.push({ url, method });
+    if (url.includes("/tokens/bearer")) {
+      return Response.json({ access_token: "synthetic-access", expires_in: 3600 });
+    }
+    if (url.includes("/invoice/inv-read-4405")) {
+      assert.equal(method, "GET");
+      return Response.json({ Invoice: { Id: "inv-read-4405", DocNumber: " OUT4405 " } });
+    }
+    return new Response("unexpected", { status: 500 });
+  }) as typeof fetch;
+  qbo.resetQuickbooksForTests();
+  const readMatch = await payments.applyQboPaymentFromFeed(
+    payment({
+      id: "505",
+      totalAmt: 90,
+      lines: [{ invoiceId: "inv-read-4405", amount: 90 }],
+    }),
+  );
+  globalThis.fetch = previousDocFetch;
+  assert.equal(readMatch.suggestedLoadIds[0], readLoadId);
+  assert.equal(queries.getLoad(readLoadId)!.invoice_paid, 0);
+  assert.equal(queries.getLoad(readLoadId)!.qbo_payment_id, "");
+  assert.equal(cardFor("inv-read-4405"), false);
+  assert.ok(docCalls.some((call) => call.method === "GET" && call.url.includes("/invoice/inv-read-4405")));
+  assert.equal(
+    docCalls.some((call) => call.method !== "GET" && call.url.includes("quickbooks.api.intuit.com")),
+    false,
+  );
+
+  const voidSuggestion = payments.applyQboPayment(payment({ id: "502", status: "voided", totalAmt: 0, lines: [] }));
+  assert.equal(voidSuggestion.suggestedLoadIds.length, 0);
+  assert.equal(
+    payments.listOutsideQboPayments().some((row) => row.qboPaymentId === "502"),
+    false,
+  );
+  assert.equal(queries.getLoad(singleId)!.invoice_paid, 0);
 
   console.log("qbo-payment-test ok");
 }

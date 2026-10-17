@@ -1141,6 +1141,27 @@ export function connectedQuickbooksRealmId(): string {
 }
 
 /**
+ * Read Invoice.DocNumber. GET only.
+ * Null when QuickBooks is not connected, the id is not safe to request, the invoice is missing, or DocNumber is blank.
+ * Never creates or updates a QuickBooks entity.
+ */
+export async function readQboInvoiceDocNumber(invoiceId: string): Promise<string | null> {
+  const clean = invoiceId.trim();
+  if (!/^[A-Za-z0-9-]+$/.test(clean)) return null;
+  if (!hasQuickbooksSession()) return null;
+  try {
+    const body = await qboGet<{ Invoice?: { DocNumber?: string } }>(
+      `/invoice/${encodeURIComponent(clean)}`,
+      "invoice read",
+    );
+    const doc = String(body.Invoice?.DocNumber ?? "").trim();
+    return doc || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Read one Payment. GET only. A missing payment is `{ deleted: true }` (void/delete reopen).
  * Never creates or updates a QuickBooks entity.
  */
